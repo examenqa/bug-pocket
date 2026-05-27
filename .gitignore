@@ -141,3 +141,11 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Electron build artifacts
+release/
+release-build/
+*.blockmap
+latest.yml
+builder-debug.yml
+builder-effective-config.yaml
