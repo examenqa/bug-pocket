@@ -30,7 +30,7 @@ npm run dist
 ```
 
 `npm install` runs `electron-rebuild` so `better-sqlite3` matches Electron.
-`npm run dist` runs `electron-vite build && electron-builder` and creates the Windows NSIS installer under `release-build`.
+`npm run dist` runs `electron-vite build && node scripts/fix-preload.js && electron-builder` and creates the Windows NSIS installer under `release-build`.
 
 ## Main Architecture
 
@@ -42,18 +42,64 @@ Bug Pocket currently has two persistent Electron windows plus a transient snippi
 
 Important files:
 
+**Main process**
 - `src/main/index.ts`: Electron windows, tray, global shortcuts, screenshot IPC, attachment download IPC, backup IPC, clipboard IPC, external URL launch IPC.
 - `src/main/ai/ollamaTriage.ts`: optional local Ollama triage service for report/title/summary/severity assistance.
-- `src/main/database.ts`: SQLite schema, migrations, defaults, CRUD, content-addressed attachments, sync queue, report templates.
+- `src/main/database.ts`: SQLite schema, migrations, defaults, CRUD, content-addressed attachments, sync queue, report templates. Also owns the `app_settings` key-value table.
 - `src/main/sync/syncService.ts`: placeholder for future Supabase sync.
+
+**Preload & shared**
 - `src/preload/index.ts`: safe `window.bugPocket` bridge.
 - `src/shared/types.ts`: shared model and IPC types.
-- `src/renderer/src/main.tsx`: Main Panel, dashboard, details, settings, snipping overlay.
+
+**Renderer — entry**
+- `src/renderer/src/main.tsx`: tiny `createRoot` entry only. All UI logic lives in the files below.
+- `src/renderer/src/App.tsx`: `App`, `CaptureRoute`, `MainShell` — the root router and shell.
+
+**Renderer — pages**
+- `src/renderer/src/pages/DashboardPage.tsx`: bug table, filters, attachment spotlight.
+- `src/renderer/src/pages/BugDetailPage.tsx`: `BugDetailsHost` + `BugDetailsView`, details autosave, AI triage mapping, attachment/version spotlight, and report actions.
+- `src/renderer/src/pages/SettingsPage.tsx`: tabbed settings shell.
+- `src/renderer/src/pages/SnipOverlay.tsx`: full-screen screenshot snip UI.
+
+**Renderer — shared components**
+- `src/renderer/src/components/shared/Select.tsx`: compact select wrapper.
+- `src/renderer/src/components/shared/Badge.tsx`: `Badge` and `SyncBadge`.
+- `src/renderer/src/components/shared/PillDropdown.tsx`: portal-based inline pill dropdown.
+- `src/renderer/src/components/shared/OptionSelect.tsx`: `OptionSelect` and `ReferenceSelect`.
 - `src/renderer/src/components/QuickCaptureForm.tsx`: Quick Capture UI and keyboard behavior.
-- `src/renderer/src/components/ScreenshotAnnotator.tsx`: native canvas screenshot annotation tools used by dashboard, details, and inline Quick Capture review.
-- `src/renderer/src/services/reports.ts`: template-based report generation and Linear/Jira deep-link construction.
+- `src/renderer/src/components/ScreenshotAnnotator.tsx`: native canvas screenshot annotation tools.
+
+**Renderer — settings components**
+- `src/renderer/src/components/settings/settingsUtils.ts`: `hasSettingsMutationBridge`, `getSettingsPreviewItems`.
+- `src/renderer/src/components/settings/ShortcutSettingsPanel.tsx`: shortcut recording UI.
+- `src/renderer/src/components/settings/CapturePreferencesPanel.tsx`: screenshot review and startup toggles.
+- `src/renderer/src/components/settings/JiraWorkspacePanel.tsx`: Jira workspace URL field.
+- `src/renderer/src/components/settings/AiOptionsPanel.tsx`: Ollama enable/model config.
+- `src/renderer/src/components/settings/DataManagementPanel.tsx`: backup export/import/auto-backup UI.
+- `src/renderer/src/components/settings/PresetManager.tsx`: Quick Capture preset CRUD (max 3).
+- `src/renderer/src/components/settings/ModuleManager.tsx`: module management grouped by application.
+- `src/renderer/src/components/settings/OptionManager.tsx`: generic collapsible option CRUD + merge.
+- `src/renderer/src/components/settings/TemplateManager.tsx`: report template editor.
+
+**Renderer — hooks**
+- `src/renderer/src/hooks/useHashRoute.ts`: hash-based navigation hook.
+- `src/renderer/src/hooks/useDebounce.ts`: generic debounce hook.
 - `src/renderer/src/hooks/useSettings.ts`: settings loader.
+
+**Renderer — utils**
+- `src/renderer/src/utils/display.ts`: pure display/format/classification helpers (`getEntryDisplay`, `syncClass`, `severityClass`, `formatTableDate`, etc.).
+- `src/renderer/src/utils/filters.ts`: `getActiveFilterChips`, `getModulesForApplication`.
+- `src/renderer/src/utils/shortcuts.ts`: keyboard accelerator helpers (`eventToAccelerator`, `isModifierOnlyKey`).
+- `src/renderer/src/utils/bugUpdate.ts`: `buildBugUpdateInput`, `serializeBugUpdateInput`, and related types.
+- `src/renderer/src/utils/spotlight.ts`: `SpotlightState` interface and `loadAttachmentLineage` helper.
+- `src/renderer/src/utils/settingsKeys.ts`: shared sessionStorage key constants for the backup restore handoff.
+
+**Renderer — services & styles**
+- `src/renderer/src/services/reports.ts`: template-based report generation and Linear/Jira deep-link construction.
 - `src/renderer/src/styles.css`: full app styling.
+
+**Build & resources**
 - `build/icon.ico`: multi-layer Windows icon used by electron-builder and runtime tray/window/notification icon loading.
 - `resources/bug-pocket-icon.png` and `resources/bug-pocket-title.png`: renderer/runtime brand artwork and packaged extra resources.
 - `supabase/schema-draft.sql`: future cloud schema draft.
@@ -247,8 +293,9 @@ Settings groups are compact collapsible cards. Closed cards show a count and pre
 Capture Preferences currently includes:
 
 - Review screenshots before attaching in Quick Capture
+- Run on System Startup
 
-This preference is stored in `config_options` as `quick_capture_annotate_screenshots`, defaults to enabled, and controls whether Quick Capture screenshots go through inline Review Screenshot mode before being saved.
+These preferences are stored in the `app_settings` key-value table (see Data Model). `quick_capture_annotate_screenshots` defaults to enabled and controls whether Quick Capture screenshots go through inline Review Screenshot mode before being saved. `run_on_system_startup` defaults to disabled.
 
 Data Management currently includes:
 
@@ -258,8 +305,8 @@ Data Management currently includes:
 
 Local AI Triage settings currently include:
 
-- `Enable Triage with Local AI`, stored in `config_options` as `ai_triage_enabled`, default `false`.
-- `Ollama model name`, stored in `config_options` as `ollama_model_name`, default `qwen3-vl:8b`.
+- `Enable Triage with Local AI`, stored in `app_settings` as `ai_triage_enabled`, default `false`.
+- `Ollama model name`, stored in `app_settings` as `ollama_model_name`, default `qwen3-vl:8b`.
 - Model names are validated before request dispatch and may contain only letters, numbers, hyphens, colons, underscores, and periods.
 - The Bug Details `Triage with Local AI` button is not mounted unless `ai_triage_enabled` is true.
 
@@ -274,11 +321,41 @@ SQLite tables include:
 - `devices`
 - `browsers`
 - `attachments`
-- `config_options`
+- `app_settings` — key-value store for scalar app preferences (see below)
+- `config_options` — taxonomy lists only (entry types, severities, issue platforms)
 - `report_templates`
 - `shortcut_settings`
 - `presets`
 - `sync_queue`
+
+### app_settings table
+
+`app_settings` is a key-value table used exclusively for singleton scalar preferences that do not belong in a taxonomy list. Schema:
+
+```sql
+CREATE TABLE app_settings (
+  key        TEXT PRIMARY KEY NOT NULL,
+  value      TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
+);
+```
+
+Current keys:
+
+| key | type | default |
+|---|---|---|
+| `jira_workspace_url` | string | `""` |
+| `auto_backup_directory_path` | string | `""` |
+| `quick_capture_annotate_screenshots` | boolean (`"true"`/`"false"`) | `"true"` |
+| `run_on_system_startup` | boolean (`"true"`/`"false"`) | `"false"` |
+| `ai_triage_enabled` | boolean (`"true"`/`"false"`) | `"false"` |
+| `ollama_model_name` | string | `"qwen3-vl:8b"` |
+
+Do NOT store these in `config_options`. The `config_options` table is only for multi-row taxonomy lists (entry types, severities, issue platforms, etc.).
+
+The `database.ts` class exposes typed private helpers `getSetting(key)` and `setSetting(key, value)` that wrap all access to `app_settings`. Add new scalar preferences through those helpers only.
+
+On first startup, `migrateToAppSettings()` runs inside a transaction: it reads any legacy `config_options` rows with matching keys, writes them into `app_settings`, and deletes those rows. This migration is idempotent.
 
 The `bugs` table currently includes:
 
@@ -565,7 +642,7 @@ Tray and shortcuts:
 - `Ctrl+Alt+M`: opens Main App Dashboard by default.
 - Global shortcuts are configurable from Settings using recorder controls.
 - If Electron cannot register a shortcut because another app/system owns it, Settings shows a warning.
-- Settings > Preferences includes `Run on System Startup`. This is stored in `config_options` as `run_on_system_startup` and enforced on app boot through `app.setLoginItemSettings({ openAtLogin, openAsHidden: true })`.
+- Settings > Preferences includes `Run on System Startup`. This is stored in `app_settings` as `run_on_system_startup` and enforced on app boot through `app.setLoginItemSettings({ openAtLogin, openAsHidden: true, args: ["--background-start"] })` when enabled.
 - When launched by Windows startup, Bug Pocket passes `--background-start` and starts hidden in the tray/background instead of opening the Main Panel.
 - Bug Pocket uses `app.requestSingleInstanceLock()`. If a second instance is launched, it should not open another SQLite/IPC process; it should bring the existing Main App dashboard to the foreground.
 
@@ -738,11 +815,11 @@ Potential UX work:
 
 Potential technical work:
 
-- Split `src/renderer/src/main.tsx` into smaller components.
 - Add focused tests for report generation and title derivation.
 - Add migration tests for SQLite schema changes.
 - Add a proper sync queue drain/retry abstraction before Supabase implementation.
 - Add verification around content-addressed attachment backup/restore.
+- Consider extracting the spotlight/annotator logic into a dedicated hook (`useSpotlight`) shared by DashboardPage and BugDetailPage.
 
 ## Phase 2 Architectural Constraints (DO NOT OVERWRITE)
 

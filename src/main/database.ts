@@ -52,6 +52,8 @@ const defaultShortcuts: Array<Pick<ShortcutSetting, 'action' | 'label' | 'accele
   { action: 'quick_capture', label: 'Quick Capture Panel', accelerator: 'CommandOrControl+Alt+P', is_enabled: 1, sort_order: 0 },
   { action: 'main_panel', label: 'Main App Panel', accelerator: 'CommandOrControl+Alt+M', is_enabled: 1, sort_order: 1 }
 ];
+const MAX_CAPTURE_PRESETS = 3;
+
 const quickReportTemplate = `🚨 *[{{severity}}] {{title}}*
 *Context:* {{application}} > {{module}} | {{environment}}
 
@@ -413,6 +415,12 @@ export class BugPocketDatabase {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key        TEXT PRIMARY KEY NOT NULL,
+        value      TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL DEFAULT ''
+      );
+
       CREATE INDEX IF NOT EXISTS idx_bugs_updated_at ON bugs(updated_at);
       CREATE INDEX IF NOT EXISTS idx_attachments_bug_id ON attachments(bug_id);
       CREATE INDEX IF NOT EXISTS idx_attachments_content_hash ON attachments(content_hash);
@@ -448,11 +456,7 @@ export class BugPocketDatabase {
     this.ensureColumn('sync_queue', 'local_seq', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureColumn('sync_queue', 'op_id', "TEXT NOT NULL DEFAULT ''");
     this.ensureClientId();
-    this.ensureJiraWorkspaceUrl();
-    this.ensureAutoBackupDirectoryPath();
-    this.ensureQuickCaptureAnnotationReview();
-    this.ensureRunOnSystemStartup();
-    this.ensureAiTriageConfig();
+    this.migrateToAppSettings();
     this.backfillSyncQueueDeterminism();
     this.backfillAttachmentContentAddress();
     this.rebuildAttachmentsTableWithoutAbsolutePaths();
@@ -503,51 +507,58 @@ export class BugPocketDatabase {
       .run('client_id', randomUUID(), 0);
   }
 
-  private ensureJiraWorkspaceUrl(): void {
-    const existing = this.db.prepare("SELECT id FROM config_options WHERE type = 'jira_workspace_url' LIMIT 1").get() as { id: number } | undefined;
-    if (existing) return;
-    this.db
-      .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-      .run('jira_workspace_url', '', 0);
-  }
+  /**
+   * One-time migration: moves all scalar singleton settings out of the
+   * legacy config_options rows and into the dedicated app_settings table.
+   * Safe to run on every startup — uses INSERT OR IGNORE so it only
+   * writes each key once and never overwrites existing values.
+   * After copying, deletes the old config_options rows so the table
+   * only holds editable lookup lists going forward.
+   */
+  private migrateToAppSettings(): void {
+    const stamp = now();
+    const singletonTypes = [
+      'jira_workspace_url',
+      'auto_backup_directory_path',
+      'quick_capture_annotate_screenshots',
+      'run_on_system_startup',
+      'ai_triage_enabled',
+      'ollama_model_name'
+    ];
 
-  private ensureAutoBackupDirectoryPath(): void {
-    const existing = this.db.prepare("SELECT id FROM config_options WHERE type = 'auto_backup_directory_path' LIMIT 1").get() as { id: number } | undefined;
-    if (existing) return;
-    this.db
-      .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-      .run('auto_backup_directory_path', '', 0);
-  }
+    const defaults: Record<string, string> = {
+      jira_workspace_url: '',
+      auto_backup_directory_path: '',
+      quick_capture_annotate_screenshots: 'true',
+      run_on_system_startup: 'false',
+      ai_triage_enabled: 'false',
+      ollama_model_name: 'qwen3-vl:8b'
+    };
 
-  private ensureQuickCaptureAnnotationReview(): void {
-    const existing = this.db.prepare("SELECT id FROM config_options WHERE type = 'quick_capture_annotate_screenshots' LIMIT 1").get() as { id: number } | undefined;
-    if (existing) return;
-    this.db
-      .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-      .run('quick_capture_annotate_screenshots', 'true', 0);
-  }
+    const tx = this.db.transaction(() => {
+      const insert = this.db.prepare(
+        'INSERT OR IGNORE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)'
+      );
 
-  private ensureRunOnSystemStartup(): void {
-    const existing = this.db.prepare("SELECT id FROM config_options WHERE type = 'run_on_system_startup' LIMIT 1").get() as { id: number } | undefined;
-    if (existing) return;
-    this.db
-      .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-      .run('run_on_system_startup', 'false', 0);
-  }
+      for (const type of singletonTypes) {
+        // Read any existing value from the old config_options table
+        const existing = this.db
+          .prepare("SELECT value FROM config_options WHERE type = ? AND is_active = 1 ORDER BY id LIMIT 1")
+          .get(type) as { value: string } | undefined;
 
-  private ensureAiTriageConfig(): void {
-    const enabled = this.db.prepare("SELECT id FROM config_options WHERE type = 'ai_triage_enabled' LIMIT 1").get() as { id: number } | undefined;
-    if (!enabled) {
+        const value = existing?.value ?? defaults[type] ?? '';
+        insert.run(type, value, stamp);
+      }
+
+      // Remove the now-migrated rows from config_options
+      // Use a parameterised IN query built from the known constant list
+      const placeholders = singletonTypes.map(() => '?').join(', ');
       this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('ai_triage_enabled', 'false', 0);
-    }
-    const model = this.db.prepare("SELECT id FROM config_options WHERE type = 'ollama_model_name' LIMIT 1").get() as { id: number } | undefined;
-    if (!model) {
-      this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('ollama_model_name', 'qwen3-vl:8b', 0);
-    }
+        .prepare(`DELETE FROM config_options WHERE type IN (${placeholders})`)
+        .run(...singletonTypes);
+    });
+
+    tx();
   }
 
   private backfillSyncQueueDeterminism(): void {
@@ -1003,136 +1014,91 @@ export class BugPocketDatabase {
     return this.db.prepare('SELECT * FROM shortcut_settings WHERE action = ?').get(action) as ShortcutSetting;
   }
 
+  // ---------------------------------------------------------------------------
+  // Generic app_settings accessors
+  // ---------------------------------------------------------------------------
+
+  private getSetting(key: string): string {
+    return (
+      this.db
+        .prepare('SELECT value FROM app_settings WHERE key = ?')
+        .get(key) as { value: string } | undefined
+    )?.value ?? '';
+  }
+
+  private setSetting(key: string, value: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
+      .run(key, value, now());
+  }
+
   getJiraWorkspaceUrl(): string | null {
-    const row = this.db.prepare("SELECT value FROM config_options WHERE type = 'jira_workspace_url' AND is_active = 1 ORDER BY id LIMIT 1").get() as
-      | { value: string }
-      | undefined;
-    const value = row?.value.trim() ?? '';
+    const value = this.getSetting('jira_workspace_url').trim();
     return value || null;
   }
 
   updateJiraWorkspaceUrl(value: string): string | null {
     const cleaned = value.trim();
-    const existingRows = this.db.prepare("SELECT id FROM config_options WHERE type = 'jira_workspace_url' ORDER BY id").all() as Array<{ id: number }>;
-    if (!existingRows.length) {
-      this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('jira_workspace_url', cleaned, 0);
-    } else {
-      const [first, ...rest] = existingRows;
-      this.db.prepare('UPDATE config_options SET value = ?, is_active = 1 WHERE id = ?').run(cleaned, first.id);
-      rest.forEach((row) => this.db.prepare('UPDATE config_options SET is_active = 0 WHERE id = ?').run(row.id));
-    }
+    this.setSetting('jira_workspace_url', cleaned);
     return cleaned || null;
   }
 
   getAutoBackupDirectoryPath(): string | null {
-    const row = this.db.prepare("SELECT value FROM config_options WHERE type = 'auto_backup_directory_path' AND is_active = 1 ORDER BY id LIMIT 1").get() as
-      | { value: string }
-      | undefined;
-    const value = row?.value.trim() ?? '';
+    const value = this.getSetting('auto_backup_directory_path').trim();
     return value || null;
   }
 
   updateAutoBackupDirectoryPath(value: string): string | null {
     const cleaned = value.trim();
-    const existingRows = this.db.prepare("SELECT id FROM config_options WHERE type = 'auto_backup_directory_path' ORDER BY id").all() as Array<{ id: number }>;
-    if (!existingRows.length) {
-      this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('auto_backup_directory_path', cleaned, 0);
-    } else {
-      const [first, ...rest] = existingRows;
-      this.db.prepare('UPDATE config_options SET value = ?, is_active = 1 WHERE id = ?').run(cleaned, first.id);
-      rest.forEach((row) => this.db.prepare('UPDATE config_options SET is_active = 0 WHERE id = ?').run(row.id));
-    }
+    this.setSetting('auto_backup_directory_path', cleaned);
     return cleaned || null;
   }
 
   getQuickCaptureAnnotationReview(): boolean {
-    const row = this.db
-      .prepare("SELECT value FROM config_options WHERE type = 'quick_capture_annotate_screenshots' AND is_active = 1 ORDER BY id LIMIT 1")
-      .get() as { value: string } | undefined;
-    return row?.value !== 'false';
+    return this.getSetting('quick_capture_annotate_screenshots') !== 'false';
   }
 
   updateQuickCaptureAnnotationReview(enabled: boolean): boolean {
-    const value = enabled ? 'true' : 'false';
-    const existingRows = this.db.prepare("SELECT id FROM config_options WHERE type = 'quick_capture_annotate_screenshots' ORDER BY id").all() as Array<{ id: number }>;
-    if (!existingRows.length) {
-      this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('quick_capture_annotate_screenshots', value, 0);
-    } else {
-      const [first, ...rest] = existingRows;
-      this.db.prepare('UPDATE config_options SET value = ?, is_active = 1 WHERE id = ?').run(value, first.id);
-      rest.forEach((row) => this.db.prepare('UPDATE config_options SET is_active = 0 WHERE id = ?').run(row.id));
-    }
+    this.setSetting('quick_capture_annotate_screenshots', enabled ? 'true' : 'false');
     return enabled;
   }
 
   getRunOnSystemStartup(): boolean {
-    const row = this.db
-      .prepare("SELECT value FROM config_options WHERE type = 'run_on_system_startup' AND is_active = 1 ORDER BY id LIMIT 1")
-      .get() as { value: string } | undefined;
-    return row?.value === 'true';
+    return this.getSetting('run_on_system_startup') === 'true';
   }
 
   updateRunOnSystemStartup(enabled: boolean): boolean {
-    const value = enabled ? 'true' : 'false';
-    const existingRows = this.db.prepare("SELECT id FROM config_options WHERE type = 'run_on_system_startup' ORDER BY id").all() as Array<{ id: number }>;
-    if (!existingRows.length) {
-      this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('run_on_system_startup', value, 0);
-    } else {
-      const [first, ...rest] = existingRows;
-      this.db.prepare('UPDATE config_options SET value = ?, is_active = 1 WHERE id = ?').run(value, first.id);
-      rest.forEach((row) => this.db.prepare('UPDATE config_options SET is_active = 0 WHERE id = ?').run(row.id));
-    }
+    this.setSetting('run_on_system_startup', enabled ? 'true' : 'false');
     return enabled;
   }
 
   getAiTriageEnabled(): boolean {
-    const row = this.db
-      .prepare("SELECT value FROM config_options WHERE type = 'ai_triage_enabled' AND is_active = 1 ORDER BY id LIMIT 1")
-      .get() as { value: string } | undefined;
-    return row?.value === 'true' || row?.value === '1';
+    const value = this.getSetting('ai_triage_enabled');
+    return value === 'true' || value === '1';
   }
 
   getOllamaModelName(): string {
-    const row = this.db
-      .prepare("SELECT value FROM config_options WHERE type = 'ollama_model_name' AND is_active = 1 ORDER BY id LIMIT 1")
-      .get() as { value: string } | undefined;
-    const value = row?.value.trim() ?? '';
+    const value = this.getSetting('ollama_model_name').trim();
     return value || 'qwen3-vl:8b';
   }
 
   updateAiTriageOptions(enabled: boolean, modelName: string): { enabled: boolean; modelName: string } {
     const cleanedModel = modelName.trim() || 'qwen3-vl:8b';
-    this.upsertSingletonConfigOption('ai_triage_enabled', enabled ? 'true' : 'false');
-    this.upsertSingletonConfigOption('ollama_model_name', cleanedModel);
+    this.setSetting('ai_triage_enabled', enabled ? 'true' : 'false');
+    this.setSetting('ollama_model_name', cleanedModel);
     return { enabled, modelName: cleanedModel };
   }
 
-  private upsertSingletonConfigOption(type: string, value: string): void {
-    const existingRows = this.db.prepare('SELECT id FROM config_options WHERE type = ? ORDER BY id').all(type) as Array<{ id: number }>;
-    if (!existingRows.length) {
-      this.db.prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)').run(type, value, 0);
-      return;
-    }
-    const [first, ...rest] = existingRows;
-    this.db.prepare('UPDATE config_options SET value = ?, is_active = 1 WHERE id = ?').run(value, first.id);
-    rest.forEach((row) => this.db.prepare('UPDATE config_options SET is_active = 0 WHERE id = ?').run(row.id));
-  }
-
   getPresets(): CapturePreset[] {
-    return this.db.prepare('SELECT * FROM presets ORDER BY id LIMIT 3').all() as CapturePreset[];
+    return this.db.prepare('SELECT * FROM presets ORDER BY id LIMIT ?').all(MAX_CAPTURE_PRESETS) as CapturePreset[];
   }
 
   createPreset(input: CapturePresetInput): CapturePreset {
     const count = this.db.prepare('SELECT COUNT(*) AS count FROM presets').get() as { count: number };
-    if (count.count >= 3) throw new Error('Only 3 Quick Capture presets are allowed.');
+    if (count.count >= MAX_CAPTURE_PRESETS) throw new Error(`Only ${MAX_CAPTURE_PRESETS} Quick Capture presets are allowed.`);
     return this.savePreset(null, input);
   }
 

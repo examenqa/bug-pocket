@@ -66,17 +66,20 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.4",
-    "@types/archiver": "^7.0.0",
-    "@types/better-sqlite3": "^7.6.11",
-    "@types/node": "^22.10.2",
-    "@types/react": "^18.3.17",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@electron/rebuild": "4.0.4",
+    "@types/archiver": "7.0.0",
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "22.19.19",
+    "@types/react": "18.3.29",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "4.7.0",
     "electron": "30.0.0",
-    "electron-builder": "^26.8.1",
-    "electron-vite": "^2.3.0",
-    "typescript": "^5.7.2",
-    "vite": "^5.4.11"
+    "electron-builder": "26.8.1",
+    "electron-vite": "2.3.0",
+    "typescript": "5.9.3",
+    "vite": "5.4.21"
+  },
+  "buildNotes": {
+    "preload": "fix-preload.js bridges an electron-vite@2.3.0 internal path-rewrite behavior. Do not upgrade electron-vite without re-testing the preload loading pipeline."
   }
 }
