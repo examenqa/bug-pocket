@@ -29,7 +29,8 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
   const statusFilterOptions = captureStatusOptions;
   const moduleFilterOptions = getModulesForApplication(settings, filters.applicationId === 'all' ? null : filters.applicationId ?? null);
   const activeFilterChips = getActiveFilterChips(filters, settings);
-  const quickCaptureShortcut = shortcutDisplay(settings.shortcuts.find((shortcut) => shortcut.action === 'quick_capture'), 'Ctrl+Alt+P');
+  const quickPanelShortcut = shortcutDisplay(settings.shortcuts.find((shortcut) => shortcut.action === 'quick_capture'), 'Ctrl+Alt+P');
+  const screenshotCaptureShortcut = shortcutDisplay(settings.shortcuts.find((shortcut) => shortcut.action === 'screenshot_capture'), 'Ctrl+Alt+S');
   const clearFilters = (): void => setFilters({ reported: 'all', search: filters.search ?? '' });
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
@@ -127,11 +128,19 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
           <h1>Captured Entries</h1>
           <p>Capture bugs without breaking your flow.</p>
         </div>
-        <div className="capture-action">
-          <button className="primary capture-button" onClick={() => window.bugPocket.openQuickCapture()}>
-            <Plus size={17} strokeWidth={3} /> Quick Capture
-          </button>
-          <span className="capture-shortcut">{quickCaptureShortcut}</span>
+        <div className="capture-actions">
+          <div className="capture-action">
+            <button className="primary capture-button" onClick={() => void window.bugPocket.startScreenshotCapture()}>
+              <Camera size={17} strokeWidth={2.6} /> Quick Capture
+            </button>
+            <span className="capture-shortcut">{screenshotCaptureShortcut}</span>
+          </div>
+          <div className="capture-action">
+            <button className="capture-button capture-button-secondary" onClick={() => void window.bugPocket.openQuickCapture()}>
+              <Plus size={17} strokeWidth={3} /> Quick Panel
+            </button>
+            <span className="capture-shortcut">{quickPanelShortcut}</span>
+          </div>
         </div>
       </header>
       <div className="dashboard-controls">
