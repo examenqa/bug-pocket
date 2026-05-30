@@ -12,6 +12,7 @@ const emptySettings: SettingsData = {
   environments: [],
   devices: [],
   browsers: [],
+  userRoles: [],
   reportTemplates: [],
   shortcuts: [],
   jiraWorkspaceUrl: null,

@@ -50,7 +50,7 @@ export function GeneralSettings({
       <section className="settings-section-group" aria-labelledby="settings-taxonomy-heading">
         <div className="settings-section-heading">
           <h2 id="settings-taxonomy-heading">Workspace Field Lists</h2>
-          <p>Keep applications, modules, environments, devices, browsers, entry types, and severities tidy.</p>
+          <p>Keep applications, modules, environments, devices, browsers, user roles, entry types, and severities tidy.</p>
         </div>
         <div className="settings-grid taxonomy-grid">
           <OptionManager
@@ -98,6 +98,17 @@ export function GeneralSettings({
             onUpdate={async (id, value) => { await window.bugPocket.updateBrowser(id, value); await refresh(); }}
             onDelete={async (id) => { await window.bugPocket.deleteBrowser(id); await refresh(); }}
             onMerge={async (sourceId, targetId) => { await window.bugPocket.mergeReference('browser', sourceId, targetId); await refresh(); }}
+          />
+          <OptionManager
+            title="User Roles"
+            open={openSettingsCard === 'user-roles'}
+            onToggle={() => toggleSettingsCard('user-roles')}
+            mutationReady={mutationReady}
+            items={settings.userRoles.map((item) => ({ id: item.id, label: item.value }))}
+            onAdd={async (value) => { await window.bugPocket.addUserRole(value); await refresh(); }}
+            onUpdate={async (id, value) => { await window.bugPocket.updateUserRole(id, value); await refresh(); }}
+            onDelete={async (id) => { await window.bugPocket.deleteUserRole(id); await refresh(); }}
+            onMerge={async (sourceId, targetId) => { await window.bugPocket.mergeReference('user_role', sourceId, targetId); await refresh(); }}
           />
           <OptionManager
             title="Entry Types"

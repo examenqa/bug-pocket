@@ -14,9 +14,12 @@ import {
   getWorkflowStatusOptions
 } from '../utils/display';
 import { getModulesForApplication } from '../utils/filters';
+import { formatStepsAsNumberedList } from '../utils/formatSteps';
 import { buildBugUpdateInput, serializeBugUpdateInput, DetailsSaveState, AiTriageStatus } from '../utils/bugUpdate';
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
 import { useDebounce } from '../hooks/useDebounce';
+
+const AI_TRIAGE_AVAILABLE = false;
 
 export function BugDetailsHost({
   bugId,
@@ -361,7 +364,7 @@ export function BugDetailsView({
         id: currentBug.id, title: currentTitle, note: currentBug.note,
         application: currentBug.application_name || '', application_context: currentApplication?.context_description ?? '',
         module: currentBug.module_name || '', module_context: currentModule?.context_description ?? '',
-        environment: currentBug.environment, device: currentBug.device, browser: currentBug.browser,
+        environment: currentBug.environment, device: currentBug.device, browser: currentBug.browser, user_role: currentBug.user_role,
         entry_type: currentBug.entry_type, severity: currentBug.severity, status: currentBug.status,
         steps_to_reproduce: currentBug.steps_to_reproduce, expected_result: currentBug.expected_result,
         actual_result: currentBug.actual_result, other_details: currentBug.other_details,
@@ -371,7 +374,7 @@ export function BugDetailsView({
       if (response.result.bug_title.trim()) updateField('title', response.result.bug_title);
       if (response.result.refined_summary.trim()) updateField('note', response.result.refined_summary, { trackStatus: false });
       if (nextSeverity) updateField('severity', nextSeverity, { trackStatus: false });
-      if (response.result.steps_to_reproduce.trim()) updateField('steps_to_reproduce', response.result.steps_to_reproduce, { trackStatus: false });
+      if (response.result.steps_to_reproduce.trim()) updateField('steps_to_reproduce', formatStepsAsNumberedList(response.result.steps_to_reproduce), { trackStatus: false });
       if (response.result.expected_result.trim()) updateField('expected_result', response.result.expected_result, { trackStatus: false });
       if (response.result.actual_result.trim()) updateField('actual_result', response.result.actual_result, { trackStatus: false });
       if (response.success) { setAiStatus('completed'); setShowAiRefinement(false); setAiRefinementNote(''); }
@@ -400,7 +403,7 @@ export function BugDetailsView({
   const convertScenarioToBug = async (): Promise<void> => {
     const updated = await window.bugPocket.updateBug(bug.id, {
       entry_type: 'Bug', application_id: bug.application_id, module_id: bug.module_id,
-      environment_id: bug.environment_id, device_id: bug.device_id, browser_id: bug.browser_id,
+      environment_id: bug.environment_id, device_id: bug.device_id, browser_id: bug.browser_id, user_role_id: bug.user_role_id,
       title: detailTitleValue, note: bug.note, other_details: bug.other_details,
       steps_to_reproduce: bug.steps_to_reproduce, expected_result: bug.expected_result,
       actual_result: bug.actual_result, status: 'Draft', severity: bug.severity || 'Medium',
@@ -437,7 +440,7 @@ export function BugDetailsView({
           <button className="text-button" onClick={() => void backToDashboard()}>Back to dashboard</button>
           <h1>{entryDisplay.title}</h1>
           {entryDisplay.preview && <p className="detail-title-preview">{entryDisplay.preview}</p>}
-          <p>{bug.entry_type || 'Bug'} / {bug.environment || 'No environment'} / {bug.device || 'No device'} / {bug.browser || 'No browser'} / <SyncBadge status={bug.sync_status} /> / Created {formatDate(bug.created_at)} / Updated {formatDate(bug.updated_at)}</p>
+          <p>{bug.entry_type || 'Bug'} / {bug.environment || 'No environment'} / {bug.user_role || 'No role'} / {bug.device || 'No device'} / {bug.browser || 'No browser'} / <SyncBadge status={bug.sync_status} /> / Created {formatDate(bug.created_at)} / Updated {formatDate(bug.updated_at)}</p>
         </div>
         <div className="header-actions">
           {bug.entry_type === 'Scenario' && <button onClick={convertScenarioToBug}>Convert to Bug</button>}
@@ -496,9 +499,10 @@ export function BugDetailsView({
             <div className="field-with-status"><ReferenceSelect label="Environment" value={bug.environment_id} options={settings.environments} onChange={(value) => updateField('environment_id', value)} />{fieldSaveStatus('environment_id')}</div>
             <div className="field-with-status"><ReferenceSelect label="Device" value={bug.device_id} options={settings.devices} onChange={(value) => updateField('device_id', value)} />{fieldSaveStatus('device_id')}</div>
             <div className="field-with-status"><ReferenceSelect label="Browser" value={bug.browser_id} options={settings.browsers} onChange={(value) => updateField('browser_id', value)} />{fieldSaveStatus('browser_id')}</div>
+            <div className="field-with-status"><ReferenceSelect label="User Role" value={bug.user_role_id} options={settings.userRoles} onChange={(value) => updateField('user_role_id', value)} />{fieldSaveStatus('user_role_id')}</div>
           </div>
           <label className="field-with-status">Bug Note<textarea value={bug.note} onChange={(event) => updateField('note', event.target.value)} />{fieldSaveStatus('note')}</label>
-          <label className="field-with-status">Steps to Reproduce<textarea value={bug.steps_to_reproduce} onChange={(event) => updateField('steps_to_reproduce', event.target.value)} placeholder="Add steps to reproduce." />{fieldSaveStatus('steps_to_reproduce')}</label>
+          <label className="field-with-status">Steps to Reproduce<textarea value={bug.steps_to_reproduce} onChange={(event) => updateField('steps_to_reproduce', event.target.value)} onBlur={(event) => { const formatted = formatStepsAsNumberedList(event.target.value); if (formatted && formatted !== event.target.value) updateField('steps_to_reproduce', formatted); }} placeholder="Add steps to reproduce." />{fieldSaveStatus('steps_to_reproduce')}</label>
           <label className="field-with-status">Expected Result<textarea value={bug.expected_result} onChange={(event) => updateField('expected_result', event.target.value)} placeholder="Add the expected behavior." />{fieldSaveStatus('expected_result')}</label>
           <label className="field-with-status">Actual Result<textarea value={bug.actual_result} onChange={(event) => updateField('actual_result', event.target.value)} placeholder="Defaults to the bug note if blank." />{fieldSaveStatus('actual_result')}</label>
           <label className="field-with-status">Other Details<textarea value={bug.other_details} onChange={(event) => updateField('other_details', event.target.value)} />{fieldSaveStatus('other_details')}</label>
@@ -545,7 +549,7 @@ export function BugDetailsView({
             <h2>Generated report preview</h2>
             <textarea className="report-preview" readOnly value={generateReport(reportBug, settings.reportTemplates.find((template) => template.name === 'Full Bug Report'))} />
             <div className="copy-grid">
-              {settings.aiTriageEnabled && (
+              {AI_TRIAGE_AVAILABLE && settings.aiTriageEnabled && (
                 <div className="ai-triage-panel">
                   {aiStatus !== 'completed' ? (
                     <button className="ai-triage-button" disabled={triaging} onClick={() => void triageWithLocalAi()}>

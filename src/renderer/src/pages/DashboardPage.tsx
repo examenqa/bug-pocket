@@ -136,7 +136,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
             <span className="dashboard-action-shortcut">{globalScreenshotShortcut}</span>
           </div>
           <div className="dashboard-action">
-            <button className="dashboard-quick-panel-button" onClick={() => void window.bugPocket.openQuickCapture()}>
+            <button className="primary dashboard-screenshot-button" title="Open Quick Capture panel" aria-label="Open Quick Capture panel" onClick={() => void window.bugPocket.openQuickCapture()}>
               <Plus size={17} strokeWidth={3} /> Quick Panel
             </button>
             <span className="dashboard-action-shortcut">{quickPanelShortcut}</span>

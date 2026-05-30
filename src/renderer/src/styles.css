@@ -3111,9 +3111,22 @@ figcaption span {
 
 .preset-form {
   display: grid;
-  grid-template-columns: repeat(5, minmax(110px, 1fr)) auto auto;
+  grid-template-columns: minmax(120px, 1.1fr) repeat(4, minmax(96px, 0.85fr)) auto auto;
   gap: 8px;
   align-items: center;
+  max-width: 100%;
+}
+
+.preset-form input,
+.preset-form select {
+  min-width: 0;
+}
+
+.preset-form button {
+  min-width: 0;
+  padding-left: 10px;
+  padding-right: 10px;
+  white-space: nowrap;
 }
 
 .add-row {
@@ -3125,7 +3138,7 @@ figcaption span {
 
 .module-add-row {
   display: grid;
-  grid-template-columns: minmax(140px, 0.8fr) minmax(160px, 1fr) 40px;
+  grid-template-columns: minmax(118px, 0.7fr) minmax(0, 1fr) 40px;
   gap: 8px;
   margin-bottom: 14px;
 }
@@ -3176,17 +3189,24 @@ figcaption span {
   flex-wrap: nowrap;
   gap: 6px;
   min-height: 42px;
+  max-width: 100%;
   padding: 0 14px 13px;
   align-items: flex-start;
   overflow: hidden;
 }
 
 .settings-preview-chip {
-  max-width: 140px;
-  flex: 0 0 auto;
+  max-width: min(150px, 45%);
+  min-width: 0;
+  flex: 0 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.settings-preview-chip.muted-chip {
+  flex: 0 0 auto;
+  max-width: 88px;
 }
 
 .muted-chip {
@@ -3218,7 +3238,7 @@ figcaption span {
 
 .module-group h3 {
   color: var(--pocket-blue-dark);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.2;
   margin: 0;
 }
@@ -3482,6 +3502,14 @@ figcaption span {
     grid-template-columns: 1fr;
   }
 
+  .preset-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .preset-form button {
+    justify-content: center;
+  }
+
   .settings-sidebar-nav {
     position: static;
   }
@@ -3639,8 +3667,8 @@ figcaption span {
 
 .settings-layout {
   display: grid;
-  grid-template-columns: 230px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 14px;
   align-items: start;
 }
 
@@ -3659,11 +3687,11 @@ figcaption span {
 
 .settings-sidebar-nav button {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-columns: 20px minmax(0, 1fr);
   align-items: start;
-  gap: 9px;
-  min-height: 62px;
-  padding: 10px;
+  gap: 7px;
+  min-height: 56px;
+  padding: 9px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
@@ -3705,9 +3733,9 @@ figcaption span {
 
 .settings-sidebar-nav small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .settings-content-panel {
@@ -3787,9 +3815,112 @@ figcaption span {
   font-weight: 800;
 }
 
+
+.settings-compact-toggle-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  border-top: 1px solid rgba(184, 214, 246, 0.62);
+  padding-top: 12px;
+}
+
+.settings-compact-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 2px 2px 10px;
+  border-bottom: 1px solid rgba(184, 214, 246, 0.62);
+  color: var(--ink);
+}
+
+.settings-compact-toggle input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--pocket-blue);
+}
+
+.settings-compact-toggle span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-compact-toggle strong {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.settings-compact-toggle small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.capture-preferences-panel {
+  margin-top: 0;
+}
+
+.ai-options-panel {
+  gap: 14px;
+  padding: 14px;
+}
+
+.ai-enable-row {
+  padding-top: 2px;
+}
+
+.ai-model-grid {
+  padding-top: 2px;
+  transition: opacity 160ms ease;
+}
+
+.ai-options-panel-disabled .ai-model-grid,
+.ai-options-panel-disabled .ai-model-card,
+.ai-options-panel-disabled .ai-custom-helper {
+  opacity: 0.58;
+}
+
+.ai-model-field {
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ai-model-field select,
+.ai-model-field input {
+  box-shadow: var(--shadow-sm);
+}
+
+.ai-model-card {
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid rgba(184, 214, 246, 0.72);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ai-model-card-header {
+  align-items: center;
+}
+
+.ai-command-row {
+  padding: 10px;
+  border: 1px solid rgba(11, 99, 206, 0.18);
+  border-radius: 8px;
+  background: rgba(248, 252, 255, 0.76);
+}
+
 @media (max-width: 920px) {
   .settings-layout,
-  .sync-placeholder-grid {
+  .sync-placeholder-grid,
+  .settings-compact-toggle-list {
     grid-template-columns: 1fr;
   }
 

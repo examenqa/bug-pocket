@@ -117,14 +117,14 @@ export function AiOptionsPanel({
   };
 
   return (
-    <div className="panel ai-options-panel">
+    <div className={`panel ai-options-panel${localEnabled ? '' : ' ai-options-panel-disabled'}`}>
       <div className="panel-heading">
         <div>
           <h2>Local AI Triage</h2>
           <p className="settings-helper">Optional AI-powered triage. Choose a vision-capable model because Bug Pocket may send screenshots with the note.</p>
         </div>
       </div>
-      <label className="capture-preference-toggle">
+      <label className="settings-compact-toggle ai-enable-row">
         <input
           type="checkbox"
           checked={localEnabled}
@@ -140,7 +140,7 @@ export function AiOptionsPanel({
       <div className="ai-model-grid">
         <label className="ai-model-field">
           <span>Model family</span>
-          <select disabled={!mutationReady} value={selectedVendor} onChange={(event) => changeVendor(event.target.value)}>
+          <select disabled={!mutationReady || !localEnabled} value={selectedVendor} onChange={(event) => changeVendor(event.target.value)}>
             {vendors.map((vendor) => <option key={vendor} value={vendor}>{vendor}</option>)}
           </select>
         </label>
@@ -150,7 +150,7 @@ export function AiOptionsPanel({
             <span>Custom Ollama model tag</span>
             <input
               value={draftModel}
-              disabled={!mutationReady}
+              disabled={!mutationReady || !localEnabled}
               onChange={(event) => setDraftModel(event.target.value)}
               onBlur={() => void saveOptions(localEnabled, draftModel)}
               placeholder={DEFAULT_MODEL}
@@ -159,7 +159,7 @@ export function AiOptionsPanel({
         ) : (
           <label className="ai-model-field">
             <span>Vision model</span>
-            <select disabled={!mutationReady} value={selectedModel?.id ?? vendorModels[0]?.id ?? ''} onChange={(event) => setDraftModel(event.target.value)}>
+            <select disabled={!mutationReady || !localEnabled} value={selectedModel?.id ?? vendorModels[0]?.id ?? ''} onChange={(event) => setDraftModel(event.target.value)}>
               {vendorModels.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
             </select>
           </label>
@@ -188,7 +188,7 @@ export function AiOptionsPanel({
       )}
 
       {selectedVendor === CUSTOM_VENDOR && (
-        <p className="settings-helper">Custom models are allowed for power users, but non-vision models may fail when screenshots are included.</p>
+        <p className="settings-helper ai-custom-helper">Custom models are allowed for power users, but non-vision models may fail when screenshots are included.</p>
       )}
       {status && <p className="settings-save-note">{status}</p>}
     </div>

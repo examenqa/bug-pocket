@@ -29,6 +29,7 @@ function CaptureRoute() {
         application_id: draft.applicationId,
         module_id: draft.moduleId,
         environment_id: draft.environmentId,
+        user_role_id: draft.userRoleId,
         note: draft.note,
         attachment_ids: attachments.map((attachment) => attachment.id)
       });
@@ -65,6 +66,11 @@ function CaptureRoute() {
       }}
       onCreateEnvironment={async (value) => {
         const option = await window.bugPocket.addEnvironment(value);
+        await refresh();
+        return option.id;
+      }}
+      onCreateUserRole={async (value) => {
+        const option = await window.bugPocket.addUserRole(value);
         await refresh();
         return option.id;
       }}

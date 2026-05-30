@@ -17,6 +17,8 @@ export function hasSettingsMutationBridge(): boolean {
     typeof api.deleteDevice === 'function' &&
     typeof api.updateBrowser === 'function' &&
     typeof api.deleteBrowser === 'function' &&
+    typeof api.updateUserRole === 'function' &&
+    typeof api.deleteUserRole === 'function' &&
     typeof api.updateConfigOption === 'function' &&
     typeof api.deleteConfigOption === 'function' &&
     typeof api.createPreset === 'function' &&
@@ -27,13 +29,13 @@ export function hasSettingsMutationBridge(): boolean {
 
 export function getSettingsPreviewItems<T>(items: T[], labelFor: (item: T) => string): T[] {
   if (items.length <= 4) return items;
-  const maxPreviewTextUnits = 34;
-  const moreChipUnits = 8;
+  const maxPreviewTextUnits = 30;
+  const moreChipUnits = 10;
   const preview: T[] = [];
   let usedUnits = 0;
 
   for (const item of items) {
-    const labelUnits = Math.min(labelFor(item).trim().length, 18);
+    const labelUnits = Math.min(labelFor(item).trim().length, 16);
     const separatorUnits = preview.length ? 2 : 0;
     if (preview.length && usedUnits + separatorUnits + labelUnits + moreChipUnits > maxPreviewTextUnits) break;
     preview.push(item);

@@ -793,6 +793,9 @@ function registerIpc(): void {
   ipcMain.handle('settings:addBrowser', (_event, name: string) => mutateSettings(() => db.addBrowser(name)));
   ipcMain.handle('settings:updateBrowser', (_event, id: number, name: string) => mutateSettings(() => db.updateBrowser(id, name)));
   ipcMain.handle('settings:deleteBrowser', (_event, id: number) => mutateSettings(() => db.deleteBrowser(id)));
+  ipcMain.handle('settings:addUserRole', (_event, name: string) => mutateSettings(() => db.addUserRole(name)));
+  ipcMain.handle('settings:updateUserRole', (_event, id: number, name: string) => mutateSettings(() => db.updateUserRole(id, name)));
+  ipcMain.handle('settings:deleteUserRole', (_event, id: number) => mutateSettings(() => db.deleteUserRole(id)));
   ipcMain.handle('settings:addConfigOption', (_event, type: string, value: string) => mutateSettings(() => db.addConfigOption(type, value)));
   ipcMain.handle('settings:updateConfigOption', (_event, id: number, value: string) => mutateSettings(() => db.updateConfigOption(id, value)));
   ipcMain.handle('settings:deleteConfigOption', (_event, id: number) => mutateSettings(() => db.deleteConfigOption(id)));
@@ -888,9 +891,8 @@ function registerIpc(): void {
   ipcMain.handle('backup:export', () => exportBackup());
   ipcMain.handle('backup:import', () => importBackup());
   ipcMain.handle('backup:chooseDirectory', () => chooseBackupDirectory());
-  ipcMain.handle('ai:triageWithOllama', (_event, payload: AiTriageBugPayload) => {
-    if (!db.getAiTriageEnabled()) throw new Error('Local AI triage is disabled.');
-    return triageBugWithOllama(payload, db.getOllamaModelName());
+  ipcMain.handle('ai:triageWithOllama', (_event, _payload: AiTriageBugPayload) => {
+    throw new Error('AI triage is coming soon and is disabled in this build.');
   });
 }
 

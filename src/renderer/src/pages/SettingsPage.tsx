@@ -32,7 +32,7 @@ function tabForRequestedCard(card: string | null): { tab: SettingsTab; card: str
   if (card === 'ai-options') return { tab: 'ai', card };
   if (['backup', 'data-management', 'storage'].includes(card)) return { tab: 'storage', card };
   if (['cloud-sync', 'sync'].includes(card)) return { tab: 'sync', card };
-  if (['entry-types', 'applications', 'modules', 'environments', 'devices', 'browsers', 'severity-values', 'issue-platforms', 'templates', 'jira-workspace'].includes(card)) {
+  if (['entry-types', 'applications', 'modules', 'environments', 'devices', 'browsers', 'user-roles', 'severity-values', 'issue-platforms', 'templates', 'jira-workspace'].includes(card)) {
     return { tab: 'general', card };
   }
   return null;

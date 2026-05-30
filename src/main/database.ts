@@ -36,15 +36,18 @@ const defaultEntryTypes = ['Bug', 'Scenario', 'Question', 'Observation', 'Improv
 const defaultEnvironments = ['Production', 'Staging', 'QA', 'UAT', 'Development', 'Local'];
 const defaultDevices = ['Desktop', 'Laptop', 'Tablet', 'Mobile', 'Other'];
 const defaultBrowsers = ['Chrome', 'Edge', 'Firefox', 'Safari', 'Other'];
+const defaultUserRoles = ['Admin', 'Standard User', 'Guest', 'Read-Only'];
 const referenceTables: Record<ReferenceTable, string> = {
   environment: 'environments',
   device: 'devices',
-  browser: 'browsers'
+  browser: 'browsers',
+  user_role: 'user_roles'
 };
 const referenceForeignKeys: Record<ReferenceTable, string> = {
   environment: 'environment_id',
   device: 'device_id',
-  browser: 'browser_id'
+  browser: 'browser_id',
+  user_role: 'user_role_id'
 };
 const attachmentFileNameSql =
   "CASE WHEN attachments.content_hash IS NULL OR attachments.content_hash = '' THEN 'Pruned attachment' ELSE attachments.content_hash || attachments.file_extension END AS file_name";
@@ -56,7 +59,7 @@ const defaultShortcuts: Array<Pick<ShortcutSetting, 'action' | 'label' | 'accele
 const MAX_CAPTURE_PRESETS = 3;
 
 const quickReportTemplate = `🚨 *[{{severity}}] {{title}}*
-*Context:* {{application}} > {{module}} | {{environment}}
+*Context:* {{application}} > {{module}} | {{environment}} | {{user_role}}
 
 *Note:* {{note}}`;
 
@@ -171,6 +174,9 @@ Device:
 
 Browser:
 {{browser}}
+
+User Role:
+{{user_role}}
 
 Steps to Reproduce:
 {{steps}}
@@ -327,6 +333,16 @@ export class BugPocketDatabase {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS user_roles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        value TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS bugs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         application_id INTEGER NULL REFERENCES applications(id) ON DELETE SET NULL,
@@ -334,6 +350,7 @@ export class BugPocketDatabase {
         environment_id INTEGER NULL REFERENCES environments(id) ON DELETE SET NULL,
         device_id INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL,
         browser_id INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL,
+        user_role_id INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL,
         entry_type TEXT NOT NULL DEFAULT 'Bug',
         title TEXT NOT NULL DEFAULT '',
         note TEXT NOT NULL DEFAULT '',
@@ -443,6 +460,7 @@ export class BugPocketDatabase {
     this.ensureColumn('bugs', 'environment_id', 'INTEGER NULL REFERENCES environments(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'device_id', 'INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'browser_id', 'INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL');
+    this.ensureColumn('bugs', 'user_role_id', 'INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'steps_to_reproduce', "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn('bugs', 'expected_result', "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn('bugs', 'actual_result', "TEXT NOT NULL DEFAULT ''");
@@ -469,6 +487,7 @@ export class BugPocketDatabase {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_environment_id ON bugs(environment_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_device_id ON bugs(device_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_browser_id ON bugs(browser_id)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_user_role_id ON bugs(user_role_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_sync_status ON bugs(sync_status)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_attachments_bug_id ON attachments(bug_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_attachments_content_hash ON attachments(content_hash)');
@@ -727,6 +746,7 @@ export class BugPocketDatabase {
         environment_id INTEGER NULL REFERENCES environments(id) ON DELETE SET NULL,
         device_id INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL,
         browser_id INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL,
+        user_role_id INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL,
         entry_type TEXT NOT NULL DEFAULT 'Bug',
         title TEXT NOT NULL DEFAULT '',
         note TEXT NOT NULL DEFAULT '',
@@ -748,12 +768,12 @@ export class BugPocketDatabase {
       );
 
       INSERT INTO bugs_status_limited (
-        id, application_id, module_id, environment_id, device_id, browser_id, entry_type, title, note, other_details,
+        id, application_id, module_id, environment_id, device_id, browser_id, user_role_id, entry_type, title, note, other_details,
         steps_to_reproduce, expected_result, actual_result, status, severity, reported, issue_platform, issue_id,
         issue_url, tags, sync_status, last_sync_at, created_at, updated_at
       )
       SELECT
-        id, application_id, module_id, environment_id, device_id, browser_id, entry_type, title, note, other_details,
+        id, application_id, module_id, environment_id, device_id, browser_id, user_role_id, entry_type, title, note, other_details,
         steps_to_reproduce, expected_result, actual_result,
         CASE
           WHEN LOWER(TRIM(status)) IN ('reported', 'fixed', 'verified', 'done', 'converted to bug') THEN 'Reported'
@@ -831,13 +851,14 @@ export class BugPocketDatabase {
         .prepare(
           `
           SELECT bugs.*, applications.name AS application_name, modules.name AS module_name,
-            environments.name AS environment, devices.name AS device, browsers.name AS browser
+            environments.name AS environment, devices.name AS device, browsers.name AS browser, user_roles.name AS user_role
           FROM bugs
           LEFT JOIN applications ON applications.id = bugs.application_id
           LEFT JOIN modules ON modules.id = bugs.module_id
           LEFT JOIN environments ON environments.id = bugs.environment_id
           LEFT JOIN devices ON devices.id = bugs.device_id
           LEFT JOIN browsers ON browsers.id = bugs.browser_id
+        LEFT JOIN user_roles ON user_roles.id = bugs.user_role_id
           WHERE bugs.id = ?
         `
         )
@@ -873,6 +894,7 @@ export class BugPocketDatabase {
     defaultEnvironments.forEach((value, index) => this.addReferenceOption('environment', value, index, stamp));
     defaultDevices.forEach((value, index) => this.addReferenceOption('device', value, index, stamp));
     defaultBrowsers.forEach((value, index) => this.addReferenceOption('browser', value, index, stamp));
+    defaultUserRoles.forEach((value, index) => this.addReferenceOption('user_role', value, index, stamp));
 
     this.normalizeShortcutActions(stamp);
 
@@ -889,9 +911,10 @@ export class BugPocketDatabase {
     );
     templateInsert.run('Full Bug Report', fullReportTemplate, stamp, stamp);
     templateInsert.run('Quick Report', quickReportTemplate, stamp, stamp);
-    templateInsert.run('Linear Format', '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}', stamp, stamp);
-    templateInsert.run('Jira Format', '{{title}}\n\nSummary:\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nDevice: {{device}}\nBrowser: {{browser}}\n\nSteps to Reproduce:\n{{steps}}\n\nExpected Result:\n{{expected}}\n\nActual Result:\n{{actual}}\n\nSeverity: {{severity}}\nAttachments:\n{{attachments}}', stamp, stamp);
+    templateInsert.run('Linear Format', '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nUser Role: {{user_role}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}', stamp, stamp);
+    templateInsert.run('Jira Format', '{{title}}\n\nSummary:\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nUser Role: {{user_role}}\nDevice: {{device}}\nBrowser: {{browser}}\n\nSteps to Reproduce:\n{{steps}}\n\nExpected Result:\n{{expected}}\n\nActual Result:\n{{actual}}\n\nSeverity: {{severity}}\nAttachments:\n{{attachments}}', stamp, stamp);
     this.upgradeDefaultTemplatesForEnvironment(stamp);
+    this.upgradeDefaultTemplatesForUserRole(stamp);
   }
 
   private ensureDefaultGeneralModule(stamp: string): void {
@@ -942,6 +965,99 @@ export class BugPocketDatabase {
     this.db.prepare('DELETE FROM shortcut_settings WHERE action IN (?, ?)').run('quick_capture_legacy', 'screenshot_capture');
   }
 
+  private upgradeDefaultTemplatesForUserRole(stamp: string): void {
+    const replacements: Array<[string, string, string]> = [
+      [
+        'Quick Report',
+        `🚨 *[{{severity}}] {{title}}*
+*Context:* {{application}} > {{module}} | {{environment}}
+
+*Note:* {{note}}`,
+        quickReportTemplate
+      ],
+      [
+        'Linear Format',
+        `{{title}}
+
+{{note}}
+
+Application: {{application}}
+Module: {{module}}
+Environment: {{environment}}
+Device: {{device}}
+Browser: {{browser}}
+Severity: {{severity}}
+Attachments:
+{{attachments}}`,
+        `{{title}}
+
+{{note}}
+
+Application: {{application}}
+Module: {{module}}
+Environment: {{environment}}
+User Role: {{user_role}}
+Device: {{device}}
+Browser: {{browser}}
+Severity: {{severity}}
+Attachments:
+{{attachments}}`
+      ],
+      [
+        'Jira Format',
+        `{{title}}
+
+Summary:
+{{note}}
+
+Application: {{application}}
+Module: {{module}}
+Environment: {{environment}}
+Device: {{device}}
+Browser: {{browser}}
+
+Steps to Reproduce:
+{{steps}}
+
+Expected Result:
+{{expected}}
+
+Actual Result:
+{{actual}}
+
+Severity: {{severity}}
+Attachments:
+{{attachments}}`,
+        `{{title}}
+
+Summary:
+{{note}}
+
+Application: {{application}}
+Module: {{module}}
+Environment: {{environment}}
+User Role: {{user_role}}
+Device: {{device}}
+Browser: {{browser}}
+
+Steps to Reproduce:
+{{steps}}
+
+Expected Result:
+{{expected}}
+
+Actual Result:
+{{actual}}
+
+Severity: {{severity}}
+Attachments:
+{{attachments}}`
+      ]
+    ];
+    const update = this.db.prepare('UPDATE report_templates SET template_text = ?, updated_at = ? WHERE name = ? AND template_text = ?');
+    replacements.forEach(([name, before, after]) => update.run(after, stamp, name, before));
+  }
+
   private upgradeDefaultTemplatesForEnvironment(stamp: string): void {
     this.db.prepare('DELETE FROM report_templates WHERE name = ?').run('Slack Summary');
 
@@ -964,7 +1080,7 @@ export class BugPocketDatabase {
       quickReportTemplate,
       stamp,
       'Quick Report',
-      '{{title}}\n\n{{note}}\n\n{{application}} / {{module}}\nEnvironment: {{environment}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}'
+      '{{title}}\n\n{{note}}\n\n{{application}} / {{module}}\nEnvironment: {{environment}}\nUser Role: {{user_role}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}'
     );
     templateUpdate.run(
       '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}',
@@ -973,7 +1089,7 @@ export class BugPocketDatabase {
       '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}'
     );
     templateUpdate.run(
-      '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}',
+      '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nUser Role: {{user_role}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}',
       stamp,
       'Linear Format',
       '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}'
@@ -1002,6 +1118,7 @@ export class BugPocketDatabase {
       environments: this.getReferenceOptions('environment'),
       devices: this.getReferenceOptions('device'),
       browsers: this.getReferenceOptions('browser'),
+      userRoles: this.getReferenceOptions('user_role'),
       reportTemplates: this.db.prepare('SELECT * FROM report_templates ORDER BY name').all() as ReportTemplate[],
       shortcuts: this.getShortcutSettings(),
       jiraWorkspaceUrl: this.getJiraWorkspaceUrl(),
@@ -1235,6 +1352,18 @@ export class BugPocketDatabase {
     this.deleteReferenceOption('browser', id);
   }
 
+  addUserRole(name: string): ReferenceOption {
+    return this.addReferenceOption('user_role', name);
+  }
+
+  updateUserRole(id: number, name: string): ReferenceOption {
+    return this.updateReferenceOption('user_role', id, name);
+  }
+
+  deleteUserRole(id: number): void {
+    this.deleteReferenceOption('user_role', id);
+  }
+
   private updateReferenceOption(type: ReferenceTable, id: number, name: string): ReferenceOption {
     const table = referenceTables[type];
     const cleaned = name.trim();
@@ -1283,6 +1412,7 @@ export class BugPocketDatabase {
     if (normalized === 'environment' || normalized === 'environments') return 'environment';
     if (normalized === 'device' || normalized === 'devices') return 'device';
     if (normalized === 'browser' || normalized === 'browsers') return 'browser';
+    if (normalized === 'user_role' || normalized === 'user_roles' || normalized === 'user role' || normalized === 'user roles') return 'user_role';
     throw new Error('Unsupported reference table.');
   }
 
@@ -1456,7 +1586,7 @@ export class BugPocketDatabase {
       .prepare(
         `
         SELECT bugs.*, applications.name AS application_name, modules.name AS module_name,
-          environments.name AS environment, devices.name AS device, browsers.name AS browser,
+          environments.name AS environment, devices.name AS device, browsers.name AS browser, user_roles.name AS user_role,
           COUNT(
             CASE
               WHEN attachments.id IS NOT NULL
@@ -1474,6 +1604,7 @@ export class BugPocketDatabase {
         LEFT JOIN environments ON environments.id = bugs.environment_id
         LEFT JOIN devices ON devices.id = bugs.device_id
         LEFT JOIN browsers ON browsers.id = bugs.browser_id
+        LEFT JOIN user_roles ON user_roles.id = bugs.user_role_id
         LEFT JOIN attachments ON attachments.bug_id = bugs.id
         ${where}
         GROUP BY bugs.id
@@ -1488,13 +1619,14 @@ export class BugPocketDatabase {
       .prepare(
         `
         SELECT bugs.*, applications.name AS application_name, modules.name AS module_name,
-          environments.name AS environment, devices.name AS device, browsers.name AS browser
+          environments.name AS environment, devices.name AS device, browsers.name AS browser, user_roles.name AS user_role
         FROM bugs
         LEFT JOIN applications ON applications.id = bugs.application_id
         LEFT JOIN modules ON modules.id = bugs.module_id
         LEFT JOIN environments ON environments.id = bugs.environment_id
         LEFT JOIN devices ON devices.id = bugs.device_id
         LEFT JOIN browsers ON browsers.id = bugs.browser_id
+        LEFT JOIN user_roles ON user_roles.id = bugs.user_role_id
         WHERE bugs.id = ?
       `
       )
@@ -1556,10 +1688,10 @@ export class BugPocketDatabase {
     const tx = this.db.transaction(() => {
       const result = this.db
         .prepare(
-          `INSERT INTO bugs (entry_type, application_id, module_id, environment_id, title, note, status, severity, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'Draft', 'Medium', ?, ?)`
+          `INSERT INTO bugs (entry_type, application_id, module_id, environment_id, user_role_id, title, note, status, severity, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'Draft', 'Medium', ?, ?)`
         )
-        .run(input.entry_type || 'Bug', input.application_id, input.module_id, input.environment_id, title, input.note.trim(), stamp, stamp);
+        .run(input.entry_type || 'Bug', input.application_id, input.module_id, input.environment_id, input.user_role_id, title, input.note.trim(), stamp, stamp);
       const bugId = Number(result.lastInsertRowid);
       const attach = this.db.prepare('UPDATE attachments SET bug_id = ? WHERE id = ? AND bug_id IS NULL');
       this.enqueueBugSyncEvent(bugId, 'INSERT');
@@ -1580,7 +1712,7 @@ export class BugPocketDatabase {
         .prepare(
           `
           UPDATE bugs SET entry_type = ?, application_id = ?, module_id = ?, title = ?, note = ?, other_details = ?,
-            steps_to_reproduce = ?, expected_result = ?, actual_result = ?, environment_id = ?, device_id = ?, browser_id = ?,
+            steps_to_reproduce = ?, expected_result = ?, actual_result = ?, environment_id = ?, device_id = ?, browser_id = ?, user_role_id = ?,
             status = ?, severity = ?, reported = ?, issue_platform = ?, issue_id = ?, issue_url = ?,
             tags = ?, sync_status = 'Sync Pending', updated_at = ?
           WHERE id = ?
@@ -1599,6 +1731,7 @@ export class BugPocketDatabase {
           input.environment_id,
           input.device_id,
           input.browser_id,
+          input.user_role_id,
           status,
           input.severity,
           status === 'Reported' ? 1 : 0,

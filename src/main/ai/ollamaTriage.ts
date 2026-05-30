@@ -1,11 +1,14 @@
 import { readFile } from 'node:fs/promises';
+import { nativeImage } from 'electron';
 import type { AiTriageBugPayload, AiTriageResponse, AiTriageResult } from '../../shared/types';
 
 const ollamaChatUrl = 'http://localhost:11434/api/chat';
 const modelNameRegex = /^[a-zA-Z0-9\-:._]+$/;
+const maxVisionImageEdge = 1280;
+const visionJpegQuality = 78;
 
 const systemPrompt =
-  "You are an Expert QA Tester. Your task is to take a rough bug note, a screenshot, and the application context, and transform them into a fully polished, professional bug report. DO NOT just repeat the user's input. You have permission to expand, infer, and deduce the missing details. You must rewrite the user's rough tester note into a highly polished, professional, 1-2 sentence executive summary. You MUST output your response as a raw JSON object wrapped in a markdown code block (e.g., ```json { ... } ```). Do not include any other text.";
+  "You are an Expert QA Tester. Transform a rough bug note, screenshot, and app context into a concise professional bug report. Do not repeat the user's input verbatim. Infer only what is directly supported by the screenshot and context. Keep every field brief and actionable. You MUST output a raw JSON object wrapped in a markdown code block (for example ```json { ... } ```). Do not include any other text.";
 
 interface OllamaChatResponse {
   message?: {
@@ -39,7 +42,9 @@ export async function triageBugWithOllama(payload: AiTriageBugPayload, configure
         }
       ],
       options: {
-        num_ctx: 8192
+        num_ctx: 4096,
+        num_predict: 900,
+        temperature: 0.2
       },
       stream: false
     };
@@ -81,10 +86,37 @@ export async function triageBugWithOllama(payload: AiTriageBugPayload, configure
 }
 
 async function readImageAsBase64(filePath: string): Promise<string> {
+  if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(filePath.trim())) return stripBase64Prefix(filePath);
+
+  const optimized = await readOptimizedImageAsBase64(filePath);
+  if (optimized) return optimized;
+
   const bytes = await readFile(filePath);
   const maybeDataUrl = bytes.toString('utf8').trim();
   if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(maybeDataUrl)) return stripBase64Prefix(maybeDataUrl);
   return stripBase64Prefix(bytes.toString('base64'));
+}
+
+async function readOptimizedImageAsBase64(filePath: string): Promise<string> {
+  try {
+    const image = nativeImage.createFromPath(filePath);
+    if (image.isEmpty()) return '';
+
+    const size = image.getSize();
+    const largestEdge = Math.max(size.width, size.height);
+    const optimizedImage = largestEdge > maxVisionImageEdge
+      ? image.resize({
+          width: size.width >= size.height ? maxVisionImageEdge : undefined,
+          height: size.height > size.width ? maxVisionImageEdge : undefined,
+          quality: 'good'
+        })
+      : image;
+
+    return optimizedImage.toJPEG(visionJpegQuality).toString('base64');
+  } catch (caught) {
+    console.warn('[OLLAMA IMAGE OPTIMIZATION WARNING]', caught instanceof Error ? caught.message : caught);
+    return '';
+  }
 }
 
 function stripBase64Prefix(value: string): string {
@@ -94,45 +126,40 @@ function stripBase64Prefix(value: string): string {
 function buildBugTriagePrompt(payload: AiTriageBugPayload): string {
   const refinementNote = cleanString(payload.refinement_note);
   return [
-    `App Context: Application: ${payload.application || 'Unknown'}\n${payload.application_context || '[No application context provided]'}`,
-    `Module Context: Module: ${payload.module || 'Unknown'}\n${payload.module_context || '[No module context provided]'}`,
-    `Tester Note: ${payload.note || '[No tester note provided]'}`,
-    [
-      refinementNote
-        ? `CRITICAL: The user has reviewed the current draft and requested the following specific correction: '${refinementNote}'. Apply this correction strictly to the existing data.`
-        : '',
-      'Task: Analyze the screenshot and context to deduce the exact steps required to reach the visual state.',
-      "Use the context to infer the 'Expected Result'.",
-      "Expand the rough note into a clear 'Actual Result'.",
-      "Rewrite the rough tester note into a polished 1-2 sentence refined_summary.",
-      "Generate a concise 'Bug Title'.",
-      'Fill out the JSON schema with visual_analysis, bug_title, refined_summary, severity_level, steps_to_reproduce, expected_result, and actual_result.'
-    ].filter(Boolean).join(' '),
-    '',
-    'Existing Manual Fields:',
-    `Entry type: ${payload.entry_type || 'Bug'}`,
+    '# Context',
+    `Application: ${payload.application || 'Unknown'}`,
+    `Application context: ${payload.application_context || 'Not provided'}`,
+    `Module: ${payload.module || 'Unknown'}`,
+    `Module context: ${payload.module_context || 'Not provided'}`,
     `Environment: ${payload.environment || 'Unknown'}`,
-    `Device: ${payload.device || 'Unknown'}`,
-    `Browser: ${payload.browser || 'Unknown'}`,
-    `Current severity: ${payload.severity || 'Unknown'}`,
-    `Current status: ${payload.status || 'Unknown'}`,
-    `Title: ${payload.title || ''}`,
-    `Steps to reproduce: ${payload.steps_to_reproduce || ''}`,
-    `Expected result: ${payload.expected_result || ''}`,
-    `Actual result: ${payload.actual_result || ''}`,
-    `Other details: ${payload.other_details || ''}`,
+    `Device/browser: ${payload.device || 'Unknown'} / ${payload.browser || 'Unknown'}`,
+    `User role: ${payload.user_role || 'Unknown'}`,
+    `Entry type: ${payload.entry_type || 'Bug'}`,
     '',
-    'Return exactly this JSON shape:',
+    '# Tester note and existing fields',
+    `Tester note: ${payload.note || 'Not provided'}`,
+    `Current title: ${payload.title || ''}`,
+    `Current severity: ${payload.severity || ''}`,
+    `Steps: ${payload.steps_to_reproduce || ''}`,
+    `Expected: ${payload.expected_result || ''}`,
+    `Actual: ${payload.actual_result || ''}`,
+    `Other details: ${payload.other_details || ''}`,
+    refinementNote ? `Correction request: ${refinementNote}` : '',
+    '',
+    '# Task',
+    'Analyze the screenshot only as needed. Return concise fields suitable for direct insertion into the form.',
+    'visual_analysis must be one short sentence. refined_summary must be 1-2 sentences. steps_to_reproduce should be short numbered steps.',
+    'Return exactly this JSON shape and no extra keys:',
     '{',
-    '  "visual_analysis": "Briefly describe what you see in the screenshot and the UI state here before generating the rest of the report.",',
+    '  "visual_analysis": "...",',
     '  "bug_title": "...",',
-    '  "refined_summary": "Rewrite the rough note into a polished 1-2 sentence summary.",',
+    '  "refined_summary": "...",',
     '  "severity_level": "...",',
-    '  "steps_to_reproduce": "1. ...\\n2. ...",',
+    '  "steps_to_reproduce": "1. ...\n2. ...",',
     '  "expected_result": "...",',
     '  "actual_result": "..."',
     '}'
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 function parseTriageJson(raw: string): AiTriageResult {
