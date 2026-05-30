@@ -75,7 +75,7 @@ Important files:
 - `src/renderer/src/components/settings/ShortcutSettingsPanel.tsx`: shortcut recording UI.
 - `src/renderer/src/components/settings/CapturePreferencesPanel.tsx`: screenshot review and startup toggles.
 - `src/renderer/src/components/settings/JiraWorkspacePanel.tsx`: Jira workspace URL field.
-- `src/renderer/src/components/settings/AiOptionsPanel.tsx`: Ollama enable/model config.
+- `src/renderer/src/components/settings/AiOptionsPanel.tsx`: Ollama enable/guided vision model config.
 - `src/renderer/src/components/settings/DataManagementPanel.tsx`: backup export/import/auto-backup UI.
 - `src/renderer/src/components/settings/PresetManager.tsx`: Quick Capture preset CRUD (max 3).
 - `src/renderer/src/components/settings/ModuleManager.tsx`: module management grouped by application.
@@ -307,7 +307,10 @@ Data Management currently includes:
 Local AI Triage settings currently include:
 
 - `Enable Triage with Local AI`, stored in `app_settings` as `ai_triage_enabled`, default `false`.
-- `Ollama model name`, stored in `app_settings` as `ollama_model_name`, default `qwen3-vl:8b`.
+- Guided Ollama vision model selection, with built-in choices for Qwen, Llama, and Pixtral vision models.
+- A `Custom / Other` escape hatch for manually entering any Ollama model tag.
+- The selected or custom model tag is still persisted as the final string in `app_settings` under `ollama_model_name`, default `qwen3-vl:8b`.
+- If the saved model tag does not match a built-in vision model, Settings opens the AI panel in `Custom / Other` mode.
 - Model names are validated before request dispatch and may contain only letters, numbers, hyphens, colons, underscores, and periods.
 - The Bug Details `Triage with Local AI` button is not mounted unless `ai_triage_enabled` is true.
 
