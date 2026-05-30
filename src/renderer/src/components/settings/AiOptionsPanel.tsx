@@ -15,14 +15,23 @@ const DEFAULT_MODEL = 'qwen3-vl:8b';
 
 const VISION_MODELS: Record<string, VisionModel[]> = {
   'Qwen (Alibaba)': [
-    { id: 'qwen2.5-vl:7b', name: 'Qwen 2.5 VL (7B)', reqs: '8GB+ VRAM Recommended', cmd: 'ollama run qwen2.5-vl', url: 'https://ollama.com/library/qwen2.5-vl' },
-    { id: 'qwen-vl-chat', name: 'Qwen VL Chat', reqs: '8GB+ VRAM', cmd: 'ollama run qwen-vl-chat', url: 'https://ollama.com/library/qwen-vl-chat' }
+    { id: 'qwen3-vl:8b', name: 'Qwen 3 VL (8B)', reqs: '8GB+ VRAM', cmd: 'ollama run qwen3-vl:8b', url: 'https://ollama.com/library/qwen3-vl' },
+    { id: 'qwen2.5-vl:7b', name: 'Qwen 2.5 VL (7B)', reqs: '8GB+ VRAM', cmd: 'ollama run qwen2.5-vl', url: 'https://ollama.com/library/qwen2.5-vl' },
+    { id: 'qwen2.5-vl:3b', name: 'Qwen 2.5 VL (3B)', reqs: '4GB+ VRAM (Fast)', cmd: 'ollama run qwen2.5-vl:3b', url: 'https://ollama.com/library/qwen2.5-vl' }
   ],
   'Llama (Meta)': [
-    { id: 'llama3.2-vision', name: 'Llama 3.2 Vision (11B)', reqs: '16GB+ VRAM Recommended', cmd: 'ollama run llama3.2-vision', url: 'https://ollama.com/library/llama3.2-vision' }
+    { id: 'llama3.2-vision', name: 'Llama 3.2 Vision (11B)', reqs: '12GB+ VRAM', cmd: 'ollama run llama3.2-vision', url: 'https://ollama.com/library/llama3.2-vision' },
+    { id: 'llama3.2-vision:90b', name: 'Llama 3.2 Vision (90B)', reqs: '40GB+ VRAM (Pro Workstation)', cmd: 'ollama run llama3.2-vision:90b', url: 'https://ollama.com/library/llama3.2-vision' }
   ],
-  'Pixtral (Mistral)': [
-    { id: 'pixtral', name: 'Pixtral 12B', reqs: '16GB+ VRAM', cmd: 'ollama run pixtral', url: 'https://ollama.com/library/pixtral' }
+  'Llava (Open Source)': [
+    { id: 'llava:7b', name: 'Llava (7B)', reqs: '8GB+ VRAM', cmd: 'ollama run llava', url: 'https://ollama.com/library/llava' },
+    { id: 'llava-llama3', name: 'Llava Llama-3 (8B)', reqs: '8GB+ VRAM', cmd: 'ollama run llava-llama3', url: 'https://ollama.com/library/llava-llama3' },
+    { id: 'llava-phi3', name: 'Llava Phi-3 (3.8B)', reqs: '4GB+ VRAM (Laptop Friendly)', cmd: 'ollama run llava-phi3', url: 'https://ollama.com/library/llava-phi3' }
+  ],
+  'Mistral & Others': [
+    { id: 'pixtral', name: 'Pixtral 12B', reqs: '12GB+ VRAM', cmd: 'ollama run pixtral', url: 'https://ollama.com/library/pixtral' },
+    { id: 'minicpm-v', name: 'MiniCPM-V (8B)', reqs: '8GB+ VRAM', cmd: 'ollama run minicpm-v', url: 'https://ollama.com/library/minicpm-v' },
+    { id: 'moondream', name: 'Moondream 2 (1.8B)', reqs: '2GB+ VRAM (Extremely Fast)', cmd: 'ollama run moondream', url: 'https://ollama.com/library/moondream' }
   ],
   [CUSTOM_VENDOR]: []
 };
