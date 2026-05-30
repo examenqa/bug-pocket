@@ -1,25 +1,42 @@
 import React, { useEffect, useState } from 'react';
-import { Check, X } from 'lucide-react';
+import { Bot, Check, Cloud, Database, Keyboard, SlidersHorizontal, X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { SettingsData } from '../../../shared/types';
-import { ShortcutSettingsPanel } from '../components/settings/ShortcutSettingsPanel';
-import { CapturePreferencesPanel } from '../components/settings/CapturePreferencesPanel';
-import { PresetManager } from '../components/settings/PresetManager';
-import { ModuleManager } from '../components/settings/ModuleManager';
-import { OptionManager } from '../components/settings/OptionManager';
-import { DataManagementPanel } from '../components/settings/DataManagementPanel';
-import { JiraWorkspacePanel } from '../components/settings/JiraWorkspacePanel';
-import { AiOptionsPanel } from '../components/settings/AiOptionsPanel';
-import { TemplateManager } from '../components/settings/TemplateManager';
+import { AiSettings } from '../components/settings/AiSettings';
+import { GeneralSettings } from '../components/settings/GeneralSettings';
+import { PresetSettings } from '../components/settings/PresetSettings';
+import { StorageSettings } from '../components/settings/StorageSettings';
+import { SyncSettings } from '../components/settings/SyncSettings';
 import { hasSettingsMutationBridge } from '../components/settings/settingsUtils';
 import { restorePendingKey, restoreSuccessKey, restoreSettingsSegmentKey } from '../utils/settingsKeys';
 
-type SettingsSegment = 'preferences' | 'taxonomy' | 'outbound';
+type SettingsTab = 'general' | 'presets' | 'ai' | 'storage' | 'sync';
 
-const settingsSegments: Array<{ id: SettingsSegment; label: string; description: string }> = [
-  { id: 'preferences', label: 'Preferences', description: 'Capture behavior, shortcuts, and presets' },
-  { id: 'taxonomy', label: 'Taxonomy', description: 'Applications, modules, statuses, and field values' },
-  { id: 'outbound', label: 'Outbound', description: 'Issue platforms, Jira, and report templates' }
+const settingsTabs: Array<{ id: SettingsTab; label: string; description: string; icon: LucideIcon }> = [
+  { id: 'general', label: 'General & Hotkeys', description: 'Shortcuts, system behavior, fields, and report output', icon: Keyboard },
+  { id: 'presets', label: 'Capture Presets', description: 'Three fast Quick Panel preset slots', icon: SlidersHorizontal },
+  { id: 'ai', label: 'AI Triage', description: 'Local Ollama vision model guidance', icon: Bot },
+  { id: 'storage', label: 'Storage & Backups', description: 'Export, restore, and rolling backups', icon: Database },
+  { id: 'sync', label: 'Cloud Sync', description: 'Placeholder for future Supabase sync', icon: Cloud }
 ];
+
+const oldSegmentToTab: Record<string, SettingsTab> = {
+  preferences: 'general',
+  taxonomy: 'general',
+  outbound: 'storage'
+};
+
+function tabForRequestedCard(card: string | null): { tab: SettingsTab; card: string | null } | null {
+  if (!card) return null;
+  if (card === 'presets') return { tab: 'presets', card: 'presets' };
+  if (card === 'ai-options') return { tab: 'ai', card };
+  if (['backup', 'data-management', 'storage'].includes(card)) return { tab: 'storage', card };
+  if (['cloud-sync', 'sync'].includes(card)) return { tab: 'sync', card };
+  if (['entry-types', 'applications', 'modules', 'environments', 'devices', 'browsers', 'severity-values', 'issue-platforms', 'templates', 'jira-workspace'].includes(card)) {
+    return { tab: 'general', card };
+  }
+  return null;
+}
 
 export function SettingsPage({
   settings,
@@ -32,16 +49,21 @@ export function SettingsPage({
 }) {
   const settingsMutationBridgeReady = hasSettingsMutationBridge();
   const [openSettingsCard, setOpenSettingsCard] = useState<string | null>(null);
-  const [activeSegment, setActiveSegment] = useState<SettingsSegment>('preferences');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [settingsToast, setSettingsToast] = useState('');
   const [restoreNotice, setRestoreNotice] = useState('');
   const requestedCard = new URLSearchParams(route.split('?')[1] ?? '').get('card');
 
   useEffect(() => {
-    const segment = window.sessionStorage.getItem(restoreSettingsSegmentKey) as SettingsSegment | null;
-    if (segment && settingsSegments.some((item) => item.id === segment)) setActiveSegment(segment);
+    const savedSegment = window.sessionStorage.getItem(restoreSettingsSegmentKey);
+    if (savedSegment) {
+      const nextTab = settingsTabs.some((item) => item.id === savedSegment)
+        ? savedSegment as SettingsTab
+        : oldSegmentToTab[savedSegment] ?? 'general';
+      setActiveTab(nextTab);
+    }
     if (window.sessionStorage.getItem(restoreSuccessKey) === '1') {
-      setActiveSegment('outbound');
+      setActiveTab('storage');
       setRestoreNotice('Workspace backup restored successfully. Bug Pocket reloaded your local database and attachments.');
       setSettingsToast('Workspace backup restored successfully.');
       window.setTimeout(() => setSettingsToast(''), 3200);
@@ -52,32 +74,19 @@ export function SettingsPage({
   }, []);
 
   useEffect(() => {
-    if (!requestedCard) return;
-    if (requestedCard === 'presets') { setActiveSegment('preferences'); setOpenSettingsCard('presets'); return; }
-    if (['entry-types', 'applications', 'modules', 'environments', 'devices', 'browsers', 'severity-values'].includes(requestedCard)) {
-      setActiveSegment('taxonomy'); setOpenSettingsCard(requestedCard); return;
-    }
-    if (['issue-platforms', 'templates', 'jira-workspace', 'ai-options'].includes(requestedCard)) {
-      setActiveSegment('outbound'); setOpenSettingsCard(requestedCard);
-    }
+    const destination = tabForRequestedCard(requestedCard);
+    if (!destination) return;
+    setActiveTab(destination.tab);
+    setOpenSettingsCard(destination.card);
   }, [requestedCard]);
 
   const toggleSettingsCard = (cardId: string): void => { setOpenSettingsCard((current) => (current === cardId ? null : cardId)); };
   const showSettingsToast = (message: string): void => { setSettingsToast(message); window.setTimeout(() => setSettingsToast(''), 2600); };
-  const runPresetLockedDelete = async (action: () => Promise<void>): Promise<void> => {
-    try {
-      await action();
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Could not update setting.';
-      if (message.includes('active preset')) showSettingsToast('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.');
-      throw caught;
-    }
-  };
 
   return (
     <section className="page settings-page">
       <header className="page-header">
-        <div><h1>Settings</h1><p>Keep quick capture dropdowns tidy.</p></div>
+        <div><h1>Settings</h1><p>Keep Bug Pocket focused, fast, and local-first.</p></div>
       </header>
       {!settingsMutationBridgeReady && (
         <div className="settings-warning">
@@ -91,117 +100,58 @@ export function SettingsPage({
           <button type="button" aria-label="Dismiss restore message" onClick={() => setRestoreNotice('')}><X size={15} /></button>
         </div>
       )}
-      <nav className="settings-segment-nav" aria-label="Settings sections">
-        {settingsSegments.map((segment) => (
-          <button
-            key={segment.id}
-            className={activeSegment === segment.id ? 'active' : ''}
-            onClick={() => setActiveSegment(segment.id)}
-            type="button"
-          >
-            <strong>{segment.label}</strong>
-            <span>{segment.description}</span>
-          </button>
-        ))}
-      </nav>
-      <div className="settings-segment-body">
-        {activeSegment === 'preferences' && (
-          <>
-            <ShortcutSettingsPanel shortcuts={settings.shortcuts} refresh={refresh} />
-            <CapturePreferencesPanel screenshotReviewEnabled={settings.quickCaptureAnnotateScreenshots} runOnSystemStartup={settings.runOnSystemStartup} refresh={refresh} />
-            <PresetManager settings={settings} mutationReady={settingsMutationBridgeReady} refresh={refresh} showToast={showSettingsToast} open={openSettingsCard === 'presets'} onToggle={() => toggleSettingsCard('presets')} />
-          </>
-        )}
-        {activeSegment === 'taxonomy' && (
-          <div className="settings-grid taxonomy-grid">
-            <OptionManager
-              title="Applications"
-              open={openSettingsCard === 'applications'}
-              onToggle={() => toggleSettingsCard('applications')}
+      <div className="settings-layout">
+        <aside className="settings-sidebar-nav" aria-label="Settings sections">
+          {settingsTabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                className={activeTab === tab.id ? 'active' : ''}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (tab.id === 'presets') setOpenSettingsCard('presets');
+                }}
+                type="button"
+              >
+                <Icon size={17} />
+                <span>
+                  <strong>{tab.label}</strong>
+                  <small>{tab.description}</small>
+                </span>
+              </button>
+            );
+          })}
+        </aside>
+        <div className="settings-content-panel">
+          {activeTab === 'general' && (
+            <GeneralSettings
+              settings={settings}
               mutationReady={settingsMutationBridgeReady}
-              items={settings.applications.map((item) => ({ id: item.id, label: item.name, contextDescription: item.context_description ?? '', isSynced: item.is_synced !== 0 }))}
-              onAdd={async (value) => { await window.bugPocket.addApplication(value); await refresh(); }}
-              onUpdate={async (id, value, item) => { await window.bugPocket.updateApplication(id, value, item.contextDescription ?? ''); await refresh(); }}
-              onUpdateContext={async (id, contextDescription) => { await window.bugPocket.updateApplicationContext(id, contextDescription); await refresh(); }}
-              onDelete={async (id) => runPresetLockedDelete(async () => { await window.bugPocket.deleteApplication(id); await refresh(); })}
-              onToggleSync={async (id, isSynced) => { await window.bugPocket.updateApplicationSync(id, isSynced); await refresh(); }}
+              openSettingsCard={openSettingsCard}
+              refresh={refresh}
+              showToast={showSettingsToast}
+              toggleSettingsCard={toggleSettingsCard}
             />
-            <ModuleManager open={openSettingsCard === 'modules'} onToggle={() => toggleSettingsCard('modules')} applications={settings.applications} modules={settings.modules} mutationReady={settingsMutationBridgeReady} refresh={refresh} showToast={showSettingsToast} />
-            <OptionManager
-              title="Environments"
-              open={openSettingsCard === 'environments'}
-              onToggle={() => toggleSettingsCard('environments')}
+          )}
+          {activeTab === 'presets' && (
+            <PresetSettings
+              settings={settings}
               mutationReady={settingsMutationBridgeReady}
-              items={settings.environments.map((item) => ({ id: item.id, label: item.value }))}
-              onAdd={async (value) => { await window.bugPocket.addEnvironment(value); await refresh(); }}
-              onUpdate={async (id, value) => { await window.bugPocket.updateEnvironment(id, value); await refresh(); }}
-              onDelete={async (id) => runPresetLockedDelete(async () => { await window.bugPocket.deleteEnvironment(id); await refresh(); })}
-              onMerge={async (sourceId, targetId) => { await window.bugPocket.mergeReference('environment', sourceId, targetId); await refresh(); }}
+              open={true}
+              refresh={refresh}
+              showToast={showSettingsToast}
+              onToggle={() => setOpenSettingsCard('presets')}
             />
-            <OptionManager
-              title="Devices"
-              open={openSettingsCard === 'devices'}
-              onToggle={() => toggleSettingsCard('devices')}
-              mutationReady={settingsMutationBridgeReady}
-              items={settings.devices.map((item) => ({ id: item.id, label: item.value }))}
-              onAdd={async (value) => { await window.bugPocket.addDevice(value); await refresh(); }}
-              onUpdate={async (id, value) => { await window.bugPocket.updateDevice(id, value); await refresh(); }}
-              onDelete={async (id) => { await window.bugPocket.deleteDevice(id); await refresh(); }}
-              onMerge={async (sourceId, targetId) => { await window.bugPocket.mergeReference('device', sourceId, targetId); await refresh(); }}
-            />
-            <OptionManager
-              title="Browsers"
-              open={openSettingsCard === 'browsers'}
-              onToggle={() => toggleSettingsCard('browsers')}
-              mutationReady={settingsMutationBridgeReady}
-              items={settings.browsers.map((item) => ({ id: item.id, label: item.value }))}
-              onAdd={async (value) => { await window.bugPocket.addBrowser(value); await refresh(); }}
-              onUpdate={async (id, value) => { await window.bugPocket.updateBrowser(id, value); await refresh(); }}
-              onDelete={async (id) => { await window.bugPocket.deleteBrowser(id); await refresh(); }}
-              onMerge={async (sourceId, targetId) => { await window.bugPocket.mergeReference('browser', sourceId, targetId); await refresh(); }}
-            />
-            <OptionManager
-              title="Entry Types"
-              open={openSettingsCard === 'entry-types'}
-              onToggle={() => toggleSettingsCard('entry-types')}
-              mutationReady={settingsMutationBridgeReady}
-              items={settings.entryTypes.map((item) => ({ id: item.id, label: item.value }))}
-              onAdd={async (value) => { await window.bugPocket.addConfigOption('entry_type', value); await refresh(); }}
-              onUpdate={async (id, value) => { await window.bugPocket.updateConfigOption(id, value); await refresh(); }}
-              onDelete={async (id) => runPresetLockedDelete(async () => { await window.bugPocket.deleteConfigOption(id); await refresh(); })}
-            />
-            <OptionManager
-              title="Severity Values"
-              open={openSettingsCard === 'severity-values'}
-              onToggle={() => toggleSettingsCard('severity-values')}
-              mutationReady={settingsMutationBridgeReady}
-              items={settings.severities.map((item) => ({ id: item.id, label: item.value }))}
-              onAdd={async (value) => { await window.bugPocket.addConfigOption('severity', value); await refresh(); }}
-              onUpdate={async (id, value) => { await window.bugPocket.updateConfigOption(id, value); await refresh(); }}
-              onDelete={async (id) => { await window.bugPocket.deleteConfigOption(id); await refresh(); }}
-            />
-          </div>
-        )}
-        {activeSegment === 'outbound' && (
-          <div className="settings-grid outbound-grid">
-            <DataManagementPanel settings={settings} refresh={refresh} showToast={showSettingsToast} />
-            <OptionManager
-              title="Report Destinations"
-              open={openSettingsCard === 'issue-platforms'}
-              onToggle={() => toggleSettingsCard('issue-platforms')}
-              mutationReady={settingsMutationBridgeReady}
-              items={settings.issuePlatforms.map((item) => ({ id: item.id, label: item.value }))}
-              onAdd={async (value) => { await window.bugPocket.addConfigOption('issue_platform', value); await refresh(); }}
-              onUpdate={async (id, value) => { await window.bugPocket.updateConfigOption(id, value); await refresh(); }}
-              onDelete={async (id) => { await window.bugPocket.deleteConfigOption(id); await refresh(); }}
-            />
-            {settings.issuePlatforms.some((platform) => platform.value.toLowerCase() === 'jira') && (
-              <JiraWorkspacePanel value={settings.jiraWorkspaceUrl} mutationReady={settingsMutationBridgeReady} refresh={refresh} />
-            )}
-            <AiOptionsPanel enabled={settings.aiTriageEnabled} modelName={settings.ollamaModelName} mutationReady={settingsMutationBridgeReady} refresh={refresh} />
-            <TemplateManager templates={settings.reportTemplates} refresh={refresh} />
-          </div>
-        )}
+          )}
+          {activeTab === 'ai' && (
+            <AiSettings enabled={settings.aiTriageEnabled} modelName={settings.ollamaModelName} mutationReady={settingsMutationBridgeReady} refresh={refresh} />
+          )}
+          {activeTab === 'storage' && (
+            <StorageSettings settings={settings} refresh={refresh} showToast={showSettingsToast} />
+          )}
+          {activeTab === 'sync' && <SyncSettings />}
+        </div>
       </div>
       {settingsToast && <div className="toast">{settingsToast}</div>}
     </section>

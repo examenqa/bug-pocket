@@ -59,7 +59,7 @@ Important files:
 **Renderer — pages**
 - `src/renderer/src/pages/DashboardPage.tsx`: bug table, filters, attachment spotlight.
 - `src/renderer/src/pages/BugDetailPage.tsx`: `BugDetailsHost` + `BugDetailsView`, details autosave, AI triage mapping, attachment/version spotlight, and report actions.
-- `src/renderer/src/pages/SettingsPage.tsx`: tabbed settings shell.
+- `src/renderer/src/pages/SettingsPage.tsx`: settings shell with a left sidebar tab layout.
 - `src/renderer/src/pages/SnipOverlay.tsx`: full-screen screenshot snip UI.
 
 **Renderer — shared components**
@@ -72,6 +72,11 @@ Important files:
 
 **Renderer — settings components**
 - `src/renderer/src/components/settings/settingsUtils.ts`: `hasSettingsMutationBridge`, `getSettingsPreviewItems`.
+- `src/renderer/src/components/settings/GeneralSettings.tsx`: General & Hotkeys tab content, including shortcuts, capture preferences, workspace field lists, report destinations, Jira, and templates.
+- `src/renderer/src/components/settings/PresetSettings.tsx`: Capture Presets tab wrapper around preset CRUD.
+- `src/renderer/src/components/settings/AiSettings.tsx`: AI Triage tab wrapper.
+- `src/renderer/src/components/settings/StorageSettings.tsx`: Storage & Backups tab wrapper.
+- `src/renderer/src/components/settings/SyncSettings.tsx`: Cloud Sync placeholder tab.
 - `src/renderer/src/components/settings/ShortcutSettingsPanel.tsx`: shortcut recording UI.
 - `src/renderer/src/components/settings/CapturePreferencesPanel.tsx`: screenshot review and startup toggles.
 - `src/renderer/src/components/settings/JiraWorkspacePanel.tsx`: Jira workspace URL field.
@@ -283,13 +288,15 @@ Settings currently manages:
 - Jira Workspace URL
 - Local AI Triage options
 
-Settings uses segmented secondary navigation:
+Settings uses a two-column layout with a persistent left sidebar and a right content panel. Current sidebar tabs are:
 
-- Preferences: Global Shortcuts, Capture Preferences, Quick Capture Presets.
-- Taxonomy: Applications, Modules, Environments, Devices, Browsers, Entry Types, Severity Values.
-- Outbound: issue destination/platform settings, Jira Workspace, Local AI Triage, Report Templates, Data Management.
+- General & Hotkeys: Global Shortcuts, Capture Preferences, workspace field lists, report destinations, Jira Workspace, and Report Templates.
+- Capture Presets: Quick Capture presets, capped at 3.
+- AI Triage: guided Ollama vision model selection and AI enablement.
+- Storage & Backups: manual backup, restore, automated backup directory.
+- Cloud Sync: placeholder for future Supabase sync.
 
-Settings groups are compact collapsible cards. Closed cards show a count and preview chips. Open cards show add/edit/delete controls. Only one Settings card should be open at a time within a segment. Opening a new Settings card collapses the previous one.
+Settings groups are shown as bordered sections with compact collapsible cards where appropriate. Closed cards show a count and preview chips. Open cards show add/edit/delete controls. Only one Settings card should be open at a time inside the active Settings tab. Opening a new Settings card collapses the previous one.
 
 Capture Preferences currently includes:
 
@@ -307,7 +314,7 @@ Data Management currently includes:
 Local AI Triage settings currently include:
 
 - `Enable Triage with Local AI`, stored in `app_settings` as `ai_triage_enabled`, default `false`.
-- Guided Ollama vision model selection, with built-in choices for Qwen, Llama, and Pixtral vision models.
+- Guided Ollama vision model selection, with built-in choices for Qwen, Llama, Llava, and Mistral/other vision models.
 - A `Custom / Other` escape hatch for manually entering any Ollama model tag.
 - The selected or custom model tag is still persisted as the final string in `app_settings` under `ollama_model_name`, default `qwen3-vl:8b`.
 - If the saved model tag does not match a built-in vision model, Settings opens the AI panel in `Custom / Other` mode.
@@ -408,7 +415,7 @@ The `modules` table includes:
 - `created_at`
 - `updated_at`
 
-Application and Module `context_description` fields are optional AI context fields. Settings > Taxonomy exposes them as `Context / Business Logic` textareas. Use the dedicated context IPC methods for explicit context saves:
+Application and Module `context_description` fields are optional AI context fields. Settings > General & Hotkeys > Workspace Field Lists exposes them as `Context / Business Logic` textareas. Use the dedicated context IPC methods for explicit context saves:
 
 - `window.bugPocket.updateApplicationContext(id, contextDescription)`
 - `window.bugPocket.updateModuleContext(id, contextDescription)`
@@ -648,7 +655,7 @@ Tray and shortcuts:
 - `Ctrl+Alt+M`: opens Main App Dashboard by default.
 - Global shortcuts are configurable from Settings using recorder controls.
 - If Electron cannot register a shortcut because another app/system owns it, Settings shows a warning.
-- Settings > Preferences includes `Run on System Startup`. This is stored in `app_settings` as `run_on_system_startup` and enforced on app boot through `app.setLoginItemSettings({ openAtLogin, openAsHidden: true, args: ["--background-start"] })` when enabled.
+- Settings > General & Hotkeys includes `Run on System Startup`. This is stored in `app_settings` as `run_on_system_startup` and enforced on app boot through `app.setLoginItemSettings({ openAtLogin, openAsHidden: true, args: ["--background-start"] })` when enabled.
 - When launched by Windows startup, Bug Pocket passes `--background-start` and starts hidden in the tray/background instead of opening the Main Panel.
 - Bug Pocket uses `app.requestSingleInstanceLock()`. If a second instance is launched, it should not open another SQLite/IPC process; it should bring the existing Main App dashboard to the foreground.
 
@@ -713,7 +720,7 @@ Future mobile app:
 
 ## Local AI Triage
 
-The app has an optional, local-only Ollama triage feature gated behind Settings > Outbound > Local AI Triage.
+The app has an optional, local-only Ollama triage feature gated behind Settings > AI Triage.
 
 Current local AI plumbing:
 

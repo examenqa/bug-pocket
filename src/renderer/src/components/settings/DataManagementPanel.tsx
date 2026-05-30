@@ -40,7 +40,7 @@ export function DataManagementPanel({
     if (!confirmed) return;
     let keepRestoreHandoff = false;
     window.sessionStorage.setItem(restorePendingKey, '1');
-    window.sessionStorage.setItem(restoreSettingsSegmentKey, 'outbound');
+    window.sessionStorage.setItem(restoreSettingsSegmentKey, 'storage');
     setImporting(true);
     try {
       const result = (await window.bugPocket.importBackup()) as BackupImportResult;
