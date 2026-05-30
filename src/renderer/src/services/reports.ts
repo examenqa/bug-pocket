@@ -1,4 +1,5 @@
 import type { BugDetails, ReportTemplate } from '../../../shared/types';
+import { formatStepsAsNumberedList } from '../utils/formatSteps';
 
 export type IssuePlatformLink = 'Linear' | 'Jira';
 
@@ -21,7 +22,8 @@ export function generateReport(bug: BugDetails, template?: ReportTemplate): stri
     environment: bug.environment || '',
     device: bug.device || '',
     browser: bug.browser || '',
-    steps: bug.steps_to_reproduce || '[Add steps to reproduce]',
+    user_role: bug.user_role || '',
+    steps: formatStepsAsNumberedList(bug.steps_to_reproduce) || '[Add steps to reproduce]',
     expected: bug.expected_result || '[Add expected result]',
     actual: bug.actual_result || bug.note || '[Add actual result]',
     status: bug.status,

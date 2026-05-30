@@ -3,7 +3,7 @@ export type CaptureStatus = 'Draft' | 'Reported' | 'Discarded';
 export type SyncStatus = 'Local Only' | 'Sync Pending' | 'Synced' | 'Sync Failed';
 export type AttachmentSourceType = 'snip' | 'screenshot' | 'clipboard' | 'uploaded_image' | 'camera_photo' | 'annotation' | 'other';
 export type ShortcutAction = 'quick_capture' | 'main_panel' | 'global_screenshot';
-export type ReferenceTable = 'environment' | 'device' | 'browser';
+export type ReferenceTable = 'environment' | 'device' | 'browser' | 'user_role';
 export type SyncQueueEntityType = 'bug' | 'attachment' | 'reference';
 export type SyncQueueOperation = 'INSERT' | 'UPDATE' | 'DELETE' | 'MERGE';
 
@@ -71,12 +71,14 @@ export interface Bug {
   environment_id: number | null;
   device_id: number | null;
   browser_id: number | null;
+  user_role_id: number | null;
   application_name?: string | null;
   module_name?: string | null;
   entry_type: string;
   environment: string;
   device: string;
   browser: string;
+  user_role: string;
   title: string;
   note: string;
   other_details: string;
@@ -144,6 +146,7 @@ export interface QuickBugInput {
   application_id: number | null;
   module_id: number | null;
   environment_id: number | null;
+  user_role_id: number | null;
   note: string;
   attachment_ids: number[];
 }
@@ -155,6 +158,7 @@ export interface BugUpdateInput {
   environment_id: number | null;
   device_id: number | null;
   browser_id: number | null;
+  user_role_id: number | null;
   title: string;
   note: string;
   other_details: string;
@@ -181,6 +185,7 @@ export interface SettingsData {
   environments: ReferenceOption[];
   devices: ReferenceOption[];
   browsers: ReferenceOption[];
+  userRoles: ReferenceOption[];
   reportTemplates: ReportTemplate[];
   shortcuts: ShortcutSetting[];
   jiraWorkspaceUrl: string | null;
@@ -254,6 +259,7 @@ export interface AiTriageBugPayload {
   environment?: string;
   device?: string;
   browser?: string;
+  user_role?: string;
   entry_type?: string;
   severity?: string;
   status?: string;

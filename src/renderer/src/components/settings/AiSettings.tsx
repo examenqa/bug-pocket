@@ -1,5 +1,4 @@
 import React from 'react';
-import { AiOptionsPanel } from './AiOptionsPanel';
 
 interface AiSettingsProps {
   enabled: boolean;
@@ -8,16 +7,21 @@ interface AiSettingsProps {
   refresh: () => Promise<void>;
 }
 
-export function AiSettings({ enabled, modelName, mutationReady, refresh }: AiSettingsProps) {
+export function AiSettings(_props: AiSettingsProps) {
   return (
     <div className="settings-tab-stack">
-      <section className="settings-section-group" aria-labelledby="settings-ai-heading">
-        <div className="settings-section-heading">
-          <h2 id="settings-ai-heading">AI Triage</h2>
-          <p>Configure local Ollama-powered assistance for turning saved entries into polished bug reports.</p>
+      <div className="panel ai-options-panel ai-coming-soon-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>AI Triage</h2>
+            <p className="settings-helper">Coming soon. We are keeping this locked while the desktop capture workflow is finalized.</p>
+          </div>
         </div>
-        <AiOptionsPanel enabled={enabled} modelName={modelName} mutationReady={mutationReady} refresh={refresh} />
-      </section>
+        <div className="coming-soon-note">
+          <strong>AI-powered report cleanup is planned, but disabled in this build.</strong>
+          <p>Bug Pocket will continue to save entries locally and generate template-based reports without sending anything to an AI service.</p>
+        </div>
+      </div>
     </div>
   );
 }

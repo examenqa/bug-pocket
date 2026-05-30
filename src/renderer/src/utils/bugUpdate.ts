@@ -14,6 +14,7 @@ export function buildBugUpdateInput(bug: BugDetails): BugUpdateInput {
     environment_id: bug.environment_id,
     device_id: bug.device_id,
     browser_id: bug.browser_id,
+    user_role_id: bug.user_role_id,
     title,
     note: bug.note,
     other_details: bug.other_details,
