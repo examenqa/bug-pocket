@@ -265,7 +265,7 @@ function shortcutHandlers(): Record<ShortcutAction, () => void> {
   return {
     quick_capture: () => { void openQuickCapture(); },
     main_panel: () => openMainWindow('/dashboard'),
-    screenshot_capture: () => { void startScreenshotCapture(); }
+    global_screenshot: () => { void startScreenshotCapture(); }
   };
 }
 
@@ -597,7 +597,7 @@ function createTray(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Quick Capture', click: () => { void openQuickCapture(); } },
-      { label: 'Capture Screenshot', click: () => { void startScreenshotCapture(); } },
+      { label: 'Take Screenshot', click: () => { void startScreenshotCapture(); } },
       { label: 'Open Dashboard', click: () => openMainWindow('/dashboard') },
       { type: 'separator' },
       {
@@ -748,7 +748,7 @@ async function downloadAttachment(id: number): Promise<AttachmentDownloadResult>
 }
 
 async function attachPendingQuickScreenshot(dataUrl: string): Promise<{ id: number; fileName: string; contentHash: string }> {
-  if (!pendingQuickScreenshotDataUrl) throw new Error('No pending Quick Capture screenshot.');
+  if (!pendingQuickScreenshotDataUrl) throw new Error('No pending Quick Panel screenshot.');
   const result = persistScreenshotDataUrl(dataUrl);
   pendingQuickScreenshotDataUrl = '';
   restoreQuickCaptureCompactSize();

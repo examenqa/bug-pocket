@@ -270,7 +270,7 @@ export function QuickCaptureForm({
           <div className="quick-inline-review-heading">
             <div>
               <h2>Review Screenshot</h2>
-              <p>Annotate this snip, then attach it to the current capture.</p>
+              <p>Annotate this snip, then attach it to the current draft.</p>
             </div>
             <div className="quick-review-actions">
               <button className="quick-review-discard" type="button" onClick={() => void discardReviewedScreenshot()}>Discard</button>
@@ -280,7 +280,7 @@ export function QuickCaptureForm({
           <ScreenshotAnnotator
             ref={screenshotAnnotatorRef}
             imageDataUrl={reviewScreenshot}
-            fileName="Quick Capture screenshot"
+            fileName="Quick Panel screenshot"
             showSaveButton={false}
             onSave={attachReviewedScreenshot}
           />

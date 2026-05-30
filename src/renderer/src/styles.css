@@ -475,7 +475,7 @@ button:disabled {
   color: var(--pocket-blue-dark);
 }
 
-.capture-actions {
+.dashboard-screenshot-actions {
   display: inline-flex;
   align-items: flex-start;
   justify-content: flex-end;
@@ -483,14 +483,14 @@ button:disabled {
   flex-wrap: wrap;
 }
 
-.capture-action {
+.dashboard-action {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
 }
 
-.capture-button,
+.dashboard-screenshot-button,
 .save-detail-button,
 .delete-report-button {
   position: relative;
@@ -506,7 +506,7 @@ button:disabled {
   white-space: nowrap;
 }
 
-.capture-button,
+.dashboard-screenshot-button,
 .save-detail-button {
   border-color: #0b63ce;
   background:
@@ -518,7 +518,7 @@ button:disabled {
   text-shadow: 0 1px 0 rgba(5, 48, 111, 0.24);
 }
 
-.capture-button::after,
+.dashboard-screenshot-button::after,
 .save-detail-button::after,
 .delete-report-button::after {
   content: "";
@@ -528,12 +528,12 @@ button:disabled {
   pointer-events: none;
 }
 
-.capture-button::after,
+.dashboard-screenshot-button::after,
 .save-detail-button::after {
   border: 1px dashed rgba(255, 255, 255, 0.5);
 }
 
-.capture-button:hover,
+.dashboard-screenshot-button:hover,
 .save-detail-button:hover {
   background:
     linear-gradient(180deg, #5bd0ff 0%, #2a91e9 52%, #0756bb 100%);
@@ -560,7 +560,7 @@ button:disabled {
   background:
     linear-gradient(180deg, #d0938d 0%, #ae6863 54%, #73403d 100%);
 }
-.capture-button-secondary {
+.dashboard-quick-panel-button {
   border-color: rgba(11, 99, 206, 0.36);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(226, 241, 255, 0.92) 100%);
@@ -571,18 +571,18 @@ button:disabled {
     0 6px 14px rgba(5, 48, 111, 0.09);
 }
 
-.capture-button-secondary::after {
+.dashboard-quick-panel-button::after {
   border-color: rgba(11, 99, 206, 0.28);
 }
 
-.capture-button-secondary:hover {
+.dashboard-quick-panel-button:hover {
   border-color: rgba(11, 99, 206, 0.52);
   background:
     linear-gradient(180deg, #f8fcff 0%, #d8edff 100%);
   color: #064b9f;
 }
 
-.capture-shortcut {
+.dashboard-action-shortcut {
   color: rgba(101, 117, 140, 0.72);
   font-size: 11px;
   font-weight: 600;

@@ -51,7 +51,7 @@ const attachmentFileNameSql =
 const defaultShortcuts: Array<Pick<ShortcutSetting, 'action' | 'label' | 'accelerator' | 'is_enabled' | 'sort_order'>> = [
   { action: 'quick_capture', label: 'Quick Capture Panel', accelerator: 'CommandOrControl+Alt+P', is_enabled: 1, sort_order: 0 },
   { action: 'main_panel', label: 'Main App Panel', accelerator: 'CommandOrControl+Alt+M', is_enabled: 1, sort_order: 1 },
-  { action: 'screenshot_capture', label: 'Screenshot Capture', accelerator: 'CommandOrControl+Alt+S', is_enabled: 1, sort_order: 2 }
+  { action: 'global_screenshot', label: 'Global Screenshot', accelerator: 'CommandOrControl+Alt+S', is_enabled: 1, sort_order: 2 }
 ];
 const MAX_CAPTURE_PRESETS = 3;
 
@@ -874,6 +874,8 @@ export class BugPocketDatabase {
     defaultDevices.forEach((value, index) => this.addReferenceOption('device', value, index, stamp));
     defaultBrowsers.forEach((value, index) => this.addReferenceOption('browser', value, index, stamp));
 
+    this.normalizeShortcutActions(stamp);
+
     const shortcutInsert = this.db.prepare(
       'INSERT OR IGNORE INTO shortcut_settings (action, label, accelerator, is_enabled, sort_order, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
     );
@@ -927,8 +929,17 @@ export class BugPocketDatabase {
       .run(generalApplication.id, 'General', stamp, stamp);
   }
 
+  private normalizeShortcutActions(stamp: string): void {
+    this.db
+      .prepare(
+        "UPDATE shortcut_settings SET action = 'global_screenshot', label = 'Global Screenshot', sort_order = 2, updated_at = ? WHERE action = 'screenshot_capture' AND NOT EXISTS (SELECT 1 FROM shortcut_settings WHERE action = 'global_screenshot')"
+      )
+      .run(stamp);
+    this.db.prepare("UPDATE shortcut_settings SET label = 'Global Screenshot' WHERE action = 'global_screenshot'").run();
+  }
+
   private removeLegacyShortcut(): void {
-    this.db.prepare('DELETE FROM shortcut_settings WHERE action = ?').run('quick_capture_legacy');
+    this.db.prepare('DELETE FROM shortcut_settings WHERE action IN (?, ?)').run('quick_capture_legacy', 'screenshot_capture');
   }
 
   private upgradeDefaultTemplatesForEnvironment(stamp: string): void {

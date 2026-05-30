@@ -161,7 +161,7 @@ The Main App is the full desktop dashboard. It is required, not optional.
 It includes:
 
 - Dashboard
-- Global Capture Button: A dedicated button in the header that triggers the `Ctrl+Alt+S` snipping flow directly from the dashboard.
+- Global Screenshot Button: A dedicated button in the header that triggers the `Ctrl+Alt+S` snipping flow directly from the dashboard.
 - Bug/entry list
 - Search
 - Collapsible filters
@@ -296,7 +296,7 @@ Capture Preferences currently includes:
 - Review screenshots before attaching in Quick Capture
 - Run on System Startup
 
-These preferences are stored in the `app_settings` key-value table (see Data Model). `quick_capture_annotate_screenshots` defaults to enabled and controls whether Quick Capture screenshots go through inline Review Screenshot mode before being saved. `run_on_system_startup` defaults to disabled.
+These preferences are stored in the `app_settings` key-value table (see Data Model). `quick_capture_annotate_screenshots` defaults to enabled and controls whether Quick Panel screenshots go through inline Review Screenshot mode before being saved. `run_on_system_startup` defaults to disabled.
 
 Data Management currently includes:
 
@@ -593,9 +593,9 @@ The Main Panel derives display titles deterministically:
 
 Manual title edits in Details should win over derived titles.
 
-## Screenshot Capture
+## Screenshot / Snip
 
-Screenshot capture works like a snipping flow:
+Screenshots use a snipping flow:
 
 - User clicks Screenshot or presses the shortcut.
 - The app hides/minimizes the capture window.
@@ -608,14 +608,14 @@ Screenshot capture works like a snipping flow:
 - SQLite stores only `content_hash` and `file_extension`, not an absolute path.
 - Esc cancels screenshot mode.
 
-Quick Capture screenshot behavior:
+Quick Panel screenshot behavior:
 
 - When `quick_capture_annotate_screenshots` is enabled, the snipped PNG is held in memory as a pending screenshot and not saved yet.
-- If a user triggers `Ctrl+Alt+S` or the Main Panel capture button while a Quick Capture draft is already in progress, the new screenshot appends to the existing draft without overwriting the user's text.
+- If a user triggers `Ctrl+Alt+S` or the Main Panel screenshot button while a Quick Capture draft is already in progress, the new screenshot appends to the existing draft without overwriting the user's text.
 - The Quick Capture window expands into an inline Review Screenshot mode with the native canvas annotator.
 - `Attach` persists the final image as a content-addressed local attachment, emits `screenshot:captured` back to Quick Capture, and restores compact size.
 - `Discard` clears the pending image and saves nothing.
-- When the preference is disabled, Quick Capture screenshots save immediately and return to the Quick Panel.
+- When the preference is disabled, Quick Panel screenshots save immediately and return to the Quick Panel.
 
 Main Panel screenshot behavior:
 
@@ -641,7 +641,7 @@ Tray and shortcuts:
 - Tray icon opens Quick Capture or Dashboard.
 - The tray, window, notification, and packaged installer icon should use the custom Bug Pocket icon, not Electron defaults.
 - `Ctrl+Alt+P`: opens Quick Capture by default.
-- `Ctrl+Alt+S`: starts screenshot capture directly by default. After capture, it uses the existing Quick Capture review/attach flow so the screenshot still lands in the current capture draft.
+- `Ctrl+Alt+S`: starts a global screenshot snip directly by default. After the snip, it uses the existing Quick Capture review/attach flow so the screenshot still lands in the current Quick Panel draft.
 - `Ctrl+Alt+M`: opens Main App Dashboard by default.
 - Global shortcuts are configurable from Settings using recorder controls.
 - If Electron cannot register a shortcut because another app/system owns it, Settings shows a warning.
