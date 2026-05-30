@@ -15,12 +15,12 @@ export function ShortcutSettingsPanel({
   const [error, setError] = useState('');
   const defaultShortcuts: Record<ShortcutAction, string> = {
     quick_capture: 'CommandOrControl+Alt+P',
-    screenshot_capture: 'CommandOrControl+Alt+S',
+    global_screenshot: 'CommandOrControl+Alt+S',
     main_panel: 'CommandOrControl+Alt+M'
   };
   const shortcutDescriptions: Record<ShortcutAction, string> = {
     quick_capture: 'Opens the Quick Capture Panel',
-    screenshot_capture: 'Starts screenshot capture directly',
+    global_screenshot: 'Starts global screenshot snip directly',
     main_panel: 'Opens the Main App Panel'
   };
 
@@ -76,7 +76,7 @@ export function ShortcutSettingsPanel({
         <h2><Keyboard size={16} /> Global Shortcuts</h2>
       </div>
       <div className="shortcut-helper-row">
-        <p className="settings-helper">Recommended defaults: Ctrl+Alt+P for Quick Capture, Ctrl+Alt+S for Screenshot Capture, and Ctrl+Alt+M for the Main App Panel.</p>
+        <p className="settings-helper">Recommended defaults: Ctrl+Alt+P for Quick Capture, Ctrl+Alt+S for Global Screenshot, and Ctrl+Alt+M for the Main App Panel.</p>
         <button className="shortcut-reset-button" onClick={() => void resetShortcuts()}>
           <RefreshCw size={14} />
           Reset Shortcuts

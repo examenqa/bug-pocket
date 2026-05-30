@@ -30,7 +30,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
   const moduleFilterOptions = getModulesForApplication(settings, filters.applicationId === 'all' ? null : filters.applicationId ?? null);
   const activeFilterChips = getActiveFilterChips(filters, settings);
   const quickPanelShortcut = shortcutDisplay(settings.shortcuts.find((shortcut) => shortcut.action === 'quick_capture'), 'Ctrl+Alt+P');
-  const screenshotCaptureShortcut = shortcutDisplay(settings.shortcuts.find((shortcut) => shortcut.action === 'screenshot_capture'), 'Ctrl+Alt+S');
+  const globalScreenshotShortcut = shortcutDisplay(settings.shortcuts.find((shortcut) => shortcut.action === 'global_screenshot'), 'Ctrl+Alt+S');
   const clearFilters = (): void => setFilters({ reported: 'all', search: filters.search ?? '' });
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
@@ -128,18 +128,18 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
           <h1>Captured Entries</h1>
           <p>Capture bugs without breaking your flow.</p>
         </div>
-        <div className="capture-actions">
-          <div className="capture-action">
-            <button className="primary capture-button" onClick={() => void window.bugPocket.startScreenshotCapture()}>
-              <Camera size={17} strokeWidth={2.6} /> Quick Capture
+        <div className="dashboard-screenshot-actions">
+          <div className="dashboard-action">
+            <button className="primary dashboard-screenshot-button" title="Start global screenshot snip" aria-label="Start global screenshot snip" onClick={() => void window.bugPocket.startScreenshotCapture()}>
+              <Camera size={17} strokeWidth={2.6} /> Global Screenshot
             </button>
-            <span className="capture-shortcut">{screenshotCaptureShortcut}</span>
+            <span className="dashboard-action-shortcut">{globalScreenshotShortcut}</span>
           </div>
-          <div className="capture-action">
-            <button className="capture-button capture-button-secondary" onClick={() => void window.bugPocket.openQuickCapture()}>
+          <div className="dashboard-action">
+            <button className="dashboard-quick-panel-button" onClick={() => void window.bugPocket.openQuickCapture()}>
               <Plus size={17} strokeWidth={3} /> Quick Panel
             </button>
-            <span className="capture-shortcut">{quickPanelShortcut}</span>
+            <span className="dashboard-action-shortcut">{quickPanelShortcut}</span>
           </div>
         </div>
       </header>
