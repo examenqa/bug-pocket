@@ -850,3 +850,4 @@ Potential technical work:
 * **ASAR Unpacking:** `better-sqlite3` must be added to the `asarUnpack` configuration so the OS can execute the native `.node` binaries outside the read-only archive.
 * **Custom Icon:** `build/icon.ico` is the Windows application icon. Keep `package.json > build.directories.buildResources` pointed at `build`, and keep `win.icon` pointed at `build/icon.ico`.
 * **Packaging Gotcha:** `npm run dist` cannot overwrite `release-build/win-unpacked/resources/app.asar` while an unpacked or installed Bug Pocket process is using it. Close running Bug Pocket instances before packaging.
+* **Preload Path Split:** `npm run dev` uses `out/preload/index.js`, while `npm run start`/packaged builds use `out/preload/index.mjs` after `scripts/fix-preload.js`. Keep `preloadPath()` environment-aware; do not hardcode only `.mjs` or dev can white-screen.

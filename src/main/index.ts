@@ -47,6 +47,11 @@ function packagedResourcePath(fileName: string): string {
   return app.isPackaged ? join(process.resourcesPath, fileName) : join(__dirname, '../../resources', fileName);
 }
 
+function preloadPath(): string {
+  if (isDev) return join(__dirname, '../preload/index.js');
+  const mjsPreload = join(__dirname, '../preload/index.mjs');
+  return existsSync(mjsPreload) ? mjsPreload : join(__dirname, '../preload/index.js');
+}
 function iconPath(): string {
   const pngIconPath = packagedResourcePath('bug-pocket-icon.png');
   if (existsSync(pngIconPath)) return pngIconPath;
@@ -74,7 +79,7 @@ function createMainWindow(route = '/dashboard', showOnReady = true): void {
     backgroundColor: '#f9fafb',
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: preloadPath(),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -128,7 +133,7 @@ function createQuickWindow(): void {
     autoHideMenuBar: true,
     skipTaskbar: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: preloadPath(),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -641,7 +646,7 @@ async function startScreenshotCapture(bugId?: number): Promise<void> {
     fullscreen: true,
     skipTaskbar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: preloadPath(),
       contextIsolation: true,
       nodeIntegration: false
     }
