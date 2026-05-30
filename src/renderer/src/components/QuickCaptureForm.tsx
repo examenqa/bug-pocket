@@ -71,6 +71,7 @@ export function QuickCaptureForm({
   const environmentRef = useRef<HTMLInputElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const screenshotButtonRef = useRef<HTMLButtonElement>(null);
+  const quickWindowRef = useRef<HTMLDivElement>(null);
   const screenshotAnnotatorRef = useRef<ScreenshotAnnotatorHandle>(null);
   const presetNoticeTimerRef = useRef<number | null>(null);
   const wasReviewingScreenshotRef = useRef(false);
@@ -176,7 +177,10 @@ export function QuickCaptureForm({
     setReviewScreenshot('');
     await window.bugPocket.restoreQuickCaptureCompact();
     window.setTimeout(() => void window.bugPocket.restoreQuickCaptureCompact(), 100);
-    window.setTimeout(() => noteRef.current?.focus(), 40);
+    window.setTimeout(() => {
+      quickWindowRef.current?.focus();
+      noteRef.current?.focus();
+    }, 40);
   };
 
   const discardReviewedScreenshot = async (): Promise<void> => {
@@ -184,7 +188,10 @@ export function QuickCaptureForm({
     await window.bugPocket.discardPendingQuickScreenshot();
     await window.bugPocket.restoreQuickCaptureCompact();
     window.setTimeout(() => void window.bugPocket.restoreQuickCaptureCompact(), 100);
-    window.setTimeout(() => noteRef.current?.focus(), 40);
+    window.setTimeout(() => {
+      quickWindowRef.current?.focus();
+      noteRef.current?.focus();
+    }, 40);
   };
 
   const openPresetSettings = (): void => {
@@ -253,8 +260,22 @@ export function QuickCaptureForm({
     }
   };
 
+  useEffect(() => {
+    const handleDocumentKeyDown = (event: globalThis.KeyboardEvent): void => {
+      if (event.defaultPrevented || event.key !== 'Escape') return;
+      const root = quickWindowRef.current;
+      const target = event.target instanceof Node ? event.target : null;
+      if (root && target && root.contains(target)) return;
+      event.preventDefault();
+      if (reviewScreenshot) void discardReviewedScreenshot();
+      else void onCancel();
+    };
+    document.addEventListener('keydown', handleDocumentKeyDown);
+    return () => document.removeEventListener('keydown', handleDocumentKeyDown);
+  });
+
   return (
-    <div className={reviewScreenshot ? 'quick-window review-mode' : 'quick-window'} onKeyDown={handlePanelKeyDown}>
+    <div ref={quickWindowRef} tabIndex={-1} className={reviewScreenshot ? 'quick-window review-mode' : 'quick-window'} onKeyDown={handlePanelKeyDown}>
       <header className="quick-header">
         <div className="quick-brand-patch">
           <img className="quick-logo" src={iconUrl} alt="" />
