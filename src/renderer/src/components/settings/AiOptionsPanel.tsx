@@ -98,7 +98,7 @@ export function AiOptionsPanel({
   const copyInstallCommand = async (): Promise<void> => {
     if (!selectedModel) return;
     await window.bugPocket.copyText(selectedModel.cmd);
-    setStatus('Install command copied.');
+    setStatus('Ollama command copied.');
     window.setTimeout(() => setStatus(''), 1400);
   };
 
@@ -112,7 +112,7 @@ export function AiOptionsPanel({
       <div className="panel-heading">
         <div>
           <h2>Local AI Triage</h2>
-          <p className="settings-helper">Optional Ollama-powered triage. Choose a vision-capable model because Bug Pocket may send screenshots with the note.</p>
+          <p className="settings-helper">Optional AI-powered triage. Choose a vision-capable model because Bug Pocket may send screenshots with the note.</p>
         </div>
       </div>
       <label className="capture-preference-toggle">
@@ -161,15 +161,18 @@ export function AiOptionsPanel({
         <div className="ai-model-card">
           <div className="ai-model-card-header">
             <div>
-              <strong>{selectedModel.name}</strong>
-              <span>{selectedModel.reqs}</span>
+              <strong>Suggested: {selectedModel.name}</strong>
+              <span>{selectedModel.reqs}. Use this if you do not already have a preferred compatible vision model.</span>
             </div>
             <button type="button" className="ai-model-link" onClick={() => void openModelPage()}>
               <ExternalLink size={14} /> Ollama page
             </button>
           </div>
           <div className="ai-command-row">
-            <code>{selectedModel.cmd}</code>
+            <div className="ai-command-copy">
+              <small>Ollama command, useful for installing or launching this model:</small>
+              <code>{selectedModel.cmd}</code>
+            </div>
             <button type="button" onClick={() => void copyInstallCommand()}><Copy size={14} /> Copy</button>
           </div>
         </div>
