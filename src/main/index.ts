@@ -18,6 +18,8 @@ app.setAppUserModelId('com.bugpocket.app');
 let mainWindow: BrowserWindow | null = null;
 let quickWindow: BrowserWindow | null = null;
 let snipWindow: BrowserWindow | null = null;
+let quickWindowLoaded = false;
+let quickWindowReady: Promise<void> | null = null;
 let tray: Tray | null = null;
 let db: BugPocketDatabase;
 let isQuitting = false;
@@ -131,7 +133,18 @@ function createQuickWindow(): void {
       nodeIntegration: false
     }
   });
-  quickWindow.loadURL(rendererUrl('/capture'));
+  quickWindowLoaded = false;
+  quickWindowReady = new Promise((resolve) => {
+    quickWindow?.webContents.once('did-finish-load', () => {
+      quickWindowLoaded = true;
+      resolve();
+    });
+  });
+  quickWindow.loadURL(rendererUrl('/capture')).catch((error) => {
+    quickWindowLoaded = true;
+    quickWindowReady = null;
+    console.error('Unable to load Quick Capture window.', error);
+  });
   quickWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
@@ -142,7 +155,12 @@ function createQuickWindow(): void {
   });
 }
 
-function openQuickCapture(): void {
+async function ensureQuickWindowReady(): Promise<void> {
+  if (!quickWindow) createQuickWindow();
+  if (!quickWindowLoaded && quickWindowReady) await quickWindowReady;
+}
+
+async function openQuickCapture(): Promise<void> {
   if (!quickWindow) createQuickWindow();
   if (!pendingQuickScreenshotDataUrl) restoreQuickCaptureCompactSize();
   quickWindow?.show();
@@ -154,6 +172,7 @@ function openQuickCapture(): void {
     quickTopmostPulseTimer = null;
   }, 500);
   quickWindow?.focus();
+  await ensureQuickWindowReady();
   setTimeout(() => {
     quickWindow?.focus();
     quickWindow?.webContents.focus();
@@ -239,8 +258,9 @@ function shortcutLabel(accelerator: string): string {
 
 function shortcutHandlers(): Record<ShortcutAction, () => void> {
   return {
-    quick_capture: openQuickCapture,
-    main_panel: () => openMainWindow('/dashboard')
+    quick_capture: () => { void openQuickCapture(); },
+    main_panel: () => openMainWindow('/dashboard'),
+    screenshot_capture: () => { void startScreenshotCapture(); }
   };
 }
 
@@ -571,7 +591,8 @@ function createTray(): void {
   tray.setToolTip('Bug Pocket');
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Quick Capture', click: openQuickCapture },
+      { label: 'Quick Capture', click: () => { void openQuickCapture(); } },
+      { label: 'Capture Screenshot', click: () => { void startScreenshotCapture(); } },
       { label: 'Open Dashboard', click: () => openMainWindow('/dashboard') },
       { type: 'separator' },
       {
@@ -583,10 +604,19 @@ function createTray(): void {
       }
     ])
   );
-  tray.on('double-click', openQuickCapture);
+  tray.on('double-click', () => { void openQuickCapture(); });
 }
 
 async function startScreenshotCapture(bugId?: number): Promise<void> {
+  if (snipWindow) {
+    snipWindow.focus();
+    return;
+  }
+  if (!bugId && pendingQuickScreenshotDataUrl) {
+    await openQuickCapture();
+    quickWindow?.webContents.send('quickScreenshot:reviewReady');
+    return;
+  }
   screenshotBugId = typeof bugId === 'number' ? bugId : null;
   mainWasVisibleBeforeSnip = !!mainWindow?.isVisible();
   quickWindow?.hide();
@@ -640,7 +670,7 @@ function persistScreenshotDataUrl(dataUrl: string): { id: number; fileName: stri
   return { id, fileName, contentHash };
 }
 
-function saveScreenshot(dataUrl: string): { id: number; fileName: string; contentHash: string } | null {
+async function saveScreenshot(dataUrl: string): Promise<{ id: number; fileName: string; contentHash: string } | null> {
   snipWindow?.close();
   snipWindow = null;
   if (screenshotBugId) {
@@ -656,13 +686,13 @@ function saveScreenshot(dataUrl: string): { id: number; fileName: string; conten
   if (db.getQuickCaptureAnnotationReview()) {
     pendingQuickScreenshotDataUrl = dataUrl;
     resetSnipWindowState();
-    openQuickCapture();
+    await openQuickCapture();
     quickWindow?.webContents.send('quickScreenshot:reviewReady');
     return null;
   }
   const result = persistScreenshotDataUrl(dataUrl);
   restoreMainAfterSnip();
-  openQuickCapture();
+  await openQuickCapture();
   quickWindow?.webContents.send('screenshot:captured', result);
   resetSnipWindowState();
   return result;
@@ -712,20 +742,20 @@ async function downloadAttachment(id: number): Promise<AttachmentDownloadResult>
   }
 }
 
-function attachPendingQuickScreenshot(dataUrl: string): { id: number; fileName: string; contentHash: string } {
+async function attachPendingQuickScreenshot(dataUrl: string): Promise<{ id: number; fileName: string; contentHash: string }> {
   if (!pendingQuickScreenshotDataUrl) throw new Error('No pending Quick Capture screenshot.');
   const result = persistScreenshotDataUrl(dataUrl);
   pendingQuickScreenshotDataUrl = '';
   restoreQuickCaptureCompactSize();
-  openQuickCapture();
+  await openQuickCapture();
   quickWindow?.webContents.send('screenshot:captured', result);
   return result;
 }
 
-function discardPendingQuickScreenshot(): void {
+async function discardPendingQuickScreenshot(): Promise<void> {
   pendingQuickScreenshotDataUrl = '';
   restoreQuickCaptureCompactSize();
-  openQuickCapture();
+  await openQuickCapture();
 }
 
 function registerIpc(): void {

@@ -15,7 +15,13 @@ export function ShortcutSettingsPanel({
   const [error, setError] = useState('');
   const defaultShortcuts: Record<ShortcutAction, string> = {
     quick_capture: 'CommandOrControl+Alt+P',
+    screenshot_capture: 'CommandOrControl+Alt+S',
     main_panel: 'CommandOrControl+Alt+M'
+  };
+  const shortcutDescriptions: Record<ShortcutAction, string> = {
+    quick_capture: 'Opens the Quick Capture Panel',
+    screenshot_capture: 'Starts screenshot capture directly',
+    main_panel: 'Opens the Main App Panel'
   };
 
   const updateShortcut = async (shortcut: ShortcutSetting, accelerator: string, enabled = true): Promise<void> => {
@@ -27,8 +33,11 @@ export function ShortcutSettingsPanel({
   const resetShortcuts = async (): Promise<void> => {
     setRecordingAction(null);
     setError('');
-    await window.bugPocket.updateShortcut('quick_capture', defaultShortcuts.quick_capture, true);
-    await window.bugPocket.updateShortcut('main_panel', defaultShortcuts.main_panel, true);
+    await Promise.all(
+      Object.entries(defaultShortcuts).map(([action, accelerator]) =>
+        window.bugPocket.updateShortcut(action as ShortcutAction, accelerator, true)
+      )
+    );
     await refresh();
   };
 
@@ -67,7 +76,7 @@ export function ShortcutSettingsPanel({
         <h2><Keyboard size={16} /> Global Shortcuts</h2>
       </div>
       <div className="shortcut-helper-row">
-        <p className="settings-helper">Recommended defaults: Ctrl+Alt+P for Quick Capture and Ctrl+Alt+M for the Main App Panel.</p>
+        <p className="settings-helper">Recommended defaults: Ctrl+Alt+P for Quick Capture, Ctrl+Alt+S for Screenshot Capture, and Ctrl+Alt+M for the Main App Panel.</p>
         <button className="shortcut-reset-button" onClick={() => void resetShortcuts()}>
           <RefreshCw size={14} />
           Reset Shortcuts
@@ -78,7 +87,7 @@ export function ShortcutSettingsPanel({
           <div className="shortcut-row" key={shortcut.action}>
             <div className="shortcut-copy">
               <strong>{shortcut.label}</strong>
-              <span>{shortcut.action === 'main_panel' ? 'Opens the Main App Panel' : 'Opens the Quick Capture Panel'}</span>
+              <span>{shortcutDescriptions[shortcut.action]}</span>
               {shortcut.registration_error && (
                 <em className="shortcut-warning"><AlertTriangle size={14} /> {shortcut.registration_error}</em>
               )}

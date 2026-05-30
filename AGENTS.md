@@ -639,6 +639,7 @@ Tray and shortcuts:
 - Tray icon opens Quick Capture or Dashboard.
 - The tray, window, notification, and packaged installer icon should use the custom Bug Pocket icon, not Electron defaults.
 - `Ctrl+Alt+P`: opens Quick Capture by default.
+- `Ctrl+Alt+S`: starts screenshot capture directly by default. After capture, it uses the existing Quick Capture review/attach flow so the screenshot still lands in the current capture draft.
 - `Ctrl+Alt+M`: opens Main App Dashboard by default.
 - Global shortcuts are configurable from Settings using recorder controls.
 - If Electron cannot register a shortcut because another app/system owns it, Settings shows a warning.

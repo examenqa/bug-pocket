@@ -50,7 +50,8 @@ const attachmentFileNameSql =
   "CASE WHEN attachments.content_hash IS NULL OR attachments.content_hash = '' THEN 'Pruned attachment' ELSE attachments.content_hash || attachments.file_extension END AS file_name";
 const defaultShortcuts: Array<Pick<ShortcutSetting, 'action' | 'label' | 'accelerator' | 'is_enabled' | 'sort_order'>> = [
   { action: 'quick_capture', label: 'Quick Capture Panel', accelerator: 'CommandOrControl+Alt+P', is_enabled: 1, sort_order: 0 },
-  { action: 'main_panel', label: 'Main App Panel', accelerator: 'CommandOrControl+Alt+M', is_enabled: 1, sort_order: 1 }
+  { action: 'main_panel', label: 'Main App Panel', accelerator: 'CommandOrControl+Alt+M', is_enabled: 1, sort_order: 1 },
+  { action: 'screenshot_capture', label: 'Screenshot Capture', accelerator: 'CommandOrControl+Alt+S', is_enabled: 1, sort_order: 2 }
 ];
 const MAX_CAPTURE_PRESETS = 3;
 
