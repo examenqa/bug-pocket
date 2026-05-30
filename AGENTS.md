@@ -49,7 +49,7 @@ Important files:
 - `src/main/sync/syncService.ts`: placeholder for future Supabase sync.
 
 **Preload & shared**
-- `src/preload/index.ts`: safe `window.bugPocket` bridge.
+- `src/preload/index.ts`: safe `window.bugPocket` bridge, including the `startScreenshotCapture()` method triggered by the Main Panel button.
 - `src/shared/types.ts`: shared model and IPC types.
 
 **Renderer — entry**
@@ -161,6 +161,7 @@ The Main App is the full desktop dashboard. It is required, not optional.
 It includes:
 
 - Dashboard
+- Global Capture Button: A dedicated button in the header that triggers the `Ctrl+Alt+S` snipping flow directly from the dashboard.
 - Bug/entry list
 - Search
 - Collapsible filters
@@ -610,6 +611,7 @@ Screenshot capture works like a snipping flow:
 Quick Capture screenshot behavior:
 
 - When `quick_capture_annotate_screenshots` is enabled, the snipped PNG is held in memory as a pending screenshot and not saved yet.
+- If a user triggers `Ctrl+Alt+S` or the Main Panel capture button while a Quick Capture draft is already in progress, the new screenshot appends to the existing draft without overwriting the user's text.
 - The Quick Capture window expands into an inline Review Screenshot mode with the native canvas annotator.
 - `Attach` persists the final image as a content-addressed local attachment, emits `screenshot:captured` back to Quick Capture, and restores compact size.
 - `Discard` clears the pending image and saves nothing.
