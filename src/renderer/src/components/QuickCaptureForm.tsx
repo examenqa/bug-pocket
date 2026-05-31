@@ -14,6 +14,7 @@ const quickPanelShortcuts = {
   application: 'Alt+A',
   module: 'Alt+M',
   environment: 'Alt+E',
+  userRole: 'Alt+R',
   note: 'Alt+N',
   screenshot: 'Alt+S',
   save: 'Ctrl+Enter',
@@ -25,6 +26,7 @@ export interface QuickCaptureDraft {
   applicationId: number | null;
   moduleId: number | null;
   environmentId: number | null;
+  userRoleId: number | null;
   note: string;
 }
 
@@ -41,6 +43,7 @@ interface QuickCaptureFormProps {
   onCreateApplication: (name: string) => Promise<number>;
   onCreateModule: (name: string, applicationId: number | null) => Promise<number>;
   onCreateEnvironment: (value: string) => Promise<number>;
+  onCreateUserRole: (value: string) => Promise<number>;
 }
 
 export function QuickCaptureForm({
@@ -55,13 +58,15 @@ export function QuickCaptureForm({
   onCreateEntryType,
   onCreateApplication,
   onCreateModule,
-  onCreateEnvironment
+  onCreateEnvironment,
+  onCreateUserRole
 }: QuickCaptureFormProps) {
   const [entryType, setEntryType] = useState('Bug');
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null);
   const [applicationId, setApplicationId] = useState<number | null>(null);
   const [moduleId, setModuleId] = useState<number | null>(null);
   const [environmentId, setEnvironmentId] = useState<number | null>(null);
+  const [userRoleId, setUserRoleId] = useState<number | null>(null);
   const [note, setNote] = useState('');
   const [reviewScreenshot, setReviewScreenshot] = useState('');
   const [presetNotice, setPresetNotice] = useState('');
@@ -69,8 +74,10 @@ export function QuickCaptureForm({
   const applicationRef = useRef<HTMLInputElement>(null);
   const moduleRef = useRef<HTMLInputElement>(null);
   const environmentRef = useRef<HTMLInputElement>(null);
+  const userRoleRef = useRef<HTMLInputElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const screenshotButtonRef = useRef<HTMLButtonElement>(null);
+  const quickWindowRef = useRef<HTMLDivElement>(null);
   const screenshotAnnotatorRef = useRef<ScreenshotAnnotatorHandle>(null);
   const presetNoticeTimerRef = useRef<number | null>(null);
   const wasReviewingScreenshotRef = useRef(false);
@@ -93,6 +100,10 @@ export function QuickCaptureForm({
     () => settings.environments.map((item) => ({ key: String(item.id), value: item.id, label: item.value })),
     [settings.environments]
   );
+  const userRoleOptions = useMemo(
+    () => settings.userRoles.map((item) => ({ key: String(item.id), value: item.id, label: item.value })),
+    [settings.userRoles]
+  );
   const presetOptions = useMemo(() => settings.presets.slice(0, 3), [settings.presets]);
 
   useEffect(() => {
@@ -101,7 +112,8 @@ export function QuickCaptureForm({
     if ((moduleId == null || !moduleOptions.some((module) => module.value === moduleId)) && moduleOptions[0]) setModuleId(moduleOptions[0].value as number);
     if (moduleId != null && !moduleOptions.length) setModuleId(null);
     if (environmentId == null && settings.environments[0]) setEnvironmentId(settings.environments[0].id);
-  }, [entryType, applicationId, moduleId, environmentId, moduleOptions, settings.entryTypes, settings.applications, settings.environments]);
+    if (userRoleId == null && settings.userRoles[0]) setUserRoleId(settings.userRoles[0].id);
+  }, [entryType, applicationId, moduleId, environmentId, userRoleId, moduleOptions, settings.entryTypes, settings.applications, settings.environments, settings.userRoles]);
 
   useEffect(() => {
     if (selectedPresetId != null && !presetOptions.some((preset) => preset.id === selectedPresetId)) setSelectedPresetId(null);
@@ -162,7 +174,7 @@ export function QuickCaptureForm({
 
   const save = async (): Promise<void> => {
     if (!note.trim()) return;
-    await onSave({ entryType: entryType || 'Bug', applicationId, moduleId, environmentId, note });
+    await onSave({ entryType: entryType || 'Bug', applicationId, moduleId, environmentId, userRoleId, note });
     setNote('');
   };
 
@@ -176,7 +188,10 @@ export function QuickCaptureForm({
     setReviewScreenshot('');
     await window.bugPocket.restoreQuickCaptureCompact();
     window.setTimeout(() => void window.bugPocket.restoreQuickCaptureCompact(), 100);
-    window.setTimeout(() => noteRef.current?.focus(), 40);
+    window.setTimeout(() => {
+      quickWindowRef.current?.focus();
+      noteRef.current?.focus();
+    }, 40);
   };
 
   const discardReviewedScreenshot = async (): Promise<void> => {
@@ -184,7 +199,10 @@ export function QuickCaptureForm({
     await window.bugPocket.discardPendingQuickScreenshot();
     await window.bugPocket.restoreQuickCaptureCompact();
     window.setTimeout(() => void window.bugPocket.restoreQuickCaptureCompact(), 100);
-    window.setTimeout(() => noteRef.current?.focus(), 40);
+    window.setTimeout(() => {
+      quickWindowRef.current?.focus();
+      noteRef.current?.focus();
+    }, 40);
   };
 
   const openPresetSettings = (): void => {
@@ -230,6 +248,10 @@ export function QuickCaptureForm({
           event.preventDefault();
           environmentRef.current?.focus();
           return;
+        case 'r':
+          event.preventDefault();
+          userRoleRef.current?.focus();
+          return;
         case 'n':
           event.preventDefault();
           noteRef.current?.focus();
@@ -253,8 +275,22 @@ export function QuickCaptureForm({
     }
   };
 
+  useEffect(() => {
+    const handleDocumentKeyDown = (event: globalThis.KeyboardEvent): void => {
+      if (event.defaultPrevented || event.key !== 'Escape') return;
+      const root = quickWindowRef.current;
+      const target = event.target instanceof Node ? event.target : null;
+      if (root && target && root.contains(target)) return;
+      event.preventDefault();
+      if (reviewScreenshot) void discardReviewedScreenshot();
+      else void onCancel();
+    };
+    document.addEventListener('keydown', handleDocumentKeyDown);
+    return () => document.removeEventListener('keydown', handleDocumentKeyDown);
+  });
+
   return (
-    <div className={reviewScreenshot ? 'quick-window review-mode' : 'quick-window'} onKeyDown={handlePanelKeyDown}>
+    <div ref={quickWindowRef} tabIndex={-1} className={reviewScreenshot ? 'quick-window review-mode' : 'quick-window'} onKeyDown={handlePanelKeyDown}>
       <header className="quick-header">
         <div className="quick-brand-patch">
           <img className="quick-logo" src={iconUrl} alt="" />
@@ -270,7 +306,7 @@ export function QuickCaptureForm({
           <div className="quick-inline-review-heading">
             <div>
               <h2>Review Screenshot</h2>
-              <p>Annotate this snip, then attach it to the current capture.</p>
+              <p>Annotate this snip, then attach it to the current draft.</p>
             </div>
             <div className="quick-review-actions">
               <button className="quick-review-discard" type="button" onClick={() => void discardReviewedScreenshot()}>Discard</button>
@@ -280,7 +316,7 @@ export function QuickCaptureForm({
           <ScreenshotAnnotator
             ref={screenshotAnnotatorRef}
             imageDataUrl={reviewScreenshot}
-            fileName="Quick Capture screenshot"
+            fileName="Quick Panel screenshot"
             showSaveButton={false}
             onSave={attachReviewedScreenshot}
           />
@@ -356,6 +392,15 @@ export function QuickCaptureForm({
           options={environmentOptions}
           onChange={(value) => { setSelectedPresetId(null); setEnvironmentId(typeof value === 'number' ? value : null); }}
           onCreate={onCreateEnvironment}
+        />
+        <QuickSearchSelect
+          ref={userRoleRef}
+          label="User Role"
+          shortcut={quickPanelShortcuts.userRole}
+          value={userRoleId}
+          options={userRoleOptions}
+          onChange={(value) => { setSelectedPresetId(null); setUserRoleId(typeof value === 'number' ? value : null); }}
+          onCreate={onCreateUserRole}
         />
           </div>
           <label className="grow">

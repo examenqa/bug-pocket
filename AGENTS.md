@@ -30,7 +30,7 @@ npm run dist
 ```
 
 `npm install` runs `electron-rebuild` so `better-sqlite3` matches Electron.
-`npm run dist` runs `electron-vite build && electron-builder` and creates the Windows NSIS installer under `release-build`.
+`npm run dist` runs `electron-vite build && node scripts/fix-preload.js && electron-builder` and creates the Windows NSIS installer under `release-build`.
 
 ## Main Architecture
 
@@ -42,18 +42,69 @@ Bug Pocket currently has two persistent Electron windows plus a transient snippi
 
 Important files:
 
+**Main process**
 - `src/main/index.ts`: Electron windows, tray, global shortcuts, screenshot IPC, attachment download IPC, backup IPC, clipboard IPC, external URL launch IPC.
 - `src/main/ai/ollamaTriage.ts`: optional local Ollama triage service for report/title/summary/severity assistance.
-- `src/main/database.ts`: SQLite schema, migrations, defaults, CRUD, content-addressed attachments, sync queue, report templates.
+- `src/main/database.ts`: SQLite schema, migrations, defaults, CRUD, content-addressed attachments, sync queue, report templates. Also owns the `app_settings` key-value table.
 - `src/main/sync/syncService.ts`: placeholder for future Supabase sync.
-- `src/preload/index.ts`: safe `window.bugPocket` bridge.
+
+**Preload & shared**
+- `src/preload/index.ts`: safe `window.bugPocket` bridge, including the `startScreenshotCapture()` method triggered by the Main Panel button.
 - `src/shared/types.ts`: shared model and IPC types.
-- `src/renderer/src/main.tsx`: Main Panel, dashboard, details, settings, snipping overlay.
+
+**Renderer — entry**
+- `src/renderer/src/main.tsx`: tiny `createRoot` entry only. All UI logic lives in the files below.
+- `src/renderer/src/App.tsx`: `App`, `CaptureRoute`, `MainShell` — the root router and shell.
+
+**Renderer — pages**
+- `src/renderer/src/pages/DashboardPage.tsx`: bug table, filters, attachment spotlight.
+- `src/renderer/src/pages/BugDetailPage.tsx`: `BugDetailsHost` + `BugDetailsView`, details autosave, AI triage mapping, attachment/version spotlight, and report actions.
+- `src/renderer/src/pages/SettingsPage.tsx`: settings shell with a left sidebar tab layout.
+- `src/renderer/src/pages/SnipOverlay.tsx`: full-screen screenshot snip UI.
+
+**Renderer — shared components**
+- `src/renderer/src/components/shared/Select.tsx`: compact select wrapper.
+- `src/renderer/src/components/shared/Badge.tsx`: `Badge` and `SyncBadge`.
+- `src/renderer/src/components/shared/PillDropdown.tsx`: portal-based inline pill dropdown.
+- `src/renderer/src/components/shared/OptionSelect.tsx`: `OptionSelect` and `ReferenceSelect`.
 - `src/renderer/src/components/QuickCaptureForm.tsx`: Quick Capture UI and keyboard behavior.
-- `src/renderer/src/components/ScreenshotAnnotator.tsx`: native canvas screenshot annotation tools used by dashboard, details, and inline Quick Capture review.
-- `src/renderer/src/services/reports.ts`: template-based report generation and Linear/Jira deep-link construction.
+- `src/renderer/src/components/ScreenshotAnnotator.tsx`: native canvas screenshot annotation tools.
+
+**Renderer — settings components**
+- `src/renderer/src/components/settings/settingsUtils.ts`: `hasSettingsMutationBridge`, `getSettingsPreviewItems`.
+- `src/renderer/src/components/settings/GeneralSettings.tsx`: General & Hotkeys tab content, including shortcuts, capture preferences, workspace field lists, report destinations, Jira, and templates.
+- `src/renderer/src/components/settings/PresetSettings.tsx`: Capture Presets tab wrapper around preset CRUD.
+- `src/renderer/src/components/settings/AiSettings.tsx`: AI Triage tab wrapper.
+- `src/renderer/src/components/settings/StorageSettings.tsx`: Storage & Backups tab wrapper.
+- `src/renderer/src/components/settings/SyncSettings.tsx`: Cloud Sync placeholder tab.
+- `src/renderer/src/components/settings/ShortcutSettingsPanel.tsx`: shortcut recording UI.
+- `src/renderer/src/components/settings/CapturePreferencesPanel.tsx`: screenshot review and startup toggles.
+- `src/renderer/src/components/settings/JiraWorkspacePanel.tsx`: Jira workspace URL field.
+- `src/renderer/src/components/settings/AiOptionsPanel.tsx`: Ollama enable/guided vision model config.
+- `src/renderer/src/components/settings/DataManagementPanel.tsx`: backup export/import/auto-backup UI.
+- `src/renderer/src/components/settings/PresetManager.tsx`: Quick Capture preset CRUD (max 3).
+- `src/renderer/src/components/settings/ModuleManager.tsx`: module management grouped by application.
+- `src/renderer/src/components/settings/OptionManager.tsx`: generic collapsible option CRUD + merge.
+- `src/renderer/src/components/settings/TemplateManager.tsx`: report template editor.
+
+**Renderer — hooks**
+- `src/renderer/src/hooks/useHashRoute.ts`: hash-based navigation hook.
+- `src/renderer/src/hooks/useDebounce.ts`: generic debounce hook.
 - `src/renderer/src/hooks/useSettings.ts`: settings loader.
+
+**Renderer — utils**
+- `src/renderer/src/utils/display.ts`: pure display/format/classification helpers (`getEntryDisplay`, `syncClass`, `severityClass`, `formatTableDate`, etc.).
+- `src/renderer/src/utils/filters.ts`: `getActiveFilterChips`, `getModulesForApplication`.
+- `src/renderer/src/utils/shortcuts.ts`: keyboard accelerator helpers (`eventToAccelerator`, `isModifierOnlyKey`).
+- `src/renderer/src/utils/bugUpdate.ts`: `buildBugUpdateInput`, `serializeBugUpdateInput`, and related types.
+- `src/renderer/src/utils/spotlight.ts`: `SpotlightState` interface and `loadAttachmentLineage` helper.
+- `src/renderer/src/utils/settingsKeys.ts`: shared sessionStorage key constants for the backup restore handoff.
+
+**Renderer — services & styles**
+- `src/renderer/src/services/reports.ts`: template-based report generation and Linear/Jira deep-link construction.
 - `src/renderer/src/styles.css`: full app styling.
+
+**Build & resources**
 - `build/icon.ico`: multi-layer Windows icon used by electron-builder and runtime tray/window/notification icon loading.
 - `resources/bug-pocket-icon.png` and `resources/bug-pocket-title.png`: renderer/runtime brand artwork and packaged extra resources.
 - `supabase/schema-draft.sql`: future cloud schema draft.
@@ -70,6 +121,7 @@ Visible fields:
 - Application
 - Module
 - Environment
+- User Role
 - Bug Note
 - Screenshot button
 - Save button
@@ -77,7 +129,7 @@ Visible fields:
 Important behavior:
 
 - Quick Capture stays minimal. Do not add Device, Browser, issue fields, status, severity, or other details here unless explicitly requested.
-- It supports creating missing Entry Type, Application, Module, and Environment values inline.
+- It supports creating missing Entry Type, Application, Module, Environment, and User Role values inline.
 - Modules are scoped to the selected Application; new modules created from Quick Capture attach to that application.
 - It can attach one or more screenshots before saving.
 - By default, screenshots taken from Quick Capture expand the same Quick Capture window into an inline Review Screenshot mode before being attached.
@@ -94,6 +146,7 @@ Quick panel shortcuts:
 - `Alt+A`: Application
 - `Alt+M`: Module
 - `Alt+E`: Environment
+- `Alt+R`: User Role
 - `Alt+N`: Bug Note
 - `Alt+S`: Screenshot
 - `Ctrl+Enter`: Save
@@ -115,6 +168,7 @@ The Main App is the full desktop dashboard. It is required, not optional.
 It includes:
 
 - Dashboard
+- Global Screenshot Button: A dedicated button in the header that triggers the `Ctrl+Alt+S` snipping flow directly from the dashboard.
 - Bug/entry list
 - Search
 - Collapsible filters
@@ -160,6 +214,7 @@ The full details page supports:
 - Application
 - Module
 - Environment
+- User Role
 - Device
 - Browser
 - Bug Note
@@ -183,16 +238,17 @@ The full details page supports:
 - Open Linear
 - Open Jira
 - Open Ticket, shown in the header as a secondary Issue pill/button and opened through the external URL IPC when `issue_url` exists
-- Optional `Triage with Local AI` / `Refine AI Draft` controls when local AI is enabled
+- AI Triage implementation code is present but locked in this build; Bug Details does not mount the triage/refine controls until the feature gate is re-enabled.
 - Delete Report
 - Save Details
 
-The top six dropdown fields are arranged as 2 rows x 3 columns:
+The top seven taxonomy/context controls are arranged in a responsive 2-column grid:
 
 - Entry Type
 - Application
 - Module
 - Environment
+- User Role
 - Device
 - Browser
 
@@ -226,29 +282,33 @@ Settings currently manages:
 - Environments
 - Devices
 - Browsers
+- User Roles
 - Severity Values
-- Issue Platforms
+- Report Destinations / Issue Platforms
 - Report Templates
 - Global Shortcuts
 - Capture Preferences
 - Quick Capture Presets
 - Data Management and backups
 - Jira Workspace URL
-- Local AI Triage options
+- AI Triage coming-soon placeholder
 
-Settings uses segmented secondary navigation:
+Settings uses a two-column layout with a persistent left sidebar and a right content panel. Current sidebar tabs are:
 
-- Preferences: Global Shortcuts, Capture Preferences, Quick Capture Presets.
-- Taxonomy: Applications, Modules, Environments, Devices, Browsers, Entry Types, Severity Values.
-- Outbound: issue destination/platform settings, Jira Workspace, Local AI Triage, Report Templates, Data Management.
+- General & Hotkeys: Global Shortcuts, Capture Preferences, workspace field lists, report destinations, Jira Workspace, and Report Templates.
+- Capture Presets: Quick Capture presets, capped at 3.
+- AI Triage: coming-soon placeholder. The guided Ollama model UI still exists in code but is intentionally not mounted in this build.
+- Storage & Backups: manual backup, restore, automated backup directory.
+- Cloud Sync: placeholder for future Supabase sync.
 
-Settings groups are compact collapsible cards. Closed cards show a count and preview chips. Open cards show add/edit/delete controls. Only one Settings card should be open at a time within a segment. Opening a new Settings card collapses the previous one.
+Settings groups are shown as bordered sections with compact collapsible cards where appropriate. Closed cards show a count and preview chips. Open cards show add/edit/delete controls. Only one Settings card should be open at a time inside the active Settings tab. Opening a new Settings card collapses the previous one.
 
 Capture Preferences currently includes:
 
 - Review screenshots before attaching in Quick Capture
+- Run on System Startup
 
-This preference is stored in `config_options` as `quick_capture_annotate_screenshots`, defaults to enabled, and controls whether Quick Capture screenshots go through inline Review Screenshot mode before being saved.
+These preferences are stored in the `app_settings` key-value table (see Data Model). `quick_capture_annotate_screenshots` defaults to enabled and controls whether Quick Panel screenshots go through inline Review Screenshot mode before being saved. `run_on_system_startup` defaults to disabled.
 
 Data Management currently includes:
 
@@ -256,12 +316,13 @@ Data Management currently includes:
 - Manual import/restore from a `.bugpocket` backup archive.
 - Automated rolling backups to a user-selected directory, retaining the newest backups.
 
-Local AI Triage settings currently include:
+AI Triage settings behavior in this build:
 
-- `Enable Triage with Local AI`, stored in `config_options` as `ai_triage_enabled`, default `false`.
-- `Ollama model name`, stored in `config_options` as `ollama_model_name`, default `qwen3-vl:8b`.
-- Model names are validated before request dispatch and may contain only letters, numbers, hyphens, colons, underscores, and periods.
-- The Bug Details `Triage with Local AI` button is not mounted unless `ai_triage_enabled` is true.
+- Settings > AI Triage shows a coming-soon card and does not expose the enable toggle or model controls.
+- The implementation code remains in place for later reactivation: `AiOptionsPanel.tsx`, `ollamaTriage.ts`, and the Bug Details triage/refinement state are still present.
+- The feature is locked with `AI_TRIAGE_AVAILABLE = false` in `BugDetailPage.tsx`, so Bug Details does not mount `Triage with Local AI` or `Refine AI Draft`.
+- The `ai:triageWithOllama` IPC channel still exists, but currently rejects calls with a coming-soon/disabled message instead of calling Ollama.
+- Stored settings remain available for future use: `ai_triage_enabled` defaults to `false`, and `ollama_model_name` defaults to `qwen3-vl:8b`.
 
 ## Data Model
 
@@ -273,12 +334,43 @@ SQLite tables include:
 - `environments`
 - `devices`
 - `browsers`
+- `user_roles`
 - `attachments`
-- `config_options`
+- `app_settings` — key-value store for scalar app preferences (see below)
+- `config_options` — taxonomy lists only (entry types, fixed capture statuses, severities, issue platforms)
 - `report_templates`
 - `shortcut_settings`
 - `presets`
 - `sync_queue`
+
+### app_settings table
+
+`app_settings` is a key-value table used exclusively for singleton scalar preferences that do not belong in a taxonomy list. Schema:
+
+```sql
+CREATE TABLE app_settings (
+  key        TEXT PRIMARY KEY NOT NULL,
+  value      TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
+);
+```
+
+Current keys:
+
+| key | type | default |
+|---|---|---|
+| `jira_workspace_url` | string | `""` |
+| `auto_backup_directory_path` | string | `""` |
+| `quick_capture_annotate_screenshots` | boolean (`"true"`/`"false"`) | `"true"` |
+| `run_on_system_startup` | boolean (`"true"`/`"false"`) | `"false"` |
+| `ai_triage_enabled` | boolean (`"true"`/`"false"`) | `"false"` |
+| `ollama_model_name` | string | `"qwen3-vl:8b"` |
+
+Do NOT store scalar preferences in `config_options`. The `config_options` table is only for multi-row taxonomy lists (entry types, fixed capture statuses, severities, issue platforms, etc.).
+
+The `database.ts` class exposes typed private helpers `getSetting(key)` and `setSetting(key, value)` that wrap all access to `app_settings`. Add new scalar preferences through those helpers only.
+
+On first startup, `migrateToAppSettings()` runs inside a transaction: it reads any legacy `config_options` rows with matching keys, writes them into `app_settings`, and deletes those rows. This migration is idempotent.
 
 The `bugs` table currently includes:
 
@@ -286,6 +378,7 @@ The `bugs` table currently includes:
 - `application_id`
 - `module_id`
 - `environment_id`
+- `user_role_id`
 - `device_id`
 - `browser_id`
 - `entry_type`
@@ -327,16 +420,16 @@ The `modules` table includes:
 - `created_at`
 - `updated_at`
 
-Application and Module `context_description` fields are optional AI context fields. Settings > Taxonomy exposes them as `Context / Business Logic` textareas. Use the dedicated context IPC methods for explicit context saves:
+Application and Module `context_description` fields are optional AI context fields. Settings > General & Hotkeys > Workspace Field Lists exposes them as `Context / Business Logic` textareas. Use the dedicated context IPC methods for explicit context saves:
 
 - `window.bugPocket.updateApplicationContext(id, contextDescription)`
 - `window.bugPocket.updateModuleContext(id, contextDescription)`
 
 The normal rename/update methods also accept context for combined saves, but context-only buttons should use the dedicated context methods so the save path is unambiguous.
 
-Environment, Device, and Browser are relational reference tables, not simple copied text fields. Renderer display models still expose joined `environment`, `device`, and `browser` names for tables, details headers, and report templates.
+Environment, User Role, Device, and Browser are relational reference tables, not simple copied text fields. Renderer display models still expose joined `environment`, `user_role`, `device`, and `browser` names for tables, details headers, AI payloads, and report templates.
 
-The `environments`, `devices`, and `browsers` tables include:
+The `environments`, `devices`, `browsers`, and `user_roles` tables include:
 
 - `id`
 - `name`
@@ -388,13 +481,13 @@ The `sync_queue` table is append-only sync preparation. It includes:
 - `id`
 - `local_seq`
 - `op_id`
-- `entity_type`
+- `entity_type` — `bug`, `attachment`, or `reference`
 - `entity_id`
-- `operation`
+- `operation` — `INSERT`, `UPDATE`, `DELETE`, or `MERGE`
 - `payload`
 - `created_at`
 
-Bug and attachment mutations should write to `sync_queue` in the same SQLite transaction as the primary table change.
+Bug and attachment mutations should write to `sync_queue` in the same SQLite transaction as the primary table change. Reference table merge operations enqueue a `reference` / `MERGE` event.
 
 ## Entry Types And Statuses
 
@@ -453,6 +546,13 @@ Default browsers:
 - Safari
 - Other
 
+Default user roles:
+
+- Admin
+- Standard User
+- Guest
+- Read-Only
+
 ## Report Generation
 
 Report generation is template-based. The copy buttons do not invoke AI; they only render saved fields through stored templates. Local AI, when enabled, can help populate or refine the saved fields before the template is copied.
@@ -465,6 +565,7 @@ Current placeholders include:
 - `{{application}}`
 - `{{module}}`
 - `{{environment}}`
+- `{{user_role}}`
 - `{{device}}`
 - `{{browser}}`
 - `{{steps}}`
@@ -484,7 +585,7 @@ Default report template notes:
 
 ```markdown
 🚨 *[{{severity}}] {{title}}*
-*Context:* {{application}} > {{module}} | {{environment}}
+*Context:* {{application}} > {{module}} | {{environment}} | {{user_role}}
 
 *Note:* {{note}}
 ```
@@ -515,9 +616,9 @@ The Main Panel derives display titles deterministically:
 
 Manual title edits in Details should win over derived titles.
 
-## Screenshot Capture
+## Screenshot / Snip
 
-Screenshot capture works like a snipping flow:
+Screenshots use a snipping flow:
 
 - User clicks Screenshot or presses the shortcut.
 - The app hides/minimizes the capture window.
@@ -530,13 +631,14 @@ Screenshot capture works like a snipping flow:
 - SQLite stores only `content_hash` and `file_extension`, not an absolute path.
 - Esc cancels screenshot mode.
 
-Quick Capture screenshot behavior:
+Quick Panel screenshot behavior:
 
 - When `quick_capture_annotate_screenshots` is enabled, the snipped PNG is held in memory as a pending screenshot and not saved yet.
+- If a user triggers `Ctrl+Alt+S` or the Main Panel screenshot button while a Quick Capture draft is already in progress, the new screenshot appends to the existing draft without overwriting the user's text.
 - The Quick Capture window expands into an inline Review Screenshot mode with the native canvas annotator.
 - `Attach` persists the final image as a content-addressed local attachment, emits `screenshot:captured` back to Quick Capture, and restores compact size.
 - `Discard` clears the pending image and saves nothing.
-- When the preference is disabled, Quick Capture screenshots save immediately and return to the Quick Panel.
+- When the preference is disabled, Quick Panel screenshots save immediately and return to the Quick Panel.
 
 Main Panel screenshot behavior:
 
@@ -562,10 +664,11 @@ Tray and shortcuts:
 - Tray icon opens Quick Capture or Dashboard.
 - The tray, window, notification, and packaged installer icon should use the custom Bug Pocket icon, not Electron defaults.
 - `Ctrl+Alt+P`: opens Quick Capture by default.
+- `Ctrl+Alt+S`: starts a global screenshot snip directly by default. After the snip, it uses the existing Quick Capture review/attach flow so the screenshot still lands in the current Quick Panel draft.
 - `Ctrl+Alt+M`: opens Main App Dashboard by default.
 - Global shortcuts are configurable from Settings using recorder controls.
 - If Electron cannot register a shortcut because another app/system owns it, Settings shows a warning.
-- Settings > Preferences includes `Run on System Startup`. This is stored in `config_options` as `run_on_system_startup` and enforced on app boot through `app.setLoginItemSettings({ openAtLogin, openAsHidden: true })`.
+- Settings > General & Hotkeys includes `Run on System Startup`. This is stored in `app_settings` as `run_on_system_startup` and enforced on app boot through `app.setLoginItemSettings({ openAtLogin, openAsHidden: true, args: ["--background-start"] })` when enabled.
 - When launched by Windows startup, Bug Pocket passes `--background-start` and starts hidden in the tray/background instead of opening the Main Panel.
 - Bug Pocket uses `app.requestSingleInstanceLock()`. If a second instance is launched, it should not open another SQLite/IPC process; it should bring the existing Main App dashboard to the foreground.
 
@@ -594,7 +697,7 @@ Sync is not implemented yet. The placeholder exists in:
 - `.env.example`
 - `supabase/schema-draft.sql`
 
-Local event logging is implemented, but no remote sync worker consumes it yet. Current bug and attachment INSERT/UPDATE/DELETE operations append JSON payloads to `sync_queue` inside the same transaction as the primary mutation.
+Local event logging is implemented, but no remote sync worker consumes it yet. Current bug and attachment INSERT/UPDATE/DELETE operations append JSON payloads to `sync_queue` inside the same transaction as the primary mutation. Reference merges append `MERGE` events.
 
 Future sync should add:
 
@@ -630,7 +733,7 @@ Future mobile app:
 
 ## Local AI Triage
 
-The app has an optional, local-only Ollama triage feature gated behind Settings > Outbound > Local AI Triage.
+The app has local Ollama triage implementation code, but AI Triage is intentionally locked in the current packaged build and presented as coming soon in Settings > AI Triage.
 
 Current local AI plumbing:
 
@@ -638,12 +741,14 @@ Current local AI plumbing:
 - Preload exposes it as `window.bugPocket.triageWithOllama(payload)`.
 - The main process IPC channel is `ai:triageWithOllama`.
 - The service calls `http://localhost:11434/api/chat` for better compatibility with vision-language models such as Qwen-VL.
-- Before calling Ollama, the main process checks `db.getAiTriageEnabled()`. If disabled, the IPC throws and no inference runs.
+- Current packaged behavior: the main-process `ai:triageWithOllama` IPC handler immediately throws a coming-soon/disabled error and does not call Ollama.
+- Intended reactivation behavior: before calling Ollama, the main process should check `db.getAiTriageEnabled()`. If disabled, the IPC should throw and no inference should run.
 - The model name is loaded dynamically from SQLite via `db.getOllamaModelName()` and validated with `/^[a-zA-Z0-9\-:._]+$/` before any network request is sent.
 - If `image_file_path` is provided, it reads the image and base64-encodes it into the Ollama `images` array.
 - Image data passed to Ollama must be raw base64 only; strip any `data:image/png;base64,` style prefix before appending to `images`.
+- Screenshots are optimized before dispatch: max edge 1280px and JPEG quality 78, then encoded to base64.
 - The Ollama request uses a `messages` array with a system message and a user message. The user message contains the app/module/tester context and includes `images: [rawBase64]` when a screenshot is supplied.
-- The Ollama request sets `stream: false` and `options.num_ctx = 8192`.
+- The Ollama request sets `stream: false`, `options.num_ctx = 4096`, `options.num_predict = 900`, and `options.temperature = 0.2` to keep local vision triage faster and bounded.
 - The fetch request intentionally has no local AbortController timeout so slower local vision models can finish.
 - Do not use Ollama API `format: "json"` for this flow; the prompt asks for raw JSON inside a fenced markdown code block, and the backend parser extracts the JSON before returning structured data.
 - The expected JSON keys are `visual_analysis`, `bug_title`, `refined_summary`, `severity_level`, `steps_to_reproduce`, `expected_result`, and `actual_result`.
@@ -651,14 +756,15 @@ Current local AI plumbing:
 - The system prompt is hardened: the model is instructed to act as an Expert QA Tester, actively inspect screenshots and user annotations, avoid merely repeating tester notes, and output strictly JSON.
 - `visual_analysis` is a scratchpad-style first key returned by the local AI service and must not be mapped into Bug Details UI fields.
 - `refined_summary` is mapped into the Bug Note field when non-empty, replacing the rough tester note with a polished 1-2 sentence summary.
-- The prompt includes clear sections: App Context, Module Context, Tester Note, Existing Manual Fields, and Task.
+- The prompt includes clear sections: App Context, Module Context, Environment, User Role, Device, Browser, Tester Note, Existing Manual Fields, and Task.
 - Bug Details hydrates the payload with the selected Application and Module `context_description` values.
-- After a successful first AI pass, Bug Details replaces `Triage with Local AI` with `Refine AI Draft`. Refinements send the current edited form state plus `refinement_note`; the backend prepends that correction to the Task section.
+- When re-enabled, after a successful first AI pass, Bug Details should replace `Triage with Local AI` with `Refine AI Draft`. Refinements send the current edited form state plus `refinement_note`; the backend prepends that correction to the Task section.
 - The transport logs sanitized request structure, the first 50 characters of the raw image base64, raw Ollama response content, and full error stacks for debugging.
 
 Important local AI constraints:
 
-- This local Ollama path is opt-in and experimental.
+- This local Ollama path is currently locked/coming soon in the packaged app, even though the implementation code remains in place.
+- When re-enabled, it should be opt-in and experimental.
 - Engine Coupling: The local triage transport layer is currently tightly coupled to Ollama's specific REST API schema (`http://localhost:11434/api/chat` and its required JSON message array). While the model string is dynamic in the database, users cannot currently plug in OpenAI-compatible local engines like LM Studio or vLLM. Future engine-agnostic support will require refactoring the network request and adding an `API Base URL` parameter to the `config_options` schema.
 - No AI generation should run automatically during Quick Capture.
 - Do not send screenshots to AI unless the user explicitly chooses an AI action and allows image use.
@@ -666,7 +772,7 @@ Important local AI constraints:
 
 ## Future AI And Monetization Direction
 
-Cloud AI and ads are intentionally not part of the current MVP. Local Ollama triage exists as an opt-in experimental desktop-only feature; cloud AI, shared credits, and monetization remain future work.
+Cloud AI and ads are intentionally not part of the current MVP. Local Ollama triage implementation exists in code but is locked behind a coming-soon state in the packaged app; cloud AI, shared credits, and monetization remain future work.
 
 Preferred future model:
 
@@ -738,11 +844,11 @@ Potential UX work:
 
 Potential technical work:
 
-- Split `src/renderer/src/main.tsx` into smaller components.
 - Add focused tests for report generation and title derivation.
 - Add migration tests for SQLite schema changes.
 - Add a proper sync queue drain/retry abstraction before Supabase implementation.
 - Add verification around content-addressed attachment backup/restore.
+- Consider extracting the spotlight/annotator logic into a dedicated hook (`useSpotlight`) shared by DashboardPage and BugDetailPage.
 
 ## Phase 2 Architectural Constraints (DO NOT OVERWRITE)
 
@@ -764,7 +870,7 @@ Potential technical work:
 * **Mechanism:** Backups must use asynchronous Node.js streams (via `archiver`) to prevent the Electron main process from freezing. Never buffer the entire database or image folder into RAM.
 * **Safe Locking:** Always `fs.copyFileSync` the active SQLite database to a temporary file before zipping to avoid `EBUSY` OS lock crashes.
 * **Restore:** When importing a `.bugpocket` file, the active `db.close()` must be called before extraction to release file locks. The `BrowserWindow` must execute `reload()` immediately after extraction.
-* **Auto-Backups:** Automated backups write to a user-defined directory stored in `config_options`. Enforce a strict rolling limit (delete oldest after 3 backups).
+* **Auto-Backups:** Automated backups write to a user-defined directory stored in `app_settings` under `auto_backup_directory_path`. Enforce a strict rolling limit (delete oldest after 3 backups).
 
 ### 4. Packaging Constraints
 
@@ -772,3 +878,4 @@ Potential technical work:
 * **ASAR Unpacking:** `better-sqlite3` must be added to the `asarUnpack` configuration so the OS can execute the native `.node` binaries outside the read-only archive.
 * **Custom Icon:** `build/icon.ico` is the Windows application icon. Keep `package.json > build.directories.buildResources` pointed at `build`, and keep `win.icon` pointed at `build/icon.ico`.
 * **Packaging Gotcha:** `npm run dist` cannot overwrite `release-build/win-unpacked/resources/app.asar` while an unpacked or installed Bug Pocket process is using it. Close running Bug Pocket instances before packaging.
+* **Preload Path Split:** `npm run dev` uses `out/preload/index.js`, while `npm run start`/packaged builds use `out/preload/index.mjs` after `scripts/fix-preload.js`. Keep `preloadPath()` environment-aware; do not hardcode only `.mjs` or dev can white-screen.

@@ -18,6 +18,8 @@ app.setAppUserModelId('com.bugpocket.app');
 let mainWindow: BrowserWindow | null = null;
 let quickWindow: BrowserWindow | null = null;
 let snipWindow: BrowserWindow | null = null;
+let quickWindowLoaded = false;
+let quickWindowReady: Promise<void> | null = null;
 let tray: Tray | null = null;
 let db: BugPocketDatabase;
 let isQuitting = false;
@@ -45,6 +47,11 @@ function packagedResourcePath(fileName: string): string {
   return app.isPackaged ? join(process.resourcesPath, fileName) : join(__dirname, '../../resources', fileName);
 }
 
+function preloadPath(): string {
+  if (isDev) return join(__dirname, '../preload/index.js');
+  const mjsPreload = join(__dirname, '../preload/index.mjs');
+  return existsSync(mjsPreload) ? mjsPreload : join(__dirname, '../preload/index.js');
+}
 function iconPath(): string {
   const pngIconPath = packagedResourcePath('bug-pocket-icon.png');
   if (existsSync(pngIconPath)) return pngIconPath;
@@ -72,7 +79,7 @@ function createMainWindow(route = '/dashboard', showOnReady = true): void {
     backgroundColor: '#f9fafb',
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: preloadPath(),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -126,12 +133,23 @@ function createQuickWindow(): void {
     autoHideMenuBar: true,
     skipTaskbar: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: preloadPath(),
       contextIsolation: true,
       nodeIntegration: false
     }
   });
-  quickWindow.loadURL(rendererUrl('/capture'));
+  quickWindowLoaded = false;
+  quickWindowReady = new Promise((resolve) => {
+    quickWindow?.webContents.once('did-finish-load', () => {
+      quickWindowLoaded = true;
+      resolve();
+    });
+  });
+  quickWindow.loadURL(rendererUrl('/capture')).catch((error) => {
+    quickWindowLoaded = true;
+    quickWindowReady = null;
+    console.error('Unable to load Quick Capture window.', error);
+  });
   quickWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
@@ -142,7 +160,12 @@ function createQuickWindow(): void {
   });
 }
 
-function openQuickCapture(): void {
+async function ensureQuickWindowReady(): Promise<void> {
+  if (!quickWindow) createQuickWindow();
+  if (!quickWindowLoaded && quickWindowReady) await quickWindowReady;
+}
+
+async function openQuickCapture(): Promise<void> {
   if (!quickWindow) createQuickWindow();
   if (!pendingQuickScreenshotDataUrl) restoreQuickCaptureCompactSize();
   quickWindow?.show();
@@ -154,6 +177,7 @@ function openQuickCapture(): void {
     quickTopmostPulseTimer = null;
   }, 500);
   quickWindow?.focus();
+  await ensureQuickWindowReady();
   setTimeout(() => {
     quickWindow?.focus();
     quickWindow?.webContents.focus();
@@ -239,8 +263,9 @@ function shortcutLabel(accelerator: string): string {
 
 function shortcutHandlers(): Record<ShortcutAction, () => void> {
   return {
-    quick_capture: openQuickCapture,
-    main_panel: () => openMainWindow('/dashboard')
+    quick_capture: () => { void openQuickCapture(); },
+    main_panel: () => openMainWindow('/dashboard'),
+    global_screenshot: () => { void startScreenshotCapture(); }
   };
 }
 
@@ -571,7 +596,8 @@ function createTray(): void {
   tray.setToolTip('Bug Pocket');
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Quick Capture', click: openQuickCapture },
+      { label: 'Quick Capture', click: () => { void openQuickCapture(); } },
+      { label: 'Take Screenshot', click: () => { void startScreenshotCapture(); } },
       { label: 'Open Dashboard', click: () => openMainWindow('/dashboard') },
       { type: 'separator' },
       {
@@ -583,10 +609,19 @@ function createTray(): void {
       }
     ])
   );
-  tray.on('double-click', openQuickCapture);
+  tray.on('double-click', () => { void openQuickCapture(); });
 }
 
 async function startScreenshotCapture(bugId?: number): Promise<void> {
+  if (snipWindow) {
+    snipWindow.focus();
+    return;
+  }
+  if (!bugId && pendingQuickScreenshotDataUrl) {
+    await openQuickCapture();
+    quickWindow?.webContents.send('quickScreenshot:reviewReady');
+    return;
+  }
   screenshotBugId = typeof bugId === 'number' ? bugId : null;
   mainWasVisibleBeforeSnip = !!mainWindow?.isVisible();
   quickWindow?.hide();
@@ -611,7 +646,7 @@ async function startScreenshotCapture(bugId?: number): Promise<void> {
     fullscreen: true,
     skipTaskbar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: preloadPath(),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -640,7 +675,7 @@ function persistScreenshotDataUrl(dataUrl: string): { id: number; fileName: stri
   return { id, fileName, contentHash };
 }
 
-function saveScreenshot(dataUrl: string): { id: number; fileName: string; contentHash: string } | null {
+async function saveScreenshot(dataUrl: string): Promise<{ id: number; fileName: string; contentHash: string } | null> {
   snipWindow?.close();
   snipWindow = null;
   if (screenshotBugId) {
@@ -656,13 +691,13 @@ function saveScreenshot(dataUrl: string): { id: number; fileName: string; conten
   if (db.getQuickCaptureAnnotationReview()) {
     pendingQuickScreenshotDataUrl = dataUrl;
     resetSnipWindowState();
-    openQuickCapture();
+    await openQuickCapture();
     quickWindow?.webContents.send('quickScreenshot:reviewReady');
     return null;
   }
   const result = persistScreenshotDataUrl(dataUrl);
   restoreMainAfterSnip();
-  openQuickCapture();
+  await openQuickCapture();
   quickWindow?.webContents.send('screenshot:captured', result);
   resetSnipWindowState();
   return result;
@@ -712,20 +747,20 @@ async function downloadAttachment(id: number): Promise<AttachmentDownloadResult>
   }
 }
 
-function attachPendingQuickScreenshot(dataUrl: string): { id: number; fileName: string; contentHash: string } {
-  if (!pendingQuickScreenshotDataUrl) throw new Error('No pending Quick Capture screenshot.');
+async function attachPendingQuickScreenshot(dataUrl: string): Promise<{ id: number; fileName: string; contentHash: string }> {
+  if (!pendingQuickScreenshotDataUrl) throw new Error('No pending Quick Panel screenshot.');
   const result = persistScreenshotDataUrl(dataUrl);
   pendingQuickScreenshotDataUrl = '';
   restoreQuickCaptureCompactSize();
-  openQuickCapture();
+  await openQuickCapture();
   quickWindow?.webContents.send('screenshot:captured', result);
   return result;
 }
 
-function discardPendingQuickScreenshot(): void {
+async function discardPendingQuickScreenshot(): Promise<void> {
   pendingQuickScreenshotDataUrl = '';
   restoreQuickCaptureCompactSize();
-  openQuickCapture();
+  await openQuickCapture();
 }
 
 function registerIpc(): void {
@@ -758,6 +793,9 @@ function registerIpc(): void {
   ipcMain.handle('settings:addBrowser', (_event, name: string) => mutateSettings(() => db.addBrowser(name)));
   ipcMain.handle('settings:updateBrowser', (_event, id: number, name: string) => mutateSettings(() => db.updateBrowser(id, name)));
   ipcMain.handle('settings:deleteBrowser', (_event, id: number) => mutateSettings(() => db.deleteBrowser(id)));
+  ipcMain.handle('settings:addUserRole', (_event, name: string) => mutateSettings(() => db.addUserRole(name)));
+  ipcMain.handle('settings:updateUserRole', (_event, id: number, name: string) => mutateSettings(() => db.updateUserRole(id, name)));
+  ipcMain.handle('settings:deleteUserRole', (_event, id: number) => mutateSettings(() => db.deleteUserRole(id)));
   ipcMain.handle('settings:addConfigOption', (_event, type: string, value: string) => mutateSettings(() => db.addConfigOption(type, value)));
   ipcMain.handle('settings:updateConfigOption', (_event, id: number, value: string) => mutateSettings(() => db.updateConfigOption(id, value)));
   ipcMain.handle('settings:deleteConfigOption', (_event, id: number) => mutateSettings(() => db.deleteConfigOption(id)));
@@ -853,9 +891,8 @@ function registerIpc(): void {
   ipcMain.handle('backup:export', () => exportBackup());
   ipcMain.handle('backup:import', () => importBackup());
   ipcMain.handle('backup:chooseDirectory', () => chooseBackupDirectory());
-  ipcMain.handle('ai:triageWithOllama', (_event, payload: AiTriageBugPayload) => {
-    if (!db.getAiTriageEnabled()) throw new Error('Local AI triage is disabled.');
-    return triageBugWithOllama(payload, db.getOllamaModelName());
+  ipcMain.handle('ai:triageWithOllama', (_event, _payload: AiTriageBugPayload) => {
+    throw new Error('AI triage is coming soon and is disabled in this build.');
   });
 }
 

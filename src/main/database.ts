@@ -36,24 +36,30 @@ const defaultEntryTypes = ['Bug', 'Scenario', 'Question', 'Observation', 'Improv
 const defaultEnvironments = ['Production', 'Staging', 'QA', 'UAT', 'Development', 'Local'];
 const defaultDevices = ['Desktop', 'Laptop', 'Tablet', 'Mobile', 'Other'];
 const defaultBrowsers = ['Chrome', 'Edge', 'Firefox', 'Safari', 'Other'];
+const defaultUserRoles = ['Admin', 'Standard User', 'Guest', 'Read-Only'];
 const referenceTables: Record<ReferenceTable, string> = {
   environment: 'environments',
   device: 'devices',
-  browser: 'browsers'
+  browser: 'browsers',
+  user_role: 'user_roles'
 };
 const referenceForeignKeys: Record<ReferenceTable, string> = {
   environment: 'environment_id',
   device: 'device_id',
-  browser: 'browser_id'
+  browser: 'browser_id',
+  user_role: 'user_role_id'
 };
 const attachmentFileNameSql =
   "CASE WHEN attachments.content_hash IS NULL OR attachments.content_hash = '' THEN 'Pruned attachment' ELSE attachments.content_hash || attachments.file_extension END AS file_name";
 const defaultShortcuts: Array<Pick<ShortcutSetting, 'action' | 'label' | 'accelerator' | 'is_enabled' | 'sort_order'>> = [
   { action: 'quick_capture', label: 'Quick Capture Panel', accelerator: 'CommandOrControl+Alt+P', is_enabled: 1, sort_order: 0 },
-  { action: 'main_panel', label: 'Main App Panel', accelerator: 'CommandOrControl+Alt+M', is_enabled: 1, sort_order: 1 }
+  { action: 'main_panel', label: 'Main App Panel', accelerator: 'CommandOrControl+Alt+M', is_enabled: 1, sort_order: 1 },
+  { action: 'global_screenshot', label: 'Global Screenshot', accelerator: 'CommandOrControl+Alt+S', is_enabled: 1, sort_order: 2 }
 ];
+const MAX_CAPTURE_PRESETS = 3;
+
 const quickReportTemplate = `🚨 *[{{severity}}] {{title}}*
-*Context:* {{application}} > {{module}} | {{environment}}
+*Context:* {{application}} > {{module}} | {{environment}} | {{user_role}}
 
 *Note:* {{note}}`;
 
@@ -168,6 +174,9 @@ Device:
 
 Browser:
 {{browser}}
+
+User Role:
+{{user_role}}
 
 Steps to Reproduce:
 {{steps}}
@@ -324,6 +333,16 @@ export class BugPocketDatabase {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS user_roles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        value TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS bugs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         application_id INTEGER NULL REFERENCES applications(id) ON DELETE SET NULL,
@@ -331,6 +350,7 @@ export class BugPocketDatabase {
         environment_id INTEGER NULL REFERENCES environments(id) ON DELETE SET NULL,
         device_id INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL,
         browser_id INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL,
+        user_role_id INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL,
         entry_type TEXT NOT NULL DEFAULT 'Bug',
         title TEXT NOT NULL DEFAULT '',
         note TEXT NOT NULL DEFAULT '',
@@ -413,6 +433,12 @@ export class BugPocketDatabase {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key        TEXT PRIMARY KEY NOT NULL,
+        value      TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL DEFAULT ''
+      );
+
       CREATE INDEX IF NOT EXISTS idx_bugs_updated_at ON bugs(updated_at);
       CREATE INDEX IF NOT EXISTS idx_attachments_bug_id ON attachments(bug_id);
       CREATE INDEX IF NOT EXISTS idx_attachments_content_hash ON attachments(content_hash);
@@ -434,6 +460,7 @@ export class BugPocketDatabase {
     this.ensureColumn('bugs', 'environment_id', 'INTEGER NULL REFERENCES environments(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'device_id', 'INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'browser_id', 'INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL');
+    this.ensureColumn('bugs', 'user_role_id', 'INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'steps_to_reproduce', "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn('bugs', 'expected_result', "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn('bugs', 'actual_result', "TEXT NOT NULL DEFAULT ''");
@@ -448,11 +475,7 @@ export class BugPocketDatabase {
     this.ensureColumn('sync_queue', 'local_seq', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureColumn('sync_queue', 'op_id', "TEXT NOT NULL DEFAULT ''");
     this.ensureClientId();
-    this.ensureJiraWorkspaceUrl();
-    this.ensureAutoBackupDirectoryPath();
-    this.ensureQuickCaptureAnnotationReview();
-    this.ensureRunOnSystemStartup();
-    this.ensureAiTriageConfig();
+    this.migrateToAppSettings();
     this.backfillSyncQueueDeterminism();
     this.backfillAttachmentContentAddress();
     this.rebuildAttachmentsTableWithoutAbsolutePaths();
@@ -464,6 +487,7 @@ export class BugPocketDatabase {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_environment_id ON bugs(environment_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_device_id ON bugs(device_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_browser_id ON bugs(browser_id)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_user_role_id ON bugs(user_role_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_sync_status ON bugs(sync_status)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_attachments_bug_id ON attachments(bug_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_attachments_content_hash ON attachments(content_hash)');
@@ -503,51 +527,58 @@ export class BugPocketDatabase {
       .run('client_id', randomUUID(), 0);
   }
 
-  private ensureJiraWorkspaceUrl(): void {
-    const existing = this.db.prepare("SELECT id FROM config_options WHERE type = 'jira_workspace_url' LIMIT 1").get() as { id: number } | undefined;
-    if (existing) return;
-    this.db
-      .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-      .run('jira_workspace_url', '', 0);
-  }
+  /**
+   * One-time migration: moves all scalar singleton settings out of the
+   * legacy config_options rows and into the dedicated app_settings table.
+   * Safe to run on every startup — uses INSERT OR IGNORE so it only
+   * writes each key once and never overwrites existing values.
+   * After copying, deletes the old config_options rows so the table
+   * only holds editable lookup lists going forward.
+   */
+  private migrateToAppSettings(): void {
+    const stamp = now();
+    const singletonTypes = [
+      'jira_workspace_url',
+      'auto_backup_directory_path',
+      'quick_capture_annotate_screenshots',
+      'run_on_system_startup',
+      'ai_triage_enabled',
+      'ollama_model_name'
+    ];
 
-  private ensureAutoBackupDirectoryPath(): void {
-    const existing = this.db.prepare("SELECT id FROM config_options WHERE type = 'auto_backup_directory_path' LIMIT 1").get() as { id: number } | undefined;
-    if (existing) return;
-    this.db
-      .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-      .run('auto_backup_directory_path', '', 0);
-  }
+    const defaults: Record<string, string> = {
+      jira_workspace_url: '',
+      auto_backup_directory_path: '',
+      quick_capture_annotate_screenshots: 'true',
+      run_on_system_startup: 'false',
+      ai_triage_enabled: 'false',
+      ollama_model_name: 'qwen3-vl:8b'
+    };
 
-  private ensureQuickCaptureAnnotationReview(): void {
-    const existing = this.db.prepare("SELECT id FROM config_options WHERE type = 'quick_capture_annotate_screenshots' LIMIT 1").get() as { id: number } | undefined;
-    if (existing) return;
-    this.db
-      .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-      .run('quick_capture_annotate_screenshots', 'true', 0);
-  }
+    const tx = this.db.transaction(() => {
+      const insert = this.db.prepare(
+        'INSERT OR IGNORE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)'
+      );
 
-  private ensureRunOnSystemStartup(): void {
-    const existing = this.db.prepare("SELECT id FROM config_options WHERE type = 'run_on_system_startup' LIMIT 1").get() as { id: number } | undefined;
-    if (existing) return;
-    this.db
-      .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-      .run('run_on_system_startup', 'false', 0);
-  }
+      for (const type of singletonTypes) {
+        // Read any existing value from the old config_options table
+        const existing = this.db
+          .prepare("SELECT value FROM config_options WHERE type = ? AND is_active = 1 ORDER BY id LIMIT 1")
+          .get(type) as { value: string } | undefined;
 
-  private ensureAiTriageConfig(): void {
-    const enabled = this.db.prepare("SELECT id FROM config_options WHERE type = 'ai_triage_enabled' LIMIT 1").get() as { id: number } | undefined;
-    if (!enabled) {
+        const value = existing?.value ?? defaults[type] ?? '';
+        insert.run(type, value, stamp);
+      }
+
+      // Remove the now-migrated rows from config_options
+      // Use a parameterised IN query built from the known constant list
+      const placeholders = singletonTypes.map(() => '?').join(', ');
       this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('ai_triage_enabled', 'false', 0);
-    }
-    const model = this.db.prepare("SELECT id FROM config_options WHERE type = 'ollama_model_name' LIMIT 1").get() as { id: number } | undefined;
-    if (!model) {
-      this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('ollama_model_name', 'qwen3-vl:8b', 0);
-    }
+        .prepare(`DELETE FROM config_options WHERE type IN (${placeholders})`)
+        .run(...singletonTypes);
+    });
+
+    tx();
   }
 
   private backfillSyncQueueDeterminism(): void {
@@ -715,6 +746,7 @@ export class BugPocketDatabase {
         environment_id INTEGER NULL REFERENCES environments(id) ON DELETE SET NULL,
         device_id INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL,
         browser_id INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL,
+        user_role_id INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL,
         entry_type TEXT NOT NULL DEFAULT 'Bug',
         title TEXT NOT NULL DEFAULT '',
         note TEXT NOT NULL DEFAULT '',
@@ -736,12 +768,12 @@ export class BugPocketDatabase {
       );
 
       INSERT INTO bugs_status_limited (
-        id, application_id, module_id, environment_id, device_id, browser_id, entry_type, title, note, other_details,
+        id, application_id, module_id, environment_id, device_id, browser_id, user_role_id, entry_type, title, note, other_details,
         steps_to_reproduce, expected_result, actual_result, status, severity, reported, issue_platform, issue_id,
         issue_url, tags, sync_status, last_sync_at, created_at, updated_at
       )
       SELECT
-        id, application_id, module_id, environment_id, device_id, browser_id, entry_type, title, note, other_details,
+        id, application_id, module_id, environment_id, device_id, browser_id, user_role_id, entry_type, title, note, other_details,
         steps_to_reproduce, expected_result, actual_result,
         CASE
           WHEN LOWER(TRIM(status)) IN ('reported', 'fixed', 'verified', 'done', 'converted to bug') THEN 'Reported'
@@ -819,13 +851,14 @@ export class BugPocketDatabase {
         .prepare(
           `
           SELECT bugs.*, applications.name AS application_name, modules.name AS module_name,
-            environments.name AS environment, devices.name AS device, browsers.name AS browser
+            environments.name AS environment, devices.name AS device, browsers.name AS browser, user_roles.name AS user_role
           FROM bugs
           LEFT JOIN applications ON applications.id = bugs.application_id
           LEFT JOIN modules ON modules.id = bugs.module_id
           LEFT JOIN environments ON environments.id = bugs.environment_id
           LEFT JOIN devices ON devices.id = bugs.device_id
           LEFT JOIN browsers ON browsers.id = bugs.browser_id
+        LEFT JOIN user_roles ON user_roles.id = bugs.user_role_id
           WHERE bugs.id = ?
         `
         )
@@ -861,6 +894,9 @@ export class BugPocketDatabase {
     defaultEnvironments.forEach((value, index) => this.addReferenceOption('environment', value, index, stamp));
     defaultDevices.forEach((value, index) => this.addReferenceOption('device', value, index, stamp));
     defaultBrowsers.forEach((value, index) => this.addReferenceOption('browser', value, index, stamp));
+    defaultUserRoles.forEach((value, index) => this.addReferenceOption('user_role', value, index, stamp));
+
+    this.normalizeShortcutActions(stamp);
 
     const shortcutInsert = this.db.prepare(
       'INSERT OR IGNORE INTO shortcut_settings (action, label, accelerator, is_enabled, sort_order, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
@@ -875,9 +911,10 @@ export class BugPocketDatabase {
     );
     templateInsert.run('Full Bug Report', fullReportTemplate, stamp, stamp);
     templateInsert.run('Quick Report', quickReportTemplate, stamp, stamp);
-    templateInsert.run('Linear Format', '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}', stamp, stamp);
-    templateInsert.run('Jira Format', '{{title}}\n\nSummary:\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nDevice: {{device}}\nBrowser: {{browser}}\n\nSteps to Reproduce:\n{{steps}}\n\nExpected Result:\n{{expected}}\n\nActual Result:\n{{actual}}\n\nSeverity: {{severity}}\nAttachments:\n{{attachments}}', stamp, stamp);
+    templateInsert.run('Linear Format', '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nUser Role: {{user_role}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}', stamp, stamp);
+    templateInsert.run('Jira Format', '{{title}}\n\nSummary:\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nUser Role: {{user_role}}\nDevice: {{device}}\nBrowser: {{browser}}\n\nSteps to Reproduce:\n{{steps}}\n\nExpected Result:\n{{expected}}\n\nActual Result:\n{{actual}}\n\nSeverity: {{severity}}\nAttachments:\n{{attachments}}', stamp, stamp);
     this.upgradeDefaultTemplatesForEnvironment(stamp);
+    this.upgradeDefaultTemplatesForUserRole(stamp);
   }
 
   private ensureDefaultGeneralModule(stamp: string): void {
@@ -915,8 +952,110 @@ export class BugPocketDatabase {
       .run(generalApplication.id, 'General', stamp, stamp);
   }
 
+  private normalizeShortcutActions(stamp: string): void {
+    this.db
+      .prepare(
+        "UPDATE shortcut_settings SET action = 'global_screenshot', label = 'Global Screenshot', sort_order = 2, updated_at = ? WHERE action = 'screenshot_capture' AND NOT EXISTS (SELECT 1 FROM shortcut_settings WHERE action = 'global_screenshot')"
+      )
+      .run(stamp);
+    this.db.prepare("UPDATE shortcut_settings SET label = 'Global Screenshot' WHERE action = 'global_screenshot'").run();
+  }
+
   private removeLegacyShortcut(): void {
-    this.db.prepare('DELETE FROM shortcut_settings WHERE action = ?').run('quick_capture_legacy');
+    this.db.prepare('DELETE FROM shortcut_settings WHERE action IN (?, ?)').run('quick_capture_legacy', 'screenshot_capture');
+  }
+
+  private upgradeDefaultTemplatesForUserRole(stamp: string): void {
+    const replacements: Array<[string, string, string]> = [
+      [
+        'Quick Report',
+        `🚨 *[{{severity}}] {{title}}*
+*Context:* {{application}} > {{module}} | {{environment}}
+
+*Note:* {{note}}`,
+        quickReportTemplate
+      ],
+      [
+        'Linear Format',
+        `{{title}}
+
+{{note}}
+
+Application: {{application}}
+Module: {{module}}
+Environment: {{environment}}
+Device: {{device}}
+Browser: {{browser}}
+Severity: {{severity}}
+Attachments:
+{{attachments}}`,
+        `{{title}}
+
+{{note}}
+
+Application: {{application}}
+Module: {{module}}
+Environment: {{environment}}
+User Role: {{user_role}}
+Device: {{device}}
+Browser: {{browser}}
+Severity: {{severity}}
+Attachments:
+{{attachments}}`
+      ],
+      [
+        'Jira Format',
+        `{{title}}
+
+Summary:
+{{note}}
+
+Application: {{application}}
+Module: {{module}}
+Environment: {{environment}}
+Device: {{device}}
+Browser: {{browser}}
+
+Steps to Reproduce:
+{{steps}}
+
+Expected Result:
+{{expected}}
+
+Actual Result:
+{{actual}}
+
+Severity: {{severity}}
+Attachments:
+{{attachments}}`,
+        `{{title}}
+
+Summary:
+{{note}}
+
+Application: {{application}}
+Module: {{module}}
+Environment: {{environment}}
+User Role: {{user_role}}
+Device: {{device}}
+Browser: {{browser}}
+
+Steps to Reproduce:
+{{steps}}
+
+Expected Result:
+{{expected}}
+
+Actual Result:
+{{actual}}
+
+Severity: {{severity}}
+Attachments:
+{{attachments}}`
+      ]
+    ];
+    const update = this.db.prepare('UPDATE report_templates SET template_text = ?, updated_at = ? WHERE name = ? AND template_text = ?');
+    replacements.forEach(([name, before, after]) => update.run(after, stamp, name, before));
   }
 
   private upgradeDefaultTemplatesForEnvironment(stamp: string): void {
@@ -941,7 +1080,7 @@ export class BugPocketDatabase {
       quickReportTemplate,
       stamp,
       'Quick Report',
-      '{{title}}\n\n{{note}}\n\n{{application}} / {{module}}\nEnvironment: {{environment}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}'
+      '{{title}}\n\n{{note}}\n\n{{application}} / {{module}}\nEnvironment: {{environment}}\nUser Role: {{user_role}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}'
     );
     templateUpdate.run(
       '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}',
@@ -950,7 +1089,7 @@ export class BugPocketDatabase {
       '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}'
     );
     templateUpdate.run(
-      '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}',
+      '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nUser Role: {{user_role}}\nDevice: {{device}}\nBrowser: {{browser}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}',
       stamp,
       'Linear Format',
       '{{title}}\n\n{{note}}\n\nApplication: {{application}}\nModule: {{module}}\nEnvironment: {{environment}}\nSeverity: {{severity}}\nAttachments:\n{{attachments}}'
@@ -979,6 +1118,7 @@ export class BugPocketDatabase {
       environments: this.getReferenceOptions('environment'),
       devices: this.getReferenceOptions('device'),
       browsers: this.getReferenceOptions('browser'),
+      userRoles: this.getReferenceOptions('user_role'),
       reportTemplates: this.db.prepare('SELECT * FROM report_templates ORDER BY name').all() as ReportTemplate[],
       shortcuts: this.getShortcutSettings(),
       jiraWorkspaceUrl: this.getJiraWorkspaceUrl(),
@@ -1003,136 +1143,91 @@ export class BugPocketDatabase {
     return this.db.prepare('SELECT * FROM shortcut_settings WHERE action = ?').get(action) as ShortcutSetting;
   }
 
+  // ---------------------------------------------------------------------------
+  // Generic app_settings accessors
+  // ---------------------------------------------------------------------------
+
+  private getSetting(key: string): string {
+    return (
+      this.db
+        .prepare('SELECT value FROM app_settings WHERE key = ?')
+        .get(key) as { value: string } | undefined
+    )?.value ?? '';
+  }
+
+  private setSetting(key: string, value: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
+      .run(key, value, now());
+  }
+
   getJiraWorkspaceUrl(): string | null {
-    const row = this.db.prepare("SELECT value FROM config_options WHERE type = 'jira_workspace_url' AND is_active = 1 ORDER BY id LIMIT 1").get() as
-      | { value: string }
-      | undefined;
-    const value = row?.value.trim() ?? '';
+    const value = this.getSetting('jira_workspace_url').trim();
     return value || null;
   }
 
   updateJiraWorkspaceUrl(value: string): string | null {
     const cleaned = value.trim();
-    const existingRows = this.db.prepare("SELECT id FROM config_options WHERE type = 'jira_workspace_url' ORDER BY id").all() as Array<{ id: number }>;
-    if (!existingRows.length) {
-      this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('jira_workspace_url', cleaned, 0);
-    } else {
-      const [first, ...rest] = existingRows;
-      this.db.prepare('UPDATE config_options SET value = ?, is_active = 1 WHERE id = ?').run(cleaned, first.id);
-      rest.forEach((row) => this.db.prepare('UPDATE config_options SET is_active = 0 WHERE id = ?').run(row.id));
-    }
+    this.setSetting('jira_workspace_url', cleaned);
     return cleaned || null;
   }
 
   getAutoBackupDirectoryPath(): string | null {
-    const row = this.db.prepare("SELECT value FROM config_options WHERE type = 'auto_backup_directory_path' AND is_active = 1 ORDER BY id LIMIT 1").get() as
-      | { value: string }
-      | undefined;
-    const value = row?.value.trim() ?? '';
+    const value = this.getSetting('auto_backup_directory_path').trim();
     return value || null;
   }
 
   updateAutoBackupDirectoryPath(value: string): string | null {
     const cleaned = value.trim();
-    const existingRows = this.db.prepare("SELECT id FROM config_options WHERE type = 'auto_backup_directory_path' ORDER BY id").all() as Array<{ id: number }>;
-    if (!existingRows.length) {
-      this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('auto_backup_directory_path', cleaned, 0);
-    } else {
-      const [first, ...rest] = existingRows;
-      this.db.prepare('UPDATE config_options SET value = ?, is_active = 1 WHERE id = ?').run(cleaned, first.id);
-      rest.forEach((row) => this.db.prepare('UPDATE config_options SET is_active = 0 WHERE id = ?').run(row.id));
-    }
+    this.setSetting('auto_backup_directory_path', cleaned);
     return cleaned || null;
   }
 
   getQuickCaptureAnnotationReview(): boolean {
-    const row = this.db
-      .prepare("SELECT value FROM config_options WHERE type = 'quick_capture_annotate_screenshots' AND is_active = 1 ORDER BY id LIMIT 1")
-      .get() as { value: string } | undefined;
-    return row?.value !== 'false';
+    return this.getSetting('quick_capture_annotate_screenshots') !== 'false';
   }
 
   updateQuickCaptureAnnotationReview(enabled: boolean): boolean {
-    const value = enabled ? 'true' : 'false';
-    const existingRows = this.db.prepare("SELECT id FROM config_options WHERE type = 'quick_capture_annotate_screenshots' ORDER BY id").all() as Array<{ id: number }>;
-    if (!existingRows.length) {
-      this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('quick_capture_annotate_screenshots', value, 0);
-    } else {
-      const [first, ...rest] = existingRows;
-      this.db.prepare('UPDATE config_options SET value = ?, is_active = 1 WHERE id = ?').run(value, first.id);
-      rest.forEach((row) => this.db.prepare('UPDATE config_options SET is_active = 0 WHERE id = ?').run(row.id));
-    }
+    this.setSetting('quick_capture_annotate_screenshots', enabled ? 'true' : 'false');
     return enabled;
   }
 
   getRunOnSystemStartup(): boolean {
-    const row = this.db
-      .prepare("SELECT value FROM config_options WHERE type = 'run_on_system_startup' AND is_active = 1 ORDER BY id LIMIT 1")
-      .get() as { value: string } | undefined;
-    return row?.value === 'true';
+    return this.getSetting('run_on_system_startup') === 'true';
   }
 
   updateRunOnSystemStartup(enabled: boolean): boolean {
-    const value = enabled ? 'true' : 'false';
-    const existingRows = this.db.prepare("SELECT id FROM config_options WHERE type = 'run_on_system_startup' ORDER BY id").all() as Array<{ id: number }>;
-    if (!existingRows.length) {
-      this.db
-        .prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)')
-        .run('run_on_system_startup', value, 0);
-    } else {
-      const [first, ...rest] = existingRows;
-      this.db.prepare('UPDATE config_options SET value = ?, is_active = 1 WHERE id = ?').run(value, first.id);
-      rest.forEach((row) => this.db.prepare('UPDATE config_options SET is_active = 0 WHERE id = ?').run(row.id));
-    }
+    this.setSetting('run_on_system_startup', enabled ? 'true' : 'false');
     return enabled;
   }
 
   getAiTriageEnabled(): boolean {
-    const row = this.db
-      .prepare("SELECT value FROM config_options WHERE type = 'ai_triage_enabled' AND is_active = 1 ORDER BY id LIMIT 1")
-      .get() as { value: string } | undefined;
-    return row?.value === 'true' || row?.value === '1';
+    const value = this.getSetting('ai_triage_enabled');
+    return value === 'true' || value === '1';
   }
 
   getOllamaModelName(): string {
-    const row = this.db
-      .prepare("SELECT value FROM config_options WHERE type = 'ollama_model_name' AND is_active = 1 ORDER BY id LIMIT 1")
-      .get() as { value: string } | undefined;
-    const value = row?.value.trim() ?? '';
+    const value = this.getSetting('ollama_model_name').trim();
     return value || 'qwen3-vl:8b';
   }
 
   updateAiTriageOptions(enabled: boolean, modelName: string): { enabled: boolean; modelName: string } {
     const cleanedModel = modelName.trim() || 'qwen3-vl:8b';
-    this.upsertSingletonConfigOption('ai_triage_enabled', enabled ? 'true' : 'false');
-    this.upsertSingletonConfigOption('ollama_model_name', cleanedModel);
+    this.setSetting('ai_triage_enabled', enabled ? 'true' : 'false');
+    this.setSetting('ollama_model_name', cleanedModel);
     return { enabled, modelName: cleanedModel };
   }
 
-  private upsertSingletonConfigOption(type: string, value: string): void {
-    const existingRows = this.db.prepare('SELECT id FROM config_options WHERE type = ? ORDER BY id').all(type) as Array<{ id: number }>;
-    if (!existingRows.length) {
-      this.db.prepare('INSERT INTO config_options (type, value, sort_order, is_active) VALUES (?, ?, ?, 1)').run(type, value, 0);
-      return;
-    }
-    const [first, ...rest] = existingRows;
-    this.db.prepare('UPDATE config_options SET value = ?, is_active = 1 WHERE id = ?').run(value, first.id);
-    rest.forEach((row) => this.db.prepare('UPDATE config_options SET is_active = 0 WHERE id = ?').run(row.id));
-  }
-
   getPresets(): CapturePreset[] {
-    return this.db.prepare('SELECT * FROM presets ORDER BY id LIMIT 3').all() as CapturePreset[];
+    return this.db.prepare('SELECT * FROM presets ORDER BY id LIMIT ?').all(MAX_CAPTURE_PRESETS) as CapturePreset[];
   }
 
   createPreset(input: CapturePresetInput): CapturePreset {
     const count = this.db.prepare('SELECT COUNT(*) AS count FROM presets').get() as { count: number };
-    if (count.count >= 3) throw new Error('Only 3 Quick Capture presets are allowed.');
+    if (count.count >= MAX_CAPTURE_PRESETS) throw new Error(`Only ${MAX_CAPTURE_PRESETS} Quick Capture presets are allowed.`);
     return this.savePreset(null, input);
   }
 
@@ -1257,6 +1352,18 @@ export class BugPocketDatabase {
     this.deleteReferenceOption('browser', id);
   }
 
+  addUserRole(name: string): ReferenceOption {
+    return this.addReferenceOption('user_role', name);
+  }
+
+  updateUserRole(id: number, name: string): ReferenceOption {
+    return this.updateReferenceOption('user_role', id, name);
+  }
+
+  deleteUserRole(id: number): void {
+    this.deleteReferenceOption('user_role', id);
+  }
+
   private updateReferenceOption(type: ReferenceTable, id: number, name: string): ReferenceOption {
     const table = referenceTables[type];
     const cleaned = name.trim();
@@ -1305,6 +1412,7 @@ export class BugPocketDatabase {
     if (normalized === 'environment' || normalized === 'environments') return 'environment';
     if (normalized === 'device' || normalized === 'devices') return 'device';
     if (normalized === 'browser' || normalized === 'browsers') return 'browser';
+    if (normalized === 'user_role' || normalized === 'user_roles' || normalized === 'user role' || normalized === 'user roles') return 'user_role';
     throw new Error('Unsupported reference table.');
   }
 
@@ -1478,7 +1586,7 @@ export class BugPocketDatabase {
       .prepare(
         `
         SELECT bugs.*, applications.name AS application_name, modules.name AS module_name,
-          environments.name AS environment, devices.name AS device, browsers.name AS browser,
+          environments.name AS environment, devices.name AS device, browsers.name AS browser, user_roles.name AS user_role,
           COUNT(
             CASE
               WHEN attachments.id IS NOT NULL
@@ -1496,6 +1604,7 @@ export class BugPocketDatabase {
         LEFT JOIN environments ON environments.id = bugs.environment_id
         LEFT JOIN devices ON devices.id = bugs.device_id
         LEFT JOIN browsers ON browsers.id = bugs.browser_id
+        LEFT JOIN user_roles ON user_roles.id = bugs.user_role_id
         LEFT JOIN attachments ON attachments.bug_id = bugs.id
         ${where}
         GROUP BY bugs.id
@@ -1510,13 +1619,14 @@ export class BugPocketDatabase {
       .prepare(
         `
         SELECT bugs.*, applications.name AS application_name, modules.name AS module_name,
-          environments.name AS environment, devices.name AS device, browsers.name AS browser
+          environments.name AS environment, devices.name AS device, browsers.name AS browser, user_roles.name AS user_role
         FROM bugs
         LEFT JOIN applications ON applications.id = bugs.application_id
         LEFT JOIN modules ON modules.id = bugs.module_id
         LEFT JOIN environments ON environments.id = bugs.environment_id
         LEFT JOIN devices ON devices.id = bugs.device_id
         LEFT JOIN browsers ON browsers.id = bugs.browser_id
+        LEFT JOIN user_roles ON user_roles.id = bugs.user_role_id
         WHERE bugs.id = ?
       `
       )
@@ -1578,10 +1688,10 @@ export class BugPocketDatabase {
     const tx = this.db.transaction(() => {
       const result = this.db
         .prepare(
-          `INSERT INTO bugs (entry_type, application_id, module_id, environment_id, title, note, status, severity, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'Draft', 'Medium', ?, ?)`
+          `INSERT INTO bugs (entry_type, application_id, module_id, environment_id, user_role_id, title, note, status, severity, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'Draft', 'Medium', ?, ?)`
         )
-        .run(input.entry_type || 'Bug', input.application_id, input.module_id, input.environment_id, title, input.note.trim(), stamp, stamp);
+        .run(input.entry_type || 'Bug', input.application_id, input.module_id, input.environment_id, input.user_role_id, title, input.note.trim(), stamp, stamp);
       const bugId = Number(result.lastInsertRowid);
       const attach = this.db.prepare('UPDATE attachments SET bug_id = ? WHERE id = ? AND bug_id IS NULL');
       this.enqueueBugSyncEvent(bugId, 'INSERT');
@@ -1602,7 +1712,7 @@ export class BugPocketDatabase {
         .prepare(
           `
           UPDATE bugs SET entry_type = ?, application_id = ?, module_id = ?, title = ?, note = ?, other_details = ?,
-            steps_to_reproduce = ?, expected_result = ?, actual_result = ?, environment_id = ?, device_id = ?, browser_id = ?,
+            steps_to_reproduce = ?, expected_result = ?, actual_result = ?, environment_id = ?, device_id = ?, browser_id = ?, user_role_id = ?,
             status = ?, severity = ?, reported = ?, issue_platform = ?, issue_id = ?, issue_url = ?,
             tags = ?, sync_status = 'Sync Pending', updated_at = ?
           WHERE id = ?
@@ -1621,6 +1731,7 @@ export class BugPocketDatabase {
           input.environment_id,
           input.device_id,
           input.browser_id,
+          input.user_role_id,
           status,
           input.severity,
           status === 'Reported' ? 1 : 0,
