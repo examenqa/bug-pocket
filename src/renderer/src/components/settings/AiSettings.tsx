@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import type { AiByokConfig, AiProvider } from '../../../../shared/types';
 
 interface AiSettingsProps {
   enabled: boolean;
@@ -7,21 +8,174 @@ interface AiSettingsProps {
   refresh: () => Promise<void>;
 }
 
+const legacyDefaultPrompts = [
+  'You are a Senior QA Engineer. Rewrite the tester input as a concise, professional issue report. Preserve confirmed facts, do not invent unsupported details, and use clear Markdown suitable for issue trackers.',
+  'You are an expert QA Engineer. Expand the user\'s input into a highly descriptive, comprehensive bug report. Do not truncate details. You must respond ONLY with a valid JSON object using exactly these keys: bugNote, stepsToReproduce, expectedResult, actualResult. Do not include any conversational text or markdown formatting outside of the JSON object.',
+  'You are a QA Engineer writing strictly for internal developers. Never explain what the application does. Extract the details into a strict JSON object with exactly these keys: title (a concise technical summary), bugNote (only the core description of the issue), stepsToReproduce, expectedResult, actualResult. Do not output any markdown outside this JSON object.',
+  'You are an expert QA Engineer writing for internal developers. Analyze the user\'s text and the provided screenshot. Extract missing details (e.g., specific error codes, visible UI state, device/browser context) directly from the image if present. Extract the details into a strict JSON object with exactly these keys: title, bugNote, stepsToReproduce, expectedResult, actualResult. Do not output any markdown outside this JSON object.',
+  'You are a Senior QA Engineer. Analyze the user\'s text and the provided Base64 screenshot. You must be highly descriptive. Identify the exact UI elements, button states, and error messages visible in the image. Expand the user\'s brief notes into a comprehensive, professional bug report. Extract the details into a strict JSON object with exactly these keys: title (a concise technical summary), bugNote (a highly detailed description of the failure and visual UI state), stepsToReproduce (numbered, granular steps), expectedResult, actualResult. Do not output any markdown outside this JSON object.',
+];
+const defaultPrompt = 'You are a Senior QA Engineer. Analyze the user\'s text and the provided Base64 screenshot. You must be highly descriptive. Identify the exact UI elements, button states, and error messages visible in the image. If explicit steps to reproduce are missing, reverse-engineer the logical user journey required to reach the failed state shown in the UI. Extract the details into a strict JSON object with exactly these keys: title, bugNote, stepsToReproduce (numbered, granular steps), expectedResult, actualResult. Do not output any markdown outside this JSON object.';
+
+function normalizePrompt(value: string | null | undefined): string {
+  const prompt = value?.trim() ?? '';
+  return !prompt || legacyDefaultPrompts.includes(prompt) ? defaultPrompt : prompt;
+}
+
+const providerPresets: Record<AiProvider, { baseUrl: string; modelId: string; helper: string }> = {
+  OpenAI: {
+    baseUrl: 'https://api.openai.com/v1',
+    modelId: '',
+    helper: 'OpenAI does not have a free default model. Enter a model ID only if you intend to use your OpenAI billing.'
+  },
+  Grok: {
+    baseUrl: 'https://api.x.ai/v1',
+    modelId: '',
+    helper: 'Grok does not have a free default model. Enter a model ID only if you intend to use your xAI billing.'
+  },
+  OpenRouter: {
+    baseUrl: 'https://openrouter.ai/api/v1',
+    modelId: 'google/gemma-4-31b-it:free',
+    helper: 'OpenRouter vision-capable free model. You can replace this with any OpenRouter model slug you prefer.'
+  },
+  Gemini: {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    modelId: 'gemini-2.0-flash',
+    helper: 'Google Gemini OpenAI-compatible endpoint.'
+  },
+  'Custom/Local': {
+    baseUrl: 'http://localhost:11434/v1',
+    modelId: 'qwen3-vl:8b',
+    helper: 'Use any OpenAI-compatible local or hosted server.'
+  }
+};
+
 export function AiSettings(_props: AiSettingsProps) {
+  const [provider, setProvider] = useState<AiProvider>('OpenRouter');
+  const [baseUrl, setBaseUrl] = useState(providerPresets.OpenRouter.baseUrl);
+  const [modelId, setModelId] = useState(providerPresets.OpenRouter.modelId);
+  const [apiKey, setApiKey] = useState('');
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [customSystemPrompt, setCustomSystemPrompt] = useState(defaultPrompt);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+
+  const loadConfig = async (): Promise<void> => {
+    const config = (await window.bugPocket.getAiConfig()) as AiByokConfig;
+    setProvider(config.provider);
+    setBaseUrl(config.baseUrl || providerPresets[config.provider].baseUrl);
+    setModelId(config.modelId || providerPresets[config.provider].modelId);
+    setHasApiKey(config.hasApiKey);
+    setCustomSystemPrompt(normalizePrompt(config.customSystemPrompt));
+    setApiKey('');
+  };
+
+  useEffect(() => {
+    void loadConfig();
+  }, []);
+
+  const chooseProvider = (nextProvider: AiProvider): void => {
+    setProvider(nextProvider);
+    setBaseUrl(providerPresets[nextProvider].baseUrl);
+    setModelId(providerPresets[nextProvider].modelId);
+    setStatus('');
+    setError('');
+  };
+
+  const saveConfig = async (clearApiKey = false): Promise<void> => {
+    setSaving(true);
+    setError('');
+    setStatus('');
+    try {
+      const cleanedBaseUrl = baseUrl.trim().replace(/\/+$/, '');
+      const cleanedModelId = modelId.trim();
+      if (!cleanedBaseUrl) throw new Error('Base URL is required.');
+      if (!cleanedModelId) throw new Error('Model ID is required.');
+      const config = (await window.bugPocket.saveAiConfig({
+        provider,
+        baseUrl: cleanedBaseUrl,
+        modelId: cleanedModelId,
+        apiKey: clearApiKey ? undefined : apiKey.trim() || undefined,
+        clearApiKey,
+        customSystemPrompt: customSystemPrompt.trim() || defaultPrompt
+      })) as AiByokConfig;
+      setProvider(config.provider);
+      setBaseUrl(config.baseUrl || cleanedBaseUrl);
+      setModelId(config.modelId || cleanedModelId);
+      setHasApiKey(config.hasApiKey);
+      setCustomSystemPrompt(normalizePrompt(config.customSystemPrompt));
+      setApiKey('');
+      setStatus(clearApiKey ? 'AI API key cleared.' : 'AI processing settings saved.');
+      window.setTimeout(() => setStatus(''), 1800);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to save AI settings.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="settings-tab-stack">
-      <div className="panel ai-options-panel ai-coming-soon-panel">
+      <div className="panel ai-processing-panel">
         <div className="panel-heading">
           <div>
-            <h2>AI Triage</h2>
-            <p className="settings-helper">Coming soon. We are keeping this locked while the desktop capture workflow is finalized.</p>
+            <h2>AI Processing</h2>
+            <p className="settings-helper">Use any OpenAI-compatible REST endpoint. Bug Pocket stores your API key encrypted on this PC and only uses it for explicit issue formatting actions.</p>
           </div>
         </div>
-        <div className="coming-soon-note">
-          <strong>AI-powered report cleanup is planned, but disabled in this build.</strong>
-          <p>Bug Pocket will continue to save entries locally and generate template-based reports without sending anything to an AI service.</p>
+
+        <div className="ai-processing-grid ai-processing-grid-three">
+          <label>
+            <span>Provider preset</span>
+            <select value={provider} onChange={(event) => chooseProvider(event.target.value as AiProvider)} disabled={saving}>
+              {Object.keys(providerPresets).map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Base URL</span>
+            <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} disabled={saving} placeholder="https://api.openai.com/v1" />
+          </label>
+          <label>
+            <span>Model ID</span>
+            <input value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={saving} placeholder="google/gemma-4-31b-it:free" />
+          </label>
+        </div>
+
+        <p className="settings-helper ai-provider-helper">{providerPresets[provider].helper} Bug Pocket calls <code>{baseUrl.replace(/\/+$/, '') || '[base-url]'}/chat/completions</code>.</p>
+
+        <label className="ai-prompt-field">
+          <span>API key {hasApiKey && <em>saved</em>}</span>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+            placeholder={hasApiKey ? 'Stored securely. Enter a new key to replace it.' : 'Paste your API key'}
+            disabled={saving}
+          />
+        </label>
+
+        <label className="ai-prompt-field">
+          <span>Custom System Prompt</span>
+          <textarea
+            value={customSystemPrompt}
+            onChange={(event) => setCustomSystemPrompt(event.target.value)}
+            disabled={saving}
+            placeholder="Return only the strict JSON object."
+          />
+        </label>
+
+        <div className="sync-action-row">
+          <button className="primary" type="button" disabled={saving} onClick={() => void saveConfig(false)}>{saving ? 'Saving...' : 'Save AI Settings'}</button>
+          <button type="button" disabled={saving || !hasApiKey} onClick={() => void saveConfig(true)}>Clear Key</button>
+          {status && <span className="sync-test-result success">{status}</span>}
+          {error && <span className="sync-test-result warning">{error}</span>}
         </div>
       </div>
     </div>
   );
 }
+
+
+
+

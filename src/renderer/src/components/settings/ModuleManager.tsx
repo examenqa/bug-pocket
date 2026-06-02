@@ -18,7 +18,7 @@ export function ModuleManager({
   modules: Module[];
   mutationReady: boolean;
   refresh: () => Promise<void>;
-  showToast: (message: string) => void;
+  showToast: (message: string, variant?: 'success' | 'info' | 'error') => void;
 }) {
   const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(applications[0]?.id ?? null);
   const [value, setValue] = useState('');
@@ -50,7 +50,7 @@ export function ModuleManager({
       await action();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Could not update modules.';
-      if (message.includes('active preset')) showToast('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.');
+      if (message.includes('active preset')) showToast('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.', 'error');
       setError(message);
     }
   };
@@ -172,3 +172,5 @@ export function ModuleManager({
     </div>
   );
 }
+
+

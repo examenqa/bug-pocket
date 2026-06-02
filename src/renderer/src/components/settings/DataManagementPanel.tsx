@@ -11,7 +11,7 @@ export function DataManagementPanel({
 }: {
   settings: SettingsData;
   refresh: () => Promise<void>;
-  showToast: (message: string) => void;
+  showToast: (message: string, variant?: 'success' | 'info' | 'error') => void;
 }) {
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -26,10 +26,10 @@ export function DataManagementPanel({
         showToast('Workspace backup exported.');
         return;
       }
-      showToast(result.error || 'Backup export failed.');
+      showToast(result.error || 'Backup export failed.', 'error');
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Backup export failed.';
-      showToast(message);
+      showToast(message, 'error');
     } finally {
       setExporting(false);
     }
@@ -51,10 +51,10 @@ export function DataManagementPanel({
         showToast('Workspace backup restored. Reloading...');
         return;
       }
-      showToast(result.error || 'Backup import failed.');
+      showToast(result.error || 'Backup import failed.', 'error');
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Backup import failed.';
-      showToast(message);
+      showToast(message, 'error');
     } finally {
       if (!keepRestoreHandoff) {
         window.sessionStorage.removeItem(restorePendingKey);
@@ -75,7 +75,7 @@ export function DataManagementPanel({
       showToast('Automated backup location saved.');
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Could not save automated backup location.';
-      showToast(message);
+      showToast(message, 'error');
     } finally {
       setSavingLocation(false);
     }
@@ -89,7 +89,7 @@ export function DataManagementPanel({
       showToast('Automated backups disabled.');
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Could not clear automated backup location.';
-      showToast(message);
+      showToast(message, 'error');
     } finally {
       setSavingLocation(false);
     }
@@ -160,3 +160,5 @@ export function DataManagementPanel({
     </>
   );
 }
+
+

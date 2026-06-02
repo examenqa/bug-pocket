@@ -12,7 +12,7 @@ interface GeneralSettingsProps {
   mutationReady: boolean;
   openSettingsCard: string | null;
   refresh: () => Promise<void>;
-  showToast: (message: string) => void;
+  showToast: (message: string, variant?: 'success' | 'info' | 'error') => void;
   toggleSettingsCard: (cardId: string) => void;
 }
 
@@ -29,7 +29,7 @@ export function GeneralSettings({
       await action();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Could not update setting.';
-      if (message.includes('active preset')) showToast('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.');
+      if (message.includes('active preset')) showToast('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.', 'error');
       throw caught;
     }
   };
@@ -158,3 +158,5 @@ export function GeneralSettings({
     </div>
   );
 }
+
+

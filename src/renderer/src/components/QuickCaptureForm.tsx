@@ -10,7 +10,6 @@ import titleUrl from '../assets/bug-pocket-title.png';
 
 const quickPanelShortcuts = {
   presets: ['Alt+1', 'Alt+2', 'Alt+3'],
-  entryType: 'Alt+T',
   application: 'Alt+A',
   module: 'Alt+M',
   environment: 'Alt+E',
@@ -22,7 +21,6 @@ const quickPanelShortcuts = {
 } as const;
 
 export interface QuickCaptureDraft {
-  entryType: string;
   applicationId: number | null;
   moduleId: number | null;
   environmentId: number | null;
@@ -39,7 +37,6 @@ interface QuickCaptureFormProps {
   onConfigurePresets: () => Promise<void>;
   onSave: (draft: QuickCaptureDraft) => Promise<void>;
   onCancel: () => Promise<void>;
-  onCreateEntryType: (value: string) => Promise<string>;
   onCreateApplication: (name: string) => Promise<number>;
   onCreateModule: (name: string, applicationId: number | null) => Promise<number>;
   onCreateEnvironment: (value: string) => Promise<number>;
@@ -55,13 +52,11 @@ export function QuickCaptureForm({
   onConfigurePresets,
   onSave,
   onCancel,
-  onCreateEntryType,
   onCreateApplication,
   onCreateModule,
   onCreateEnvironment,
   onCreateUserRole
 }: QuickCaptureFormProps) {
-  const [entryType, setEntryType] = useState('Bug');
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null);
   const [applicationId, setApplicationId] = useState<number | null>(null);
   const [moduleId, setModuleId] = useState<number | null>(null);
@@ -70,7 +65,6 @@ export function QuickCaptureForm({
   const [note, setNote] = useState('');
   const [reviewScreenshot, setReviewScreenshot] = useState('');
   const [presetNotice, setPresetNotice] = useState('');
-  const entryTypeRef = useRef<HTMLInputElement>(null);
   const applicationRef = useRef<HTMLInputElement>(null);
   const moduleRef = useRef<HTMLInputElement>(null);
   const environmentRef = useRef<HTMLInputElement>(null);
@@ -82,10 +76,6 @@ export function QuickCaptureForm({
   const presetNoticeTimerRef = useRef<number | null>(null);
   const wasReviewingScreenshotRef = useRef(false);
 
-  const entryTypeOptions = useMemo(
-    () => (settings.entryTypes.length ? settings.entryTypes.map((type) => ({ key: String(type.id), value: type.value, label: type.value })) : [{ key: 'bug', value: 'Bug', label: 'Bug' }]),
-    [settings.entryTypes]
-  );
   const applicationOptions = useMemo(
     () => settings.applications.map((application) => ({ key: String(application.id), value: application.id, label: application.name })),
     [settings.applications]
@@ -107,13 +97,12 @@ export function QuickCaptureForm({
   const presetOptions = useMemo(() => settings.presets.slice(0, 3), [settings.presets]);
 
   useEffect(() => {
-    if (!entryType && settings.entryTypes[0]) setEntryType(settings.entryTypes[0].value);
     if (applicationId == null && settings.applications[0]) setApplicationId(settings.applications[0].id);
     if ((moduleId == null || !moduleOptions.some((module) => module.value === moduleId)) && moduleOptions[0]) setModuleId(moduleOptions[0].value as number);
     if (moduleId != null && !moduleOptions.length) setModuleId(null);
     if (environmentId == null && settings.environments[0]) setEnvironmentId(settings.environments[0].id);
     if (userRoleId == null && settings.userRoles[0]) setUserRoleId(settings.userRoles[0].id);
-  }, [entryType, applicationId, moduleId, environmentId, userRoleId, moduleOptions, settings.entryTypes, settings.applications, settings.environments, settings.userRoles]);
+  }, [applicationId, moduleId, environmentId, userRoleId, moduleOptions, settings.applications, settings.environments, settings.userRoles]);
 
   useEffect(() => {
     if (selectedPresetId != null && !presetOptions.some((preset) => preset.id === selectedPresetId)) setSelectedPresetId(null);
@@ -153,13 +142,12 @@ export function QuickCaptureForm({
   }, [reviewScreenshot]);
 
   const applyPreset = (preset: CapturePreset): void => {
-    const presetEntryType = settings.entryTypes.find((type) => type.id === preset.entry_type_id);
     setPresetNotice('');
     setSelectedPresetId(preset.id);
-    setEntryType(presetEntryType?.value ?? 'Bug');
     setApplicationId(preset.application_id);
     setModuleId(preset.module_id);
     setEnvironmentId(preset.environment_id);
+    setUserRoleId(preset.user_role_id);
     window.setTimeout(() => noteRef.current?.focus(), 0);
   };
 
@@ -174,7 +162,7 @@ export function QuickCaptureForm({
 
   const save = async (): Promise<void> => {
     if (!note.trim()) return;
-    await onSave({ entryType: entryType || 'Bug', applicationId, moduleId, environmentId, userRoleId, note });
+    await onSave({ applicationId, moduleId, environmentId, userRoleId, note });
     setNote('');
   };
 
@@ -232,10 +220,6 @@ export function QuickCaptureForm({
         return;
       }
       switch (event.key.toLowerCase()) {
-        case 't':
-          event.preventDefault();
-          entryTypeRef.current?.focus();
-          return;
         case 'a':
           event.preventDefault();
           applicationRef.current?.focus();
@@ -357,15 +341,6 @@ export function QuickCaptureForm({
             })}
           </div>
         </div>
-        <QuickSearchSelect
-          ref={entryTypeRef}
-          label="Entry Type"
-          shortcut={quickPanelShortcuts.entryType}
-          value={entryType}
-          options={entryTypeOptions}
-          onChange={(value) => { setSelectedPresetId(null); setEntryType(String(value || 'Bug')); }}
-          onCreate={onCreateEntryType}
-        />
         <QuickSearchSelect
           ref={applicationRef}
           label="Application"

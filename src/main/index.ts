@@ -6,7 +6,9 @@ import { pathToFileURL } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { BugPocketDatabase } from './database';
 import { triageBugWithOllama } from './ai/ollamaTriage';
-import type { AiTriageBugPayload, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting } from '../shared/types';
+import { getByokAiConfig, processIssueWithByokAi, saveByokAiConfig, triageBugWithByokAi } from './ai/byokIssueProcessor';
+import { SyncEngine } from './sync/syncService';
+import type { AiIssueProcessPayload, AiProvider, AiTriageBugPayload, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting } from '../shared/types';
 
 if (!app.isPackaged) {
   app.setPath('userData', `${app.getPath('userData')}-dev`);
@@ -22,6 +24,7 @@ let quickWindowLoaded = false;
 let quickWindowReady: Promise<void> | null = null;
 let tray: Tray | null = null;
 let db: BugPocketDatabase;
+let syncEngine: SyncEngine;
 let isQuitting = false;
 let currentScreenshotSource = '';
 let pendingQuickScreenshotDataUrl = '';
@@ -364,6 +367,8 @@ async function importBackup(): Promise<BackupImportResult> {
     cleanupSqliteSidecars(userDataPath);
 
     db = new BugPocketDatabase();
+    syncEngine = new SyncEngine(db);
+    syncEngine.initialize();
     registerAppShortcuts();
 
     setTimeout(() => {
@@ -377,6 +382,8 @@ async function importBackup(): Promise<BackupImportResult> {
     const message = caught instanceof Error ? caught.message : 'Backup import failed.';
     try {
       db = new BugPocketDatabase();
+    syncEngine = new SyncEngine(db);
+    syncEngine.initialize();
       registerAppShortcuts();
     } catch {
       // If reopening fails, surface the original restore error.
@@ -804,6 +811,17 @@ function registerIpc(): void {
   ipcMain.handle('settings:updateAutoBackupDirectoryPath', (_event, value: string) => mutateSettings(() => db.updateAutoBackupDirectoryPath(value)));
   ipcMain.handle('settings:updateQuickCaptureAnnotationReview', (_event, enabled: boolean) => mutateSettings(() => db.updateQuickCaptureAnnotationReview(enabled)));
   ipcMain.handle('settings:updateAiTriageOptions', (_event, enabled: boolean, modelName: string) => mutateSettings(() => db.updateAiTriageOptions(enabled, modelName)));
+  ipcMain.handle('get-ai-config', () => getByokAiConfig(db));
+  ipcMain.handle('save-ai-config', (_event, input: { provider: AiProvider; baseUrl: string; modelId: string; apiKey?: string; clearApiKey?: boolean; customSystemPrompt: string }) =>
+    mutateSettings(() => saveByokAiConfig(db, input))
+  );
+  ipcMain.handle('settings:updateSupabaseSettings', (_event, projectUrl: string, anonKey: string) =>
+    mutateSettings(() => {
+      const result = db.updateSupabaseSettings(projectUrl, anonKey);
+      syncEngine?.initialize();
+      return result;
+    })
+  );
   ipcMain.handle('settings:toggleStartup', (_event, enabled: boolean) =>
     mutateSettings(() => {
       const value = db.updateRunOnSystemStartup(enabled);
@@ -848,7 +866,7 @@ function registerIpc(): void {
   ipcMain.handle('attachments:download', async (_event, id: number) => {
     const result = await downloadAttachment(id);
     if (result.success) mainWindow?.webContents.send('app:toast', 'Screenshot downloaded.');
-    else if (!result.canceled) mainWindow?.webContents.send('app:toast', result.error || 'Unable to download screenshot.');
+    else if (!result.canceled) mainWindow?.webContents.send('app:toast', result.error || 'Unable to download screenshot.', 'error');
     return result;
   });
   ipcMain.handle('attachments:saveAnnotated', (_event, parentId: number, dataUrl: string) => saveAnnotatedAttachment(parentId, dataUrl));
@@ -875,6 +893,8 @@ function registerIpc(): void {
     if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only web URLs can be opened.');
     return shell.openExternal(parsed.toString());
   });
+  ipcMain.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => syncEngine.sendFeedback(payload));
+
   ipcMain.handle('details:setDirty', (_event, dirty: boolean) => {
     rendererHasDirtyDetails = !!dirty;
   });
@@ -891,9 +911,16 @@ function registerIpc(): void {
   ipcMain.handle('backup:export', () => exportBackup());
   ipcMain.handle('backup:import', () => importBackup());
   ipcMain.handle('backup:chooseDirectory', () => chooseBackupDirectory());
+  ipcMain.handle('sync:testConnection', () => syncEngine.testConnection());
+  ipcMain.handle('sync:authSignIn', (_event, email: string, password: string) => syncEngine.authSignIn(email, password));
+  ipcMain.handle('sync:authSignUp', (_event, email: string, password: string) => syncEngine.authSignUp(email, password));
+  ipcMain.handle('sync:authSignOut', () => syncEngine.authSignOut());
+  ipcMain.handle('sync:getSessionStatus', () => syncEngine.getSyncSessionStatus());
   ipcMain.handle('ai:triageWithOllama', (_event, _payload: AiTriageBugPayload) => {
-    throw new Error('AI triage is coming soon and is disabled in this build.');
+    throw new Error('Legacy Ollama triage is disabled. Use universal AI triage instead.');
   });
+  ipcMain.handle('ai:triageBug', (_event, bugData: unknown) => triageBugWithByokAi(db, bugData));
+  ipcMain.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => processIssueWithByokAi(db, payload));
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -907,6 +934,8 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     db = new BugPocketDatabase();
+    syncEngine = new SyncEngine(db);
+    syncEngine.initialize();
     enforceStartupPreference(db.getRunOnSystemStartup());
     registerIpc();
     createMainWindow('/dashboard', !process.argv.includes(backgroundStartArg));
@@ -924,3 +953,4 @@ app.on('window-all-closed', () => {});
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
+

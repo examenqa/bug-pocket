@@ -36,8 +36,8 @@ The current app already includes:
 - Automated rolling backups to a user-selected directory
 - Windows startup toggle with background startup behavior
 - Dev/prod user-data isolation
-- Optional local Ollama AI triage, gated behind Settings and not part of Quick Capture
-- Supabase-ready placeholder files for future sync
+- Local Ollama AI triage implementation exists in code but is currently locked behind a coming-soon state
+- Supabase Phase 1 scaffold: local Project URL / anon key settings, connection test, SyncEngine client initialization, and workspace-scoped schema draft
 
 Do not remove or weaken the local-first desktop behavior.
 
@@ -199,8 +199,8 @@ Core principles:
 Add:
 
 - Supabase Auth or equivalent authentication.
-- Personal workspace.
-- Sync queue.
+- Personal workspace creation/onboarding.
+- Sync worker that drains the existing local sync queue.
 - Attachment upload queue.
 - Cloud storage for screenshots/attachments.
 - Sync status per entry and attachment.
@@ -256,7 +256,9 @@ Team features:
 - Activity history.
 - Team filters.
 
-Lead approval options:
+Lead approval options can be introduced later as a team-review workflow that is separate from the local capture lifecycle. Do not treat these as active local defaults; the current local capture statuses remain `Draft`, `Reported`, and `Discarded`.
+
+Possible future team-review options:
 
 - New
 - Needs Review
@@ -321,12 +323,14 @@ Goal: evolve the current optional local Ollama triage into a safer, engine-aware
 
 Current local AI baseline:
 
-- Local Ollama triage is already implemented behind Settings > Outbound > Local AI Triage.
-- It calls `http://localhost:11434/api/chat` with Ollama's message-array schema.
+- Local Ollama triage implementation exists in code, but the packaged app currently locks AI Triage behind a coming-soon state.
+- Settings > AI Triage shows a coming-soon placeholder instead of enable/model controls.
+- Bug Details should not expose AI action buttons while `AI_TRIAGE_AVAILABLE = false`.
+- The existing implementation calls `http://localhost:11434/api/chat` with Ollama's message-array schema when re-enabled.
 - It can use screenshot base64, Application context, Module context, tester note, and existing manual fields.
 - It returns `visual_analysis`, `bug_title`, `refined_summary`, `severity_level`, `steps_to_reproduce`, `expected_result`, and `actual_result`.
-- `refined_summary` overwrites the Bug Note only after an explicit AI action.
-- Bug Details supports `Refine AI Draft` with a user correction note after the first successful AI pass.
+- `refined_summary` should overwrite the Bug Note only after an explicit AI action.
+- Bug Details has refinement code for `Refine AI Draft` with a user correction note after the first successful AI pass, but it is currently hidden by the feature gate.
 - The configured Ollama model name is dynamic but validated to a safe model-name character set.
 - The current transport is tightly coupled to Ollama and does not yet support LM Studio, vLLM, or OpenAI-compatible local servers.
 

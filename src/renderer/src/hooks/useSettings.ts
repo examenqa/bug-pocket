@@ -21,6 +21,9 @@ const emptySettings: SettingsData = {
   runOnSystemStartup: false,
   aiTriageEnabled: false,
   ollamaModelName: 'qwen3-vl:8b',
+  supabaseProjectUrl: null,
+  supabaseAnonKey: null,
+  currentWorkspaceId: null,
   presets: []
 };
 

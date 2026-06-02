@@ -9,7 +9,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/main/index.ts')
         },
-        external: ['electron', 'better-sqlite3', 'archiver'],
+        external: ['electron', 'better-sqlite3', 'archiver', 'ws'],
         output: {
           format: 'cjs',
           entryFileNames: '[name].js'

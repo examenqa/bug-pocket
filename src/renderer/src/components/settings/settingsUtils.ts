@@ -23,7 +23,13 @@ export function hasSettingsMutationBridge(): boolean {
     typeof api.deleteConfigOption === 'function' &&
     typeof api.createPreset === 'function' &&
     typeof api.updatePreset === 'function' &&
-    typeof api.deletePreset === 'function'
+    typeof api.deletePreset === 'function' &&
+    typeof api.updateSupabaseSettings === 'function' &&
+    typeof api.testSupabaseConnection === 'function' &&
+    typeof api.authSignIn === 'function' &&
+    typeof api.authSignUp === 'function' &&
+    typeof api.authSignOut === 'function' &&
+    typeof api.getSyncSessionStatus === 'function'
   );
 }
 
