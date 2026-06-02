@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import type { CapturePreset, CapturePresetInput, SettingsData } from '../../../../shared/types';
 import { getModulesForApplication } from '../../utils/filters';
@@ -9,15 +9,16 @@ const emptyPresetDraft: CapturePresetInput = {
   application_id: null,
   module_id: null,
   environment_id: null,
+  user_role_id: null,
   entry_type_id: null
 };
 
 function presetSummary(preset: CapturePreset, settings: SettingsData): string {
   const parts = [
-    settings.entryTypes.find((entryType) => entryType.id === preset.entry_type_id)?.value,
     settings.applications.find((application) => application.id === preset.application_id)?.name,
     settings.modules.find((module) => module.id === preset.module_id)?.name,
-    settings.environments.find((environment) => environment.id === preset.environment_id)?.value
+    settings.environments.find((environment) => environment.id === preset.environment_id)?.value,
+    settings.userRoles.find((role) => role.id === preset.user_role_id)?.value
   ].filter(Boolean);
   return parts.length ? parts.join(' / ') : 'No fields mapped';
 }
@@ -33,15 +34,20 @@ export function PresetManager({
   settings: SettingsData;
   mutationReady: boolean;
   refresh: () => Promise<void>;
-  showToast: (message: string) => void;
+  showToast: (message: string, variant?: 'success' | 'info' | 'error') => void;
   open: boolean;
   onToggle: () => void;
 }) {
   const [draft, setDraft] = useState<CapturePresetInput>(emptyPresetDraft);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [error, setError] = useState('');
   const presetLimitReached = settings.presets.length >= 3 && editingId == null;
   const moduleChoices = getModulesForApplication(settings, draft.application_id, draft.module_id);
+  const bugEntryTypeId = useMemo(
+    () => settings.entryTypes.find((entryType) => entryType.value.toLowerCase() === 'bug')?.id ?? null,
+    [settings.entryTypes]
+  );
 
   const updateDraft = <K extends keyof CapturePresetInput>(key: K, value: CapturePresetInput[K]): void => {
     setDraft((current) => {
@@ -53,6 +59,13 @@ export function PresetManager({
     });
   };
 
+  const startCreate = (): void => {
+    setEditingId(null);
+    setDraft(emptyPresetDraft);
+    setError('');
+    setFormOpen(true);
+  };
+
   const startEdit = (preset: CapturePreset): void => {
     setEditingId(preset.id);
     setDraft({
@@ -60,28 +73,35 @@ export function PresetManager({
       application_id: preset.application_id,
       module_id: preset.module_id,
       environment_id: preset.environment_id,
-      entry_type_id: preset.entry_type_id
+      user_role_id: preset.user_role_id,
+      entry_type_id: bugEntryTypeId
     });
     setError('');
+    setFormOpen(true);
   };
 
   const reset = (): void => {
     setEditingId(null);
     setDraft(emptyPresetDraft);
     setError('');
+    setFormOpen(false);
   };
 
   const save = async (): Promise<void> => {
     setError('');
+    const payload: CapturePresetInput = {
+      ...draft,
+      entry_type_id: bugEntryTypeId
+    };
     try {
-      if (editingId) await window.bugPocket.updatePreset(editingId, draft);
-      else await window.bugPocket.createPreset(draft);
+      if (editingId) await window.bugPocket.updatePreset(editingId, payload);
+      else await window.bugPocket.createPreset(payload);
       await refresh();
       reset();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Could not save preset.';
       setError(message);
-      if (message.includes('3 Quick Capture presets')) showToast(message);
+      if (message.includes('3 Quick Capture presets')) showToast(message, 'error');
     }
   };
 
@@ -94,6 +114,7 @@ export function PresetManager({
 
   const previewItems = getSettingsPreviewItems(settings.presets, (preset) => preset.name);
   const hiddenCount = Math.max(0, settings.presets.length - previewItems.length);
+  const formDisabled = !mutationReady || presetLimitReached;
 
   return (
     <div className={open ? 'panel settings-option-panel preset-panel open' : 'panel settings-option-panel preset-panel'}>
@@ -113,7 +134,41 @@ export function PresetManager({
       )}
       {open && (
         <div className="settings-option-body">
-          <p className="settings-helper">Up to 3 presets. Quick Panel shortcuts are Alt+1, Alt+2, and Alt+3.</p>
+          <div className="preset-utility-row">
+            <p className="settings-helper">Up to 3 presets. Quick Panel shortcuts are Alt+1, Alt+2, and Alt+3.</p>
+            {!formOpen && <button className="preset-save-button" type="button" disabled={!mutationReady || presetLimitReached} onClick={startCreate}>Create Preset</button>}
+          </div>
+
+          {formOpen && (
+            <div className="preset-form preset-form-shell">
+              <div className="preset-form-header-row">
+                <input value={draft.name} onChange={(event) => updateDraft('name', event.target.value)} placeholder="Preset name" disabled={formDisabled} />
+                <div className="preset-form-actions">
+                  <button className="preset-cancel-button" type="button" onClick={reset}>Cancel</button>
+                  <button className="preset-save-button" type="button" disabled={formDisabled || !draft.name.trim()} onClick={() => void save()}>{editingId ? 'Save Preset' : 'Create Preset'}</button>
+                </div>
+              </div>
+              <div className="preset-form-grid">
+                <select value={draft.application_id ?? ''} onChange={(event) => updateDraft('application_id', Number(event.target.value) || null)} disabled={formDisabled}>
+                  <option value="">Application</option>
+                  {settings.applications.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
+                </select>
+                <select value={draft.module_id ?? ''} onChange={(event) => updateDraft('module_id', Number(event.target.value) || null)} disabled={formDisabled}>
+                  <option value="">Module</option>
+                  {moduleChoices.map((module) => <option key={module.id} value={module.id}>{module.name}</option>)}
+                </select>
+                <select value={draft.environment_id ?? ''} onChange={(event) => updateDraft('environment_id', Number(event.target.value) || null)} disabled={formDisabled}>
+                  <option value="">Environment</option>
+                  {settings.environments.map((environment) => <option key={environment.id} value={environment.id}>{environment.value}</option>)}
+                </select>
+                <select value={draft.user_role_id ?? ''} onChange={(event) => updateDraft('user_role_id', Number(event.target.value) || null)} disabled={formDisabled}>
+                  <option value="">User Role</option>
+                  {settings.userRoles.map((role) => <option key={role.id} value={role.id}>{role.value}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+
           <div className="preset-list">
             {settings.presets.map((preset, index) => (
               <div className="preset-row" key={preset.id}>
@@ -127,31 +182,13 @@ export function PresetManager({
             ))}
             {!settings.presets.length && <p className="muted">No presets yet.</p>}
           </div>
-          <div className="preset-form">
-            <input value={draft.name} onChange={(event) => updateDraft('name', event.target.value)} placeholder="Preset name" disabled={!mutationReady || presetLimitReached} />
-            <select value={draft.entry_type_id ?? ''} onChange={(event) => updateDraft('entry_type_id', Number(event.target.value) || null)} disabled={!mutationReady || presetLimitReached}>
-              <option value="">Entry type</option>
-              {settings.entryTypes.map((entryType) => <option key={entryType.id} value={entryType.id}>{entryType.value}</option>)}
-            </select>
-            <select value={draft.application_id ?? ''} onChange={(event) => updateDraft('application_id', Number(event.target.value) || null)} disabled={!mutationReady || presetLimitReached}>
-              <option value="">Application</option>
-              {settings.applications.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
-            </select>
-            <select value={draft.module_id ?? ''} onChange={(event) => updateDraft('module_id', Number(event.target.value) || null)} disabled={!mutationReady || presetLimitReached}>
-              <option value="">Module</option>
-              {moduleChoices.map((module) => <option key={module.id} value={module.id}>{module.name}</option>)}
-            </select>
-            <select value={draft.environment_id ?? ''} onChange={(event) => updateDraft('environment_id', Number(event.target.value) || null)} disabled={!mutationReady || presetLimitReached}>
-              <option value="">Environment</option>
-              {settings.environments.map((environment) => <option key={environment.id} value={environment.id}>{environment.value}</option>)}
-            </select>
-            <button disabled={!mutationReady || presetLimitReached || !draft.name.trim()} onClick={() => void save()}>{editingId ? 'Save Preset' : 'Create Preset'}</button>
-            {editingId && <button onClick={reset}>Cancel</button>}
-          </div>
-          {presetLimitReached && <p className="settings-helper">Preset limit reached. Edit or delete a preset to create another.</p>}
+
+          {presetLimitReached && !formOpen && <p className="settings-helper">Preset limit reached. Edit or delete a preset to create another.</p>}
           {error && <p className="settings-error">{error}</p>}
         </div>
       )}
     </div>
   );
 }
+
+

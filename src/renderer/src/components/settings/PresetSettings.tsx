@@ -7,7 +7,7 @@ interface PresetSettingsProps {
   mutationReady: boolean;
   open: boolean;
   refresh: () => Promise<void>;
-  showToast: (message: string) => void;
+  showToast: (message: string, variant?: 'success' | 'info' | 'error') => void;
   onToggle: () => void;
 }
 
@@ -24,3 +24,4 @@ export function PresetSettings({ settings, mutationReady, open, refresh, showToa
     </div>
   );
 }
+

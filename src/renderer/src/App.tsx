@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Home, Settings as SettingsIcon } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { HelpCircle, Home, Settings as SettingsIcon } from 'lucide-react';
 import type { ScreenshotResult } from '../../shared/types';
 import { QuickCaptureDraft, QuickCaptureForm } from './components/QuickCaptureForm';
 import { useSettings } from './hooks/useSettings';
@@ -9,6 +9,8 @@ import { Dashboard } from './pages/DashboardPage';
 import { BugDetailsHost } from './pages/BugDetailPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SnipOverlay } from './pages/SnipOverlay';
+import { SupportModal } from './components/shared/SupportModal';
+import { ToastBanner, type ToastVariant } from './components/shared/ToastBanner';
 import iconUrl from './assets/bug-pocket-icon.png';
 import titleUrl from './assets/bug-pocket-title.png';
 
@@ -25,7 +27,7 @@ function CaptureRoute() {
     setSaving(true);
     try {
       await createQuickBugRecord({
-        entry_type: draft.entryType,
+        entry_type: 'Bug',
         application_id: draft.applicationId,
         module_id: draft.moduleId,
         environment_id: draft.environmentId,
@@ -49,11 +51,6 @@ function CaptureRoute() {
       onTakeScreenshot={() => window.bugPocket.startScreenshotCapture()}
       onSave={saveDraft}
       onCancel={() => window.bugPocket.hideQuickCapture()}
-      onCreateEntryType={async (value) => {
-        const option = await window.bugPocket.addConfigOption('entry_type', value);
-        await refresh();
-        return option.value;
-      }}
       onCreateApplication={async (name) => {
         const application = await window.bugPocket.addApplication(name);
         await refresh();
@@ -83,6 +80,7 @@ function MainShell({ route, navigate }: { route: string; navigate: (route: strin
   const bugMatch = route.match(/^\/bugs\/(\d+)$/);
   const bugId = bugMatch ? Number(bugMatch[1]) : null;
   const [selectedBugId, setSelectedBugId] = useState<number | null>(bugId);
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const showingDetails = selectedBugId != null && !route.startsWith('/settings');
   const activeView = route.startsWith('/settings') ? 'settings' : 'dashboard';
 
@@ -120,7 +118,13 @@ function MainShell({ route, navigate }: { route: string; navigate: (route: strin
         >
           <SettingsIcon size={17} /> Settings
         </button>
+        <div className="sidebar-support-area">
+          <button className="nav support-nav" type="button" onClick={() => setIsSupportModalOpen(true)}>
+            <HelpCircle size={17} /> Help & Support
+          </button>
+        </div>
       </aside>
+      <SupportModal open={isSupportModalOpen} onClose={() => setIsSupportModalOpen(false)} />
       <main className="content">
         {route.startsWith('/settings') ? (
           <SettingsPage settings={settings} refresh={refresh} route={route} />
@@ -139,16 +143,12 @@ function MainShell({ route, navigate }: { route: string; navigate: (route: strin
 
 export function App() {
   const { route, navigate } = useHashRoute();
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState<{ message: string; variant: ToastVariant } | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
 
-  useEffect(() => {
-    let timer: number | undefined;
-    return window.bugPocket.onToast((message) => {
-      if (timer) window.clearTimeout(timer);
-      setToast(message);
-      timer = window.setTimeout(() => setToast(''), 2400);
-    });
-  }, []);
+  useEffect(() => window.bugPocket.onToast((message, variant = 'success') => {
+    setToast({ message, variant });
+  }), []);
 
   let content: React.ReactNode;
   if (route.startsWith('/capture')) content = <CaptureRoute />;
@@ -158,7 +158,11 @@ export function App() {
   return (
     <>
       {content}
-      {toast && !route.startsWith('/snip') && <div className="toast">{toast}</div>}
+      {toast && !route.startsWith('/snip') && (
+        <ToastBanner message={toast.message} variant={toast.variant} onClose={closeToast} />
+      )}
     </>
   );
 }
+
+

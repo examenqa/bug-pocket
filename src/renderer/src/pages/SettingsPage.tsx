@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Bot, Check, Cloud, Database, Keyboard, SlidersHorizontal, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { SettingsData } from '../../../shared/types';
@@ -8,6 +8,7 @@ import { PresetSettings } from '../components/settings/PresetSettings';
 import { StorageSettings } from '../components/settings/StorageSettings';
 import { SyncSettings } from '../components/settings/SyncSettings';
 import { hasSettingsMutationBridge } from '../components/settings/settingsUtils';
+import { ToastBanner, type ToastVariant } from '../components/shared/ToastBanner';
 import { restorePendingKey, restoreSuccessKey, restoreSettingsSegmentKey } from '../utils/settingsKeys';
 
 type SettingsTab = 'general' | 'presets' | 'ai' | 'storage' | 'sync';
@@ -15,9 +16,9 @@ type SettingsTab = 'general' | 'presets' | 'ai' | 'storage' | 'sync';
 const settingsTabs: Array<{ id: SettingsTab; label: string; description: string; icon: LucideIcon }> = [
   { id: 'general', label: 'General & Hotkeys', description: 'Shortcuts, system behavior, fields, and report output', icon: Keyboard },
   { id: 'presets', label: 'Capture Presets', description: 'Three fast Quick Panel preset slots', icon: SlidersHorizontal },
-  { id: 'ai', label: 'AI Triage', description: 'Local Ollama vision model guidance', icon: Bot },
+  { id: 'ai', label: 'AI Processing', description: 'BYOK provider, key, and prompt formatting', icon: Bot },
   { id: 'storage', label: 'Storage & Backups', description: 'Export, restore, and rolling backups', icon: Database },
-  { id: 'sync', label: 'Cloud Sync', description: 'Placeholder for future Supabase sync', icon: Cloud }
+  { id: 'sync', label: 'Cloud Sync', description: 'Supabase credentials and future sync', icon: Cloud }
 ];
 
 const oldSegmentToTab: Record<string, SettingsTab> = {
@@ -51,6 +52,7 @@ export function SettingsPage({
   const [openSettingsCard, setOpenSettingsCard] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [settingsToast, setSettingsToast] = useState('');
+  const [settingsToastVariant, setSettingsToastVariant] = useState<ToastVariant>('success');
   const [restoreNotice, setRestoreNotice] = useState('');
   const requestedCard = new URLSearchParams(route.split('?')[1] ?? '').get('card');
 
@@ -65,8 +67,8 @@ export function SettingsPage({
     if (window.sessionStorage.getItem(restoreSuccessKey) === '1') {
       setActiveTab('storage');
       setRestoreNotice('Workspace backup restored successfully. Bug Pocket reloaded your local database and attachments.');
+      setSettingsToastVariant('success');
       setSettingsToast('Workspace backup restored successfully.');
-      window.setTimeout(() => setSettingsToast(''), 3200);
     }
     window.sessionStorage.removeItem(restorePendingKey);
     window.sessionStorage.removeItem(restoreSuccessKey);
@@ -81,7 +83,11 @@ export function SettingsPage({
   }, [requestedCard]);
 
   const toggleSettingsCard = (cardId: string): void => { setOpenSettingsCard((current) => (current === cardId ? null : cardId)); };
-  const showSettingsToast = (message: string): void => { setSettingsToast(message); window.setTimeout(() => setSettingsToast(''), 2600); };
+  const showSettingsToast = useCallback((message: string, variant: ToastVariant = 'success'): void => {
+    setSettingsToastVariant(variant);
+    setSettingsToast(message);
+  }, []);
+  const closeSettingsToast = useCallback(() => setSettingsToast(''), []);
 
   return (
     <section className="page settings-page">
@@ -150,10 +156,14 @@ export function SettingsPage({
           {activeTab === 'storage' && (
             <StorageSettings settings={settings} refresh={refresh} showToast={showSettingsToast} />
           )}
-          {activeTab === 'sync' && <SyncSettings />}
+          {activeTab === 'sync' && <SyncSettings settings={settings} mutationReady={settingsMutationBridgeReady} refresh={refresh} showToast={showSettingsToast} />}
         </div>
       </div>
-      {settingsToast && <div className="toast">{settingsToast}</div>}
+      {settingsToast && (
+        <ToastBanner message={settingsToast} variant={settingsToastVariant} onClose={closeSettingsToast} />
+      )}
     </section>
   );
 }
+
+

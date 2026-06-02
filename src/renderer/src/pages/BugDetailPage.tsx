@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Check, ChevronLeft, ChevronRight, Clipboard, Download, Gauge, Save, Trash2, X } from 'lucide-react';
-import type { AiTriageResponse, Attachment, AttachmentDownloadResult, BugDetails, CaptureStatus, SettingsData } from '../../../shared/types';
+import type { AiByokConfig, AiIssueProcessResult, Attachment, AttachmentDownloadResult, BugDetails, CaptureStatus, SettingsData } from '../../../shared/types';
 import { Badge, SyncBadge } from '../components/shared/Badge';
 import { PillDropdown } from '../components/shared/PillDropdown';
+import { ToastBanner, type ToastVariant } from '../components/shared/ToastBanner';
 import { OptionSelect, ReferenceSelect } from '../components/shared/OptionSelect';
 import { ScreenshotAnnotator } from '../components/ScreenshotAnnotator';
 import { formatDate, generateReport, buildIssueDeepLink, IssuePlatformLink } from '../services/reports';
@@ -19,7 +20,7 @@ import { buildBugUpdateInput, serializeBugUpdateInput, DetailsSaveState, AiTriag
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
 import { useDebounce } from '../hooks/useDebounce';
 
-const AI_TRIAGE_AVAILABLE = false;
+const AI_TRIAGE_AVAILABLE = true;
 
 export function BugDetailsHost({
   bugId,
@@ -58,6 +59,7 @@ export function BugDetailsView({
   const [attachmentPreviews, setAttachmentPreviews] = useState<Record<number, string>>({});
   const [copied, setCopied] = useState('');
   const [detailsToast, setDetailsToast] = useState('');
+  const [detailsToastVariant, setDetailsToastVariant] = useState<ToastVariant>('success');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [spotlight, setSpotlight] = useState<SpotlightState | null>(null);
@@ -72,6 +74,11 @@ export function BugDetailsView({
   const lastSavedPayloadRef = useRef('');
   const saveStateTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef<Promise<BugDetails | null> | null>(null);
+  const showDetailsToast = useCallback((message: string, variant: ToastVariant = 'success'): void => {
+    setDetailsToastVariant(variant);
+    setDetailsToast(message);
+  }, []);
+  const closeDetailsToast = useCallback(() => setDetailsToast(''), []);
 
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
@@ -131,8 +138,7 @@ export function BugDetailsView({
       isDirtyRef.current = false;
       void window.bugPocket.setDetailsDirty(false);
       if (showToast) {
-        setDetailsToast('Details already saved.');
-        window.setTimeout(() => setDetailsToast(''), 1400);
+        showDetailsToast('Details already saved.');
       }
       return currentBug;
     }
@@ -158,15 +164,13 @@ export function BugDetailsView({
       void window.bugPocket.setDetailsDirty(false);
       markSavedSoon();
       if (showToast) {
-        setDetailsToast('Details saved successfully.');
-        window.setTimeout(() => setDetailsToast(''), 1800);
+        showDetailsToast('Details saved successfully.');
       }
       return updated;
     } catch (caught) {
       setSaveState('error');
       const message = caught instanceof Error ? caught.message : 'Unable to save details.';
-      setDetailsToast(message);
-      window.setTimeout(() => setDetailsToast(''), 2600);
+      showDetailsToast(message, 'error');
       throw caught;
     } finally {
       saveInFlightRef.current = null;
@@ -297,16 +301,21 @@ export function BugDetailsView({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [spotlight]);
 
-  const updateField = (key: keyof BugDetails, value: string | number | boolean | null, options: { trackStatus?: boolean } = {}): void => {
+  const updateField = (key: keyof BugDetails, value: string | number | boolean | null, options: { trackStatus?: boolean; autoSave?: boolean } = {}): void => {
     setBug((current) => {
       if (!current || current[key] === value) return current;
       const nextBug = { ...current, [key]: value };
       bugRef.current = nextBug;
-      isDirtyRef.current = true;
-      setIsDirty(true);
-      setSaveState('dirty');
-      if (options.trackStatus !== false) setLastEditedField(key);
-      void window.bugPocket.setDetailsDirty(true);
+      if (options.autoSave === false) {
+        setSaveState('dirty');
+        if (options.trackStatus !== false) setLastEditedField(key);
+      } else {
+        isDirtyRef.current = true;
+        setIsDirty(true);
+        setSaveState('dirty');
+        if (options.trackStatus !== false) setLastEditedField(key);
+        void window.bugPocket.setDetailsDirty(true);
+      }
       return nextBug;
     });
   };
@@ -336,13 +345,38 @@ export function BugDetailsView({
   };
   const openIssuePlatform = async (platform: IssuePlatformLink): Promise<void> => {
     const templateName = `${platform} Format`;
-    const url = buildIssueDeepLink(platform, reportBug, report(templateName), { jiraWorkspaceUrl: settings.jiraWorkspaceUrl });
+    let issueBody = report(templateName);
+    const aiConfig = (await window.bugPocket.getAiConfig()) as AiByokConfig;
+    if (aiConfig.hasApiKey) {
+      showDetailsToast(`Formatting ${platform} issue with ${aiConfig.provider}...`, 'info');
+      const aiResult = (await window.bugPocket.processIssueWithByokAi({
+        rawInput: issueBody,
+        taxonomy: {
+          application: reportBug.application_name ?? undefined,
+          module: reportBug.module_name ?? undefined,
+          environment: reportBug.environment || undefined,
+          user_role: reportBug.user_role || undefined,
+          device: reportBug.device || undefined,
+          browser: reportBug.browser || undefined,
+          entry_type: reportBug.entry_type || undefined,
+          severity: reportBug.severity || undefined
+        }
+      })) as AiIssueProcessResult;
+      if (aiResult.success && aiResult.output?.trim()) {
+        issueBody = aiResult.output.trim();
+      } else if (aiResult.error) {
+        showDetailsToast(`AI formatting skipped: ${aiResult.error}`, 'error');
+      }
+    }
+    const url = buildIssueDeepLink(platform, reportBug, issueBody, { jiraWorkspaceUrl: settings.jiraWorkspaceUrl });
     if (!url) {
-      setDetailsToast('Configure your Jira workspace URL in Settings before opening Jira.');
-      window.setTimeout(() => setDetailsToast(''), 2600);
+      showDetailsToast('Configure your Jira workspace URL in Settings before opening Jira.', 'error');
       return;
     }
     await window.bugPocket.openExternalUrl(url);
+    if (aiConfig.hasApiKey) {
+      showDetailsToast(`${platform} issue opened with AI-formatted content.`);
+    }
   };
   const openTicketUrl = async (): Promise<void> => {
     const url = bug.issue_url.trim();
@@ -350,42 +384,63 @@ export function BugDetailsView({
     await window.bugPocket.openExternalUrl(url);
   };
   const triageWithLocalAi = async (refinementNote = ''): Promise<void> => {
-    if (!settings.aiTriageEnabled || triaging) return;
+    if (triaging) return;
     const currentBug = bugRef.current ?? bug;
     if (!currentBug) return;
     const currentEntryDisplay = getEntryDisplay(currentBug);
-    const currentTitle = currentEntryDisplay.isDerived ? currentEntryDisplay.title : currentBug.title;
+    const currentApplication = settings.applications.find((application) => application.id === currentBug.application_id);
+    const currentModule = settings.modules.find((module) => module.id === currentBug.module_id);
     setAiStatus('loading');
     try {
       const imagePath = currentBug.attachments[0] ? String((await window.bugPocket.resolveAttachmentPath(currentBug.attachments[0].id)) || '') : '';
-      const currentApplication = settings.applications.find((application) => application.id === currentBug.application_id);
-      const currentModule = settings.modules.find((module) => module.id === currentBug.module_id);
-      const response = (await window.bugPocket.triageWithOllama({
-        id: currentBug.id, title: currentTitle, note: currentBug.note,
-        application: currentBug.application_name || '', application_context: currentApplication?.context_description ?? '',
-        module: currentBug.module_name || '', module_context: currentModule?.context_description ?? '',
-        environment: currentBug.environment, device: currentBug.device, browser: currentBug.browser, user_role: currentBug.user_role,
-        entry_type: currentBug.entry_type, severity: currentBug.severity, status: currentBug.status,
-        steps_to_reproduce: currentBug.steps_to_reproduce, expected_result: currentBug.expected_result,
-        actual_result: currentBug.actual_result, other_details: currentBug.other_details,
-        image_file_path: imagePath || undefined, refinement_note: refinementNote.trim() || undefined
-      })) as AiTriageResponse;
-      const nextSeverity = settings.severities.find((severity) => severity.value.toLowerCase() === response.result.severity_level.toLowerCase())?.value;
-      if (response.result.bug_title.trim()) updateField('title', response.result.bug_title);
-      if (response.result.refined_summary.trim()) updateField('note', response.result.refined_summary, { trackStatus: false });
-      if (nextSeverity) updateField('severity', nextSeverity, { trackStatus: false });
-      if (response.result.steps_to_reproduce.trim()) updateField('steps_to_reproduce', formatStepsAsNumberedList(response.result.steps_to_reproduce), { trackStatus: false });
-      if (response.result.expected_result.trim()) updateField('expected_result', response.result.expected_result, { trackStatus: false });
-      if (response.result.actual_result.trim()) updateField('actual_result', response.result.actual_result, { trackStatus: false });
-      if (response.success) { setAiStatus('completed'); setShowAiRefinement(false); setAiRefinementNote(''); }
-      else setAiStatus('idle');
-      setDetailsToast(response.success ? `Local AI triage applied with ${response.model}.` : `Local AI fallback used: ${response.error || 'Ollama unavailable.'}`);
-      window.setTimeout(() => setDetailsToast(''), 3200);
+      const triageText = String(await window.bugPocket.triageBug({
+        id: currentBug.id,
+        title: currentEntryDisplay.title,
+        note: currentBug.note,
+        other_details: currentBug.other_details,
+        steps_to_reproduce: currentBug.steps_to_reproduce,
+        expected_result: currentBug.expected_result,
+        actual_result: currentBug.actual_result,
+        application: currentBug.application_name || '',
+        application_context: currentApplication?.context_description ?? '',
+        module: currentBug.module_name || '',
+        module_context: currentModule?.context_description ?? '',
+        environment: currentBug.environment,
+        device: currentBug.device,
+        browser: currentBug.browser,
+        user_role: currentBug.user_role,
+        entry_type: currentBug.entry_type,
+        severity: currentBug.severity,
+        status: currentBug.status,
+        image_file_path: imagePath || undefined,
+        refinement_note: refinementNote.trim() || undefined
+      })).trim();
+      if (!triageText) throw new Error('AI triage returned an empty response.');
+      const cleanJsonString = triageText.match(/\{[\s\S]*\}/)?.[0] || triageText;
+      try {
+        const triageData = JSON.parse(cleanJsonString) as Partial<Record<'title' | 'bugNote' | 'stepsToReproduce' | 'expectedResult' | 'actualResult', unknown>>;
+        const title = typeof triageData.title === 'string' ? triageData.title.trim() : '';
+        const bugNote = typeof triageData.bugNote === 'string' ? triageData.bugNote.trim() : '';
+        const stepsToReproduce = typeof triageData.stepsToReproduce === 'string' ? triageData.stepsToReproduce.trim() : '';
+        const expectedResult = typeof triageData.expectedResult === 'string' ? triageData.expectedResult.trim() : '';
+        const actualResult = typeof triageData.actualResult === 'string' ? triageData.actualResult.trim() : '';
+        if (title) updateField('title', title, { trackStatus: false, autoSave: false });
+        if (bugNote) updateField('note', bugNote, { trackStatus: false, autoSave: false });
+        if (stepsToReproduce) updateField('steps_to_reproduce', formatStepsAsNumberedList(stepsToReproduce), { trackStatus: false, autoSave: false });
+        if (expectedResult) updateField('expected_result', expectedResult, { trackStatus: false, autoSave: false });
+        if (actualResult) updateField('actual_result', actualResult, { trackStatus: false, autoSave: false });
+      } catch (error) {
+        console.error('AI returned malformed JSON', error);
+        updateField('note', cleanJsonString, { trackStatus: false, autoSave: false });
+      }
+      setAiStatus('completed');
+      setShowAiRefinement(false);
+      setAiRefinementNote('');
+      showDetailsToast('AI triage draft added. Review it, then click Save Details to commit.');
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Local AI triage failed.';
+      const message = caught instanceof Error ? caught.message : 'AI triage failed.';
       setAiStatus('idle');
-      setDetailsToast(message);
-      window.setTimeout(() => setDetailsToast(''), 3200);
+      showDetailsToast(message, 'error');
     }
   };
   const addScreenshot = async (): Promise<void> => { await window.bugPocket.startScreenshotCapture(bug.id); };
@@ -420,7 +475,6 @@ export function BugDetailsView({
 
   const statusOptions = statusOptionsForEntryType(bug.entry_type, settings);
   const workflowStatusOptions = getWorkflowStatusOptions(statusOptions, bug.status);
-  const currentStatusIndex = Math.max(0, workflowStatusOptions.findIndex((status) => status.value === bug.status));
   const updateStatus = (status: string): void => {
     updateField('status', status as CaptureStatus);
     updateField('reported', status === 'Reported' ? 1 : 0, { trackStatus: false });
@@ -457,10 +511,10 @@ export function BugDetailsView({
         </div>
       </header>
       <div className="detail-workflow" aria-label="Report workflow">
-        <div className="workflow-steps">
-          {workflowStatusOptions.map((status, index) => (
+        <div className="workflow-steps workflow-steps-branch">
+          {workflowStatusOptions.filter((status) => status.value === 'Draft').map((status) => (
             <button
-              className={['workflow-step', 'workflow-step-button', index < currentStatusIndex ? 'complete' : '', status.value === bug.status ? 'active' : ''].filter(Boolean).join(' ')}
+              className={['workflow-step', 'workflow-step-button', bug.status !== 'Draft' ? 'complete' : '', status.value === bug.status ? 'active' : ''].filter(Boolean).join(' ')}
               key={`${status.type}-${status.value}`}
               onClick={() => updateStatus(status.value)}
               type="button"
@@ -468,9 +522,20 @@ export function BugDetailsView({
               {status.value}
             </button>
           ))}
+          <div className="workflow-branch-endpoints" aria-label="Workflow endpoints">
+            {workflowStatusOptions.filter((status) => status.value === 'Reported' || status.value === 'Discarded').map((status) => (
+              <button
+                className={['workflow-step', 'workflow-step-button', 'workflow-endpoint', status.value === bug.status ? 'active' : ''].filter(Boolean).join(' ')}
+                key={`${status.type}-${status.value}`}
+                onClick={() => updateStatus(status.value)}
+                type="button"
+              >
+                {status.value}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="workflow-pill-controls">
-          <div className="field-with-status pill-field-status">
+        <div className="workflow-pill-controls"><div className="field-with-status pill-field-status">
             <PillDropdown label="Severity" value={bug.severity} options={settings.severities.map((severity) => ({ value: severity.value, label: severity.value }))} colorClass={severityPillClass(bug.severity)} onChange={(value) => updateField('severity', value)} />
             {fieldSaveStatus('severity')}
           </div>
@@ -549,11 +614,11 @@ export function BugDetailsView({
             <h2>Generated report preview</h2>
             <textarea className="report-preview" readOnly value={generateReport(reportBug, settings.reportTemplates.find((template) => template.name === 'Full Bug Report'))} />
             <div className="copy-grid">
-              {AI_TRIAGE_AVAILABLE && settings.aiTriageEnabled && (
+              {AI_TRIAGE_AVAILABLE && (
                 <div className="ai-triage-panel">
                   {aiStatus !== 'completed' ? (
                     <button className="ai-triage-button" disabled={triaging} onClick={() => void triageWithLocalAi()}>
-                      <Gauge size={16} /> {triaging ? 'Triaging...' : 'Triage with Local AI'}
+                      <Gauge size={16} /> {triaging ? 'Triaging...' : 'AI Triage'}
                     </button>
                   ) : (
                     <>
@@ -613,7 +678,17 @@ export function BugDetailsView({
           </div>
         </div>
       )}
-      {detailsToast && <div className="toast">{detailsToast}</div>}
+      {detailsToast && (
+        <ToastBanner
+          message={detailsToast}
+          variant={detailsToastVariant}
+          onClose={closeDetailsToast}
+        />
+      )}
     </section>
   );
 }
+
+
+
+
