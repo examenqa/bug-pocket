@@ -12,7 +12,7 @@ export function formatDate(value: string): string {
 }
 
 export function generateReport(bug: BugDetails, template?: ReportTemplate): string {
-  const attachments = bug.attachments.length ? bug.attachments.map((attachment) => attachment.file_name).join('\n') : '[No attachments]';
+  const attachments = bug.attachments.length ? `${bug.attachments.length} attachment${bug.attachments.length === 1 ? '' : 's'} included in Bug Pocket.` : '[No attachments]';
   const values: Record<string, string> = {
     title: bug.title || bug.note.split(/\r?\n/)[0] || 'Untitled bug',
     entry_type: bug.entry_type || 'Bug',
@@ -70,3 +70,6 @@ function getJiraBaseUrl(value: string): string | null {
     return null; // Fails safely if the URL is completely malformed or empty
   }
 }
+
+
+

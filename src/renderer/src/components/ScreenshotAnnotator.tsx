@@ -31,7 +31,7 @@ interface TextDraft {
 }
 
 const annotationColor = '#e53935';
-const strokeShadow = 'rgba(6, 27, 66, 0.72)';
+const strokeShadow = 'rgba(6, 27, 66, 0.18)';
 
 export const ScreenshotAnnotator = forwardRef<ScreenshotAnnotatorHandle, ScreenshotAnnotatorProps>(function ScreenshotAnnotator(
   { activeAttachmentId, imageDataUrl, fileName, saveLabel = 'Save annotated copy', showSaveButton = true, versionHistory = [], versionPreviews = {}, onSelectVersion, onSave },
@@ -56,7 +56,7 @@ export const ScreenshotAnnotator = forwardRef<ScreenshotAnnotatorHandle, Screens
     ctx.strokeStyle = annotationColor;
     ctx.fillStyle = annotationColor;
     ctx.shadowColor = strokeShadow;
-    ctx.shadowBlur = 3;
+    ctx.shadowBlur = 1;
     ctx.font = '700 18px system-ui, sans-serif';
     return ctx;
   };
@@ -160,21 +160,61 @@ export const ScreenshotAnnotator = forwardRef<ScreenshotAnnotatorHandle, Screens
   const drawArrow = (from: Point, to: Point, canvas = canvasRef.current): void => {
     const ctx = getContext(canvas);
     if (!ctx) return;
-    const angle = Math.atan2(to.y - from.y, to.x - from.x);
-    const headLength = 16;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 8) return;
+
+    const angle = Math.atan2(dy, dx);
+    const headLength = Math.min(24, Math.max(15, length * 0.22));
+    const headWidth = Math.min(18, Math.max(11, headLength * 0.72));
+    const shaftEnd = {
+      x: to.x - Math.cos(angle) * (headLength * 0.7),
+      y: to.y - Math.sin(angle) * (headLength * 0.7)
+    };
+    const left = {
+      x: to.x - Math.cos(angle) * headLength + Math.cos(angle - Math.PI / 2) * headWidth,
+      y: to.y - Math.sin(angle) * headLength + Math.sin(angle - Math.PI / 2) * headWidth
+    };
+    const right = {
+      x: to.x - Math.cos(angle) * headLength + Math.cos(angle + Math.PI / 2) * headWidth,
+      y: to.y - Math.sin(angle) * headLength + Math.sin(angle + Math.PI / 2) * headWidth
+    };
+
+    ctx.save();
+    ctx.lineWidth = 5;
+    ctx.shadowBlur = 1;
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
-    ctx.lineTo(to.x, to.y);
-    ctx.lineTo(to.x - headLength * Math.cos(angle - Math.PI / 6), to.y - headLength * Math.sin(angle - Math.PI / 6));
-    ctx.moveTo(to.x, to.y);
-    ctx.lineTo(to.x - headLength * Math.cos(angle + Math.PI / 6), to.y - headLength * Math.sin(angle + Math.PI / 6));
+    ctx.lineTo(shaftEnd.x, shaftEnd.y);
     ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(left.x, left.y);
+    ctx.quadraticCurveTo(shaftEnd.x, shaftEnd.y, right.x, right.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   };
 
   const drawText = (text: string, point: Point, canvas = canvasRef.current): void => {
     const ctx = getContext(canvas);
     if (!ctx) return;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
     ctx.fillText(text, point.x, point.y);
+    ctx.restore();
+  };
+
+  const prepareFreehandContext = (): CanvasRenderingContext2D | null => {
+    const ctx = getContext();
+    if (!ctx) return null;
+    ctx.lineWidth = 3;
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+    return ctx;
   };
 
   const drawBlur = (from: Point, to: Point, canvas = canvasRef.current, previewOnly = false): void => {

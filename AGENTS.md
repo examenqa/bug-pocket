@@ -6,7 +6,7 @@ This document describes the current Bug Pocket build so another engineer, agent,
 
 Bug Pocket is a Windows-first Electron desktop app for fast QA capture. The core problem is that testers often notice unrelated bugs, scenarios, observations, or questions while testing but do not want to break their current flow to write a full bug report. Bug Pocket lets them capture a short note and screenshot quickly, then return later to clean up details and generate structured reports.
 
-The app is intentionally local-first. Captures and attachments save immediately to SQLite and the local filesystem. Cloud sync, ads, and web/mobile versions are planned but not active in the MVP. Local Ollama AI triage is available as an opt-in experimental desktop feature, but it is not part of the fast Quick Capture flow.
+The app is intentionally local-first. Captures and attachments save immediately to SQLite and the local filesystem. Cloud sync is now in an early push-only implementation phase: credentials, auth/session capture, workspace routing, and a background `sync_queue` worker exist, but remote pull/conflict resolution is still future work. Support telemetry is routed through a Supabase Edge Function. BYOK AI Processing is now implemented through a universal OpenAI-compatible REST engine with encrypted local API-key storage; ads and web/mobile versions remain future work.
 
 ## Current Tech Stack
 
@@ -16,7 +16,7 @@ The app is intentionally local-first. Captures and attachments save immediately 
 - `electron-vite`
 - SQLite via `better-sqlite3`
 - Local filesystem attachment storage using content-addressed files
-- Supabase-ready schema draft and sync service placeholder
+- Supabase Phase 3 push-sync scaffold: credentials, auth/session capture, workspace routing, RLS schema draft, background `sync_queue` drain, and Supabase Storage attachment upload
 - Windows-first behavior with system tray and global shortcuts
 
 Core commands:
@@ -44,12 +44,13 @@ Important files:
 
 **Main process**
 - `src/main/index.ts`: Electron windows, tray, global shortcuts, screenshot IPC, attachment download IPC, backup IPC, clipboard IPC, external URL launch IPC.
-- `src/main/ai/ollamaTriage.ts`: optional local Ollama triage service for report/title/summary/severity assistance.
+- `src/main/ai/byokIssueProcessor.ts`: active BYOK AI Processing and triage engine using native `fetch` against OpenAI-compatible `/chat/completions` endpoints. It stores API keys through Electron `safeStorage`, supports multimodal screenshot payloads, and surfaces upstream provider errors.
+- `src/main/ai/ollamaTriage.ts`: legacy/local Ollama triage implementation kept in the tree for reference; it is not the primary AI path.
 - `src/main/database.ts`: SQLite schema, migrations, defaults, CRUD, content-addressed attachments, sync queue, report templates. Also owns the `app_settings` key-value table.
-- `src/main/sync/syncService.ts`: placeholder for future Supabase sync.
+- `src/main/sync/syncService.ts`: Supabase `SyncEngine`. It reads local credentials, initializes the client with Node WebSocket support, handles sign in/sign up/sign out, captures `current_workspace_id`, runs a push-only background worker that drains `sync_queue` sequentially, and sends support feedback through the Supabase Edge Function proxy.
 
 **Preload & shared**
-- `src/preload/index.ts`: safe `window.bugPocket` bridge, including the `startScreenshotCapture()` method triggered by the Main Panel button.
+- `src/preload/index.ts`: safe `window.bugPocket` bridge, including `startScreenshotCapture()`, BYOK AI config/triage methods, support feedback, toast variants, sync auth, backup/restore, and settings IPC.
 - `src/shared/types.ts`: shared model and IPC types.
 
 **Renderer — entry**
@@ -69,18 +70,20 @@ Important files:
 - `src/renderer/src/components/shared/OptionSelect.tsx`: `OptionSelect` and `ReferenceSelect`.
 - `src/renderer/src/components/QuickCaptureForm.tsx`: Quick Capture UI and keyboard behavior.
 - `src/renderer/src/components/ScreenshotAnnotator.tsx`: native canvas screenshot annotation tools.
+- `src/renderer/src/components/shared/SupportModal.tsx`: Help & Support portal modal for bug/feature feedback with optional PNG/JPEG upload.
+- `src/renderer/src/components/shared/ToastBanner.tsx`: global toast component with success/info/error variants, hover-to-pause timers, and longer error visibility.
 
 **Renderer — settings components**
 - `src/renderer/src/components/settings/settingsUtils.ts`: `hasSettingsMutationBridge`, `getSettingsPreviewItems`.
 - `src/renderer/src/components/settings/GeneralSettings.tsx`: General & Hotkeys tab content, including shortcuts, capture preferences, workspace field lists, report destinations, Jira, and templates.
 - `src/renderer/src/components/settings/PresetSettings.tsx`: Capture Presets tab wrapper around preset CRUD.
-- `src/renderer/src/components/settings/AiSettings.tsx`: AI Triage tab wrapper.
+- `src/renderer/src/components/settings/AiSettings.tsx`: AI Processing tab with BYOK provider presets, Base URL, Model ID, encrypted API key save/clear, and custom system prompt.
 - `src/renderer/src/components/settings/StorageSettings.tsx`: Storage & Backups tab wrapper.
-- `src/renderer/src/components/settings/SyncSettings.tsx`: Cloud Sync placeholder tab.
+- `src/renderer/src/components/settings/SyncSettings.tsx`: Cloud Sync credentials, connection test, login/create-account UI, connected profile state, workspace ID display, and logout action.
 - `src/renderer/src/components/settings/ShortcutSettingsPanel.tsx`: shortcut recording UI.
 - `src/renderer/src/components/settings/CapturePreferencesPanel.tsx`: screenshot review and startup toggles.
 - `src/renderer/src/components/settings/JiraWorkspacePanel.tsx`: Jira workspace URL field.
-- `src/renderer/src/components/settings/AiOptionsPanel.tsx`: Ollama enable/guided vision model config.
+- `src/renderer/src/components/settings/AiOptionsPanel.tsx`: legacy Ollama/guided vision-model config component retained in code but not the active AI settings surface.
 - `src/renderer/src/components/settings/DataManagementPanel.tsx`: backup export/import/auto-backup UI.
 - `src/renderer/src/components/settings/PresetManager.tsx`: Quick Capture preset CRUD (max 3).
 - `src/renderer/src/components/settings/ModuleManager.tsx`: module management grouped by application.
@@ -117,7 +120,6 @@ The Quick Capture panel is a separate small Electron window with a denim pocket 
 
 Visible fields:
 
-- Entry Type
 - Application
 - Module
 - Environment
@@ -129,7 +131,7 @@ Visible fields:
 Important behavior:
 
 - Quick Capture stays minimal. Do not add Device, Browser, issue fields, status, severity, or other details here unless explicitly requested.
-- It supports creating missing Entry Type, Application, Module, Environment, and User Role values inline.
+- It supports creating missing Application, Module, Environment, and User Role values inline.
 - Modules are scoped to the selected Application; new modules created from Quick Capture attach to that application.
 - It can attach one or more screenshots before saving.
 - By default, screenshots taken from Quick Capture expand the same Quick Capture window into an inline Review Screenshot mode before being attached.
@@ -138,11 +140,10 @@ Important behavior:
 - `Discard` clears the pending screenshot without saving and returns the Quick Capture window to compact size.
 - Settings can disable the review step and restore the older instant-attach flow.
 - It saves locally first and then closes/minimizes after save.
-- It uses the same record creation path as the Main App.
+- It uses the same record creation path as the Main App and hardcodes `entry_type: 'Bug'` so the panel stays fast.
 
 Quick panel shortcuts:
 
-- `Alt+T`: Entry Type
 - `Alt+A`: Application
 - `Alt+M`: Module
 - `Alt+E`: Environment
@@ -153,6 +154,12 @@ Quick panel shortcuts:
 - `Esc`: Cancel
 - `Tab` and `Shift+Tab`: normal field traversal
 - `Alt+1`, `Alt+2`, `Alt+3`: apply the first three Quick Capture presets if configured
+
+Preset behavior:
+
+- Quick Capture uses a permanent 3-slot preset button array, not a preset dropdown.
+- Filled preset slots apply their saved Application, Module, Environment, and User Role. Preset saves hardcode `entry_type: 'Bug'` to match the current Quick Capture schema.
+- Empty preset slots route the user to Settings > Capture Presets.
 
 Dropdown behavior:
 
@@ -291,15 +298,15 @@ Settings currently manages:
 - Quick Capture Presets
 - Data Management and backups
 - Jira Workspace URL
-- AI Triage coming-soon placeholder
+- AI Processing / BYOK triage configuration
 
 Settings uses a two-column layout with a persistent left sidebar and a right content panel. Current sidebar tabs are:
 
 - General & Hotkeys: Global Shortcuts, Capture Preferences, workspace field lists, report destinations, Jira Workspace, and Report Templates.
 - Capture Presets: Quick Capture presets, capped at 3.
-- AI Triage: coming-soon placeholder. The guided Ollama model UI still exists in code but is intentionally not mounted in this build.
+- AI Processing: BYOK provider preset, Base URL, Model ID, encrypted API key, and custom system prompt.
 - Storage & Backups: manual backup, restore, automated backup directory.
-- Cloud Sync: placeholder for future Supabase sync.
+- Cloud Sync: Supabase Project URL / anon key credential UI, Test Connection action, Log In / Create Account flow, connected profile state, active Workspace ID display, and Log Out. Background push sync starts after an authenticated session and workspace membership are captured.
 
 Settings groups are shown as bordered sections with compact collapsible cards where appropriate. Closed cards show a count and preview chips. Open cards show add/edit/delete controls. Only one Settings card should be open at a time inside the active Settings tab. Opening a new Settings card collapses the previous one.
 
@@ -316,13 +323,40 @@ Data Management currently includes:
 - Manual import/restore from a `.bugpocket` backup archive.
 - Automated rolling backups to a user-selected directory, retaining the newest backups.
 
-AI Triage settings behavior in this build:
+AI Processing settings behavior in this build:
 
-- Settings > AI Triage shows a coming-soon card and does not expose the enable toggle or model controls.
-- The implementation code remains in place for later reactivation: `AiOptionsPanel.tsx`, `ollamaTriage.ts`, and the Bug Details triage/refinement state are still present.
-- The feature is locked with `AI_TRIAGE_AVAILABLE = false` in `BugDetailPage.tsx`, so Bug Details does not mount `Triage with Local AI` or `Refine AI Draft`.
-- The `ai:triageWithOllama` IPC channel still exists, but currently rejects calls with a coming-soon/disabled message instead of calling Ollama.
-- Stored settings remain available for future use: `ai_triage_enabled` defaults to `false`, and `ollama_model_name` defaults to `qwen3-vl:8b`.
+- Settings > AI Processing exposes a BYOK configuration card.
+- Provider presets currently include OpenAI, Grok, OpenRouter, Gemini, and Custom/Local.
+- Selecting OpenRouter defaults to `https://openrouter.ai/api/v1` and `google/gemma-4-31b-it:free` so the default model path is free-tier and vision-capable.
+- Selecting Gemini uses Google's OpenAI-compatible endpoint: `https://generativelanguage.googleapis.com/v1beta/openai`.
+- Base URL and Model ID remain editable and are trimmed before saving to avoid invisible typo failures.
+- API keys are encrypted with Electron `safeStorage` and stored in `app_settings` as `byok_ai_api_key_encrypted`; never store raw provider keys in SQLite.
+- The custom system prompt defaults to a strict JSON triage prompt with keys `title`, `bugNote`, `stepsToReproduce`, `expectedResult`, and `actualResult`.
+- Bug Details exposes AI triage through the universal BYOK engine. The returned JSON is parsed and mapped into the individual fields; malformed JSON falls back to the Bug Note field rather than crashing.
+- Triage should not auto-save the record; users review the generated fields and rely on normal auto-save/manual save behavior.
+
+## Support And Notifications
+
+Support feedback is available from the bottom of the global sidebar through Help & Support.
+
+Support flow:
+
+- `SupportModal.tsx` renders as a React portal above normal app content.
+- The user can submit a Bug or Feature message, optional email, and optional PNG/JPEG image chosen through a normal file input.
+- The renderer sends `FeedbackPayload` through `window.bugPocket.sendFeedback(payload)` / `support:sendFeedback`.
+- The Electron main process does not call Slack directly. It routes feedback through `SyncEngine.sendFeedback()`.
+- If an image is attached, the main process uploads it to the Supabase Storage bucket `telemetry-assets`, retrieves the public URL, and sends `image_url` to the Edge Function. The Edge Function should not decode large Base64 images.
+- The Supabase Edge Function is `supabase/functions/submit-feedback/index.ts` and expects `{ type, message, user_email, image_url }`.
+- The Edge Function reads `SLACK_WEBHOOK_URL` from Supabase secrets and posts the formatted message to Slack. Do not hardcode real Slack webhook URLs in the Electron app or repository.
+- `telemetry-assets` must be public-read or Slack cannot unfurl/open the attached image URL.
+
+Notification behavior:
+
+- `ToastBanner.tsx` supports `success`, `info`, and `error` variants.
+- Error toasts use red/destructive styling, `role="alert"`, and `aria-live="assertive"`.
+- Error toasts stay visible for 4000ms by default; success/info toasts use 2400ms unless overridden.
+- Hovering a toast pauses its dismissal timer; leaving restarts the countdown.
+- App-level toast IPC supports an optional variant, so error paths should call the error variant instead of reusing success styling.
 
 ## Data Model
 
@@ -363,8 +397,16 @@ Current keys:
 | `auto_backup_directory_path` | string | `""` |
 | `quick_capture_annotate_screenshots` | boolean (`"true"`/`"false"`) | `"true"` |
 | `run_on_system_startup` | boolean (`"true"`/`"false"`) | `"false"` |
-| `ai_triage_enabled` | boolean (`"true"`/`"false"`) | `"false"` |
-| `ollama_model_name` | string | `"qwen3-vl:8b"` |
+| `ai_triage_enabled` | legacy boolean (`"true"`/`"false"`) | `"false"` |
+| `ollama_model_name` | legacy string | `"qwen3-vl:8b"` |
+| `byok_ai_provider` | string | `"OpenRouter"` |
+| `byok_ai_base_url` | string | `"https://openrouter.ai/api/v1"` |
+| `byok_ai_model_id` | string | `"google/gemma-4-31b-it:free"` |
+| `byok_ai_api_key_encrypted` | encrypted string | `""` |
+| `byok_ai_custom_system_prompt` | string | `""` |
+| `supabase_project_url` | string | `""` |
+| `supabase_anon_key` | string | `""` |
+| `current_workspace_id` | string | `""` |
 
 Do NOT store scalar preferences in `config_options`. The `config_options` table is only for multi-row taxonomy lists (entry types, fixed capture statuses, severities, issue platforms, etc.).
 
@@ -682,7 +724,7 @@ Development data isolation:
 
 ## Sync Status
 
-The app is offline-first.
+The app is offline-first. Local capture must never wait for cloud availability.
 
 Current sync statuses:
 
@@ -691,25 +733,37 @@ Current sync statuses:
 - Synced
 - Sync Failed
 
-Sync is not implemented yet. The placeholder exists in:
+Cloud sync is in an early Phase 3 push-only implementation:
 
-- `src/main/sync/syncService.ts`
-- `.env.example`
-- `supabase/schema-draft.sql`
+- Settings > Cloud Sync stores `supabase_project_url`, `supabase_anon_key`, and the captured `current_workspace_id` in `app_settings`.
+- Settings > Cloud Sync supports Test Connection, Log In, Create Account, connected profile display, active Workspace ID display, and Log Out.
+- `src/main/sync/syncService.ts` initializes `@supabase/supabase-js` with `ws` as the Node realtime transport. Keep `ws` externalized in `electron.vite.config.ts` so optional native helpers like `bufferutil` do not crash the Electron main bundle.
+- After sign in/sign up, `SyncEngine` queries remote `workspace_members`, captures the first `workspace_id`, and stores it locally as `current_workspace_id`.
+- When an authenticated session and workspace ID exist, `SyncEngine` starts a safe interval-based background worker.
+- The worker reads `sync_queue` rows ordered by `local_seq`, preserving local mutation order.
+- Bug events are upserted/deleted against the cloud `bugs` table with `workspace_id` injected.
+- Attachment events upload content-addressed files to Supabase Storage bucket `attachments` using `<workspace_id>/<content_hash>.<extension>`, then upsert/delete rows in the cloud `attachments` table.
+- Reference merge events are written to cloud `sync_events` for future server-side reconciliation.
+- Successful events update local `bugs` / `attachments` to `Synced`, stamp `last_sync_at`, and remove the processed queue row.
+- Failed events use basic exponential backoff and mark the local primary record `Sync Failed` after repeated failures.
+- `supabase/schema-draft.sql` contains the current workspace-scoped PostgreSQL schema draft plus RLS helper/policies.
 
-Local event logging is implemented, but no remote sync worker consumes it yet. Current bug and attachment INSERT/UPDATE/DELETE operations append JSON payloads to `sync_queue` inside the same transaction as the primary mutation. Reference merges append `MERGE` events.
+Current sync limitations:
+
+- Remote pull into SQLite is not implemented yet.
+- Conflict handling is not implemented yet beyond preserving deterministic `local_seq` / `op_id` ordering locally.
+- Cloud taxonomy/reference-table mapping is minimal. Bug payloads currently preserve local labels/fields and set cloud taxonomy foreign keys to null until a fuller cloud taxonomy sync exists.
+- The Supabase Storage bucket `attachments` and RLS policies must exist in the target project before attachment sync can succeed.
+- Local data remains the source of truth for capture; cloud sync must remain best-effort and non-blocking.
 
 Future sync should add:
 
-- Supabase Auth
-- Workspaces/teams
-- RLS policies
-- Supabase Storage for screenshots/attachments
-- Local SQLite cache
-- Sync worker that drains/retries `sync_queue`
-- Conflict handling with `updated_at`
-- Attachment upload state
-
+- Remote pull into the local SQLite cache
+- Conflict handling with `updated_at`, `client_id`, `local_seq`, and `op_id`
+- Workspace/team management UI
+- Role-aware RLS beyond basic workspace membership
+- Cloud taxonomy/reference synchronization
+- Better sync diagnostics and manual retry controls
 ## Future Web And Mobile Direction
 
 The route structure intentionally maps to future web routes:
@@ -731,53 +785,64 @@ Future mobile app:
 - Should support existing image upload and camera photos.
 - Does not need snipping-tool behavior.
 
-## Local AI Triage
+## AI Processing And Triage
 
-The app has local Ollama triage implementation code, but AI Triage is intentionally locked in the current packaged build and presented as coming soon in Settings > AI Triage.
+The active AI path is BYOK AI Processing through a universal OpenAI-compatible REST engine, not the older Ollama-only transport.
 
-Current local AI plumbing:
+Active BYOK AI plumbing:
 
-- `src/main/ai/ollamaTriage.ts` exports `triageBugWithOllama(payload, configuredModelName)`.
-- Preload exposes it as `window.bugPocket.triageWithOllama(payload)`.
-- The main process IPC channel is `ai:triageWithOllama`.
-- The service calls `http://localhost:11434/api/chat` for better compatibility with vision-language models such as Qwen-VL.
-- Current packaged behavior: the main-process `ai:triageWithOllama` IPC handler immediately throws a coming-soon/disabled error and does not call Ollama.
-- Intended reactivation behavior: before calling Ollama, the main process should check `db.getAiTriageEnabled()`. If disabled, the IPC should throw and no inference should run.
-- The model name is loaded dynamically from SQLite via `db.getOllamaModelName()` and validated with `/^[a-zA-Z0-9\-:._]+$/` before any network request is sent.
-- If `image_file_path` is provided, it reads the image and base64-encodes it into the Ollama `images` array.
-- Image data passed to Ollama must be raw base64 only; strip any `data:image/png;base64,` style prefix before appending to `images`.
-- Screenshots are optimized before dispatch: max edge 1280px and JPEG quality 78, then encoded to base64.
-- The Ollama request uses a `messages` array with a system message and a user message. The user message contains the app/module/tester context and includes `images: [rawBase64]` when a screenshot is supplied.
-- The Ollama request sets `stream: false`, `options.num_ctx = 4096`, `options.num_predict = 900`, and `options.temperature = 0.2` to keep local vision triage faster and bounded.
-- The fetch request intentionally has no local AbortController timeout so slower local vision models can finish.
-- Do not use Ollama API `format: "json"` for this flow; the prompt asks for raw JSON inside a fenced markdown code block, and the backend parser extracts the JSON before returning structured data.
-- The expected JSON keys are `visual_analysis`, `bug_title`, `refined_summary`, `severity_level`, `steps_to_reproduce`, `expected_result`, and `actual_result`.
-- Offline/resource/parser failures return a deterministic fallback response instead of crashing the app.
-- The system prompt is hardened: the model is instructed to act as an Expert QA Tester, actively inspect screenshots and user annotations, avoid merely repeating tester notes, and output strictly JSON.
-- `visual_analysis` is a scratchpad-style first key returned by the local AI service and must not be mapped into Bug Details UI fields.
-- `refined_summary` is mapped into the Bug Note field when non-empty, replacing the rough tester note with a polished 1-2 sentence summary.
-- The prompt includes clear sections: App Context, Module Context, Environment, User Role, Device, Browser, Tester Note, Existing Manual Fields, and Task.
-- Bug Details hydrates the payload with the selected Application and Module `context_description` values.
-- When re-enabled, after a successful first AI pass, Bug Details should replace `Triage with Local AI` with `Refine AI Draft`. Refinements send the current edited form state plus `refinement_note`; the backend prepends that correction to the Task section.
-- The transport logs sanitized request structure, the first 50 characters of the raw image base64, raw Ollama response content, and full error stacks for debugging.
+- `src/main/ai/byokIssueProcessor.ts` owns provider config, encrypted API-key handling, AI issue processing, and Bug Details triage.
+- `src/renderer/src/components/settings/AiSettings.tsx` exposes the AI Processing tab.
+- Shared types include `AiByokConfig`, `AiIssueProcessPayload`, `AiIssueProcessResult`, and `AiTriageBugPayload`.
+- Preload exposes `getAiConfig`, `saveAiConfig`, `processIssueWithAi`, and `triageBug` through `window.bugPocket`.
+- API keys are encrypted with Electron `safeStorage`; only encrypted key material is stored in `app_settings`.
+- Provider presets: OpenAI, Grok, OpenRouter, Gemini, and Custom/Local.
+- OpenRouter defaults to `google/gemma-4-31b-it:free` and `https://openrouter.ai/api/v1`.
+- Gemini uses the OpenAI-compatible endpoint `https://generativelanguage.googleapis.com/v1beta/openai`.
+- Custom/Local defaults to `http://localhost:11434/v1`, so OpenAI-compatible local servers can be used without changing the fetcher.
+- The universal transport calls `${baseUrl}/chat/completions` with the standard OpenAI `messages` schema and native `fetch`; do not add provider SDKs unless there is a strong reason.
+- OpenRouter requests include `HTTP-Referer: https://bugpocket.app` and `X-Title: Bug Pocket`.
+- Base URL and Model ID are trimmed before saving.
+- If the provider returns a non-2xx response, parse and surface the upstream `error.message`, `message`, or `detail` before falling back to `HTTP <status>`; do not swallow provider errors as generic network failures.
+- If the provider returns an empty `choices` array or blank content, throw a clear empty-success error.
 
-Important local AI constraints:
+Current triage behavior:
 
-- This local Ollama path is currently locked/coming soon in the packaged app, even though the implementation code remains in place.
-- When re-enabled, it should be opt-in and experimental.
-- Engine Coupling: The local triage transport layer is currently tightly coupled to Ollama's specific REST API schema (`http://localhost:11434/api/chat` and its required JSON message array). While the model string is dynamic in the database, users cannot currently plug in OpenAI-compatible local engines like LM Studio or vLLM. Future engine-agnostic support will require refactoring the network request and adding an `API Base URL` parameter to the `config_options` schema.
+- Bug Details sends the current bug fields to `window.bugPocket.triageBug(...)`.
+- The default system prompt requires strict JSON with exactly `title`, `bugNote`, `stepsToReproduce`, `expectedResult`, and `actualResult`.
+- The main process extracts the first JSON object from the model response before returning it to the renderer.
+- `BugDetailPage.tsx` parses the returned JSON and maps the keys into the matching state setters. It does not auto-save immediately after mapping; normal auto-save/manual save is responsible for persistence.
+- If JSON parsing fails, the raw returned text is placed into Bug Note as a fallback.
+- Steps to Reproduce should remain numbered/plain-text friendly for Linear and Jira copy formats.
+
+Vision payload rules:
+
+- Do not pass local filenames or paths to the AI provider.
+- If a bug has an image path, the main process loads it with Electron `nativeImage`.
+- Screenshots are resized to a maximum width of 1024px when needed, compressed to JPEG at 80% quality with `toJPEG(80)`, and sent as `data:image/jpeg;base64,...` in an OpenAI-compatible `image_url` content part.
+- This keeps desktop screenshots under provider/free-tier payload limits while preserving enough UI detail for triage.
+
+Legacy Ollama notes:
+
+- `src/main/ai/ollamaTriage.ts`, `AiOptionsPanel.tsx`, `ai_triage_enabled`, and `ollama_model_name` still exist from the earlier local-Ollama path.
+- Do not treat the Ollama-specific `/api/chat` path as the current primary AI architecture.
+- If reusing Ollama directly in the future, keep it opt-in and do not send screenshots without an explicit user action.
+
+Important AI constraints:
+
 - No AI generation should run automatically during Quick Capture.
-- Do not send screenshots to AI unless the user explicitly chooses an AI action and allows image use.
-- Future public/cloud AI still needs backend mediation; do not bundle remote AI API keys into Electron.
+- Do not send screenshots to AI unless the user explicitly chooses an AI action and the payload path clearly includes image use.
+- Never bundle a shared remote AI API key into Electron. BYOK keys belong to the user and must stay encrypted locally.
+- Future shared/public AI should still run through a backend and credit system, not direct bundled app credentials.
 
 ## Future AI And Monetization Direction
 
-Cloud AI and ads are intentionally not part of the current MVP. Local Ollama triage implementation exists in code but is locked behind a coming-soon state in the packaged app; cloud AI, shared credits, and monetization remain future work.
+Ads are intentionally not part of the current MVP. BYOK AI Processing is available for explicit user-triggered triage/formatting, while shared cloud AI, pooled credits, and monetization remain future work.
 
 Preferred future model:
 
 - Finish desktop local-first MVP first.
-- Add cloud sync and accounts before AI.
+- Finish cloud sync pull/conflict handling and accounts/team foundations before cloud AI.
 - Run AI calls through a backend, never from a bundled Electron API key.
 - Use shared cloud credits across web and desktop.
 - Web can later use rewarded ads to earn AI credits.
@@ -829,8 +894,8 @@ High-priority product work:
 
 - Finish and polish installer/distribution flow.
 - Verify tray and shortcuts after packaged install.
-- Add real cloud sync.
-- Add account/workspace model.
+- Finish cloud sync pull/conflict handling and diagnostics.
+- Expand account/workspace/team management beyond the current auth/session capture.
 - Improve Settings search if option lists grow large.
 - Add verification around backup/restore behavior after packaging.
 
@@ -846,7 +911,7 @@ Potential technical work:
 
 - Add focused tests for report generation and title derivation.
 - Add migration tests for SQLite schema changes.
-- Add a proper sync queue drain/retry abstraction before Supabase implementation.
+- Harden the current sync queue drain/retry worker with diagnostics, manual retry, and remote pull coverage.
 - Add verification around content-addressed attachment backup/restore.
 - Consider extracting the spotlight/annotator logic into a dedicated hook (`useSpotlight`) shared by DashboardPage and BugDetailPage.
 
@@ -863,13 +928,13 @@ Potential technical work:
 
 * **Content-Addressed Storage:** Attachments are saved via SHA-256 hashes of the file buffer (e.g., `<hash>.png`). Never save absolute file paths to the database.
 * **Non-Destructive Annotation:** Edits made in the native HTML5 `<canvas>` annotator generate a *new* file hash and are saved with a `parent_id` pointing to the original unedited screenshot.
-* **Storage Pruning:** A background worker deletes physical files (via `fs.unlink`) and nullifies the `content_hash` in the database for Discarded captures that are older than 60 days.
+* **Storage Pruning:** A background worker deletes physical files (via `fs.unlink`) and nullifies the `content_hash` in the database for Discarded captures that are older than 60 days. Because attachments are content-addressed, prune a physical file only when that hash is not referenced by any non-discarded entry, newer entry, or child/lineage attachment that should remain viewable.
 
 ### 3. Failsafe Backup Protocol
 
 * **Mechanism:** Backups must use asynchronous Node.js streams (via `archiver`) to prevent the Electron main process from freezing. Never buffer the entire database or image folder into RAM.
 * **Safe Locking:** Always `fs.copyFileSync` the active SQLite database to a temporary file before zipping to avoid `EBUSY` OS lock crashes.
-* **Restore:** When importing a `.bugpocket` file, the active `db.close()` must be called before extraction to release file locks. The `BrowserWindow` must execute `reload()` immediately after extraction.
+* **Restore:** Before replacing local data, validate that the `.bugpocket` archive has the expected structure (`bug-pocket.sqlite` plus optional `attachments/`). When importing, the active `db.close()` must be called before extraction to release file locks. The `BrowserWindow` must execute `reload()` immediately after extraction.
 * **Auto-Backups:** Automated backups write to a user-defined directory stored in `app_settings` under `auto_backup_directory_path`. Enforce a strict rolling limit (delete oldest after 3 backups).
 
 ### 4. Packaging Constraints

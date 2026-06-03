@@ -21,21 +21,26 @@ export function OptionManager({
   onUpdateContext,
   onDelete,
   onMerge,
-  onToggleSync
+  onToggleSync,
+  addContextLabel,
+  addContextRequired = false
 }: {
   title: string;
   open: boolean;
   onToggle: () => void;
   mutationReady: boolean;
   items: SettingsOptionItem[];
-  onAdd: (value: string) => Promise<void>;
+  onAdd: (value: string, contextDescription?: string) => Promise<void>;
   onUpdate: (id: number, value: string, item: SettingsOptionItem) => Promise<void>;
   onUpdateContext?: (id: number, contextDescription: string, item: SettingsOptionItem) => Promise<void>;
   onDelete: (id: number, item: SettingsOptionItem) => Promise<void>;
   onMerge?: (sourceId: number, targetId: number, sourceItem: SettingsOptionItem, targetItem: SettingsOptionItem) => Promise<void>;
   onToggleSync?: (id: number, isSynced: boolean, item: SettingsOptionItem) => Promise<void>;
+  addContextLabel?: string;
+  addContextRequired?: boolean;
 }) {
   const [value, setValue] = useState('');
+  const [addContext, setAddContext] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editContext, setEditContext] = useState('');
@@ -43,8 +48,9 @@ export function OptionManager({
   const [mergingId, setMergingId] = useState<number | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
   const [error, setError] = useState('');
-  const previewItems = getSettingsPreviewItems(items, (item) => item.label);
+  const previewItems = getSettingsPreviewItems(items);
   const hiddenCount = Math.max(0, items.length - previewItems.length);
+  const addDisabled = !value.trim() || (addContextRequired && !addContext.trim());
 
   const run = async (action: () => Promise<void>): Promise<void> => {
     setError('');
@@ -112,9 +118,26 @@ export function OptionManager({
       )}
       {open && (
         <div className="settings-option-body">
-          <div className="add-row">
+          <div className={addContextLabel ? 'add-row add-row-with-context' : 'add-row'}>
             <input value={value} onChange={(event) => setValue(event.target.value)} placeholder={`Add ${title.toLowerCase()}`} />
-            <button title={`Add ${title}`} onClick={() => run(async () => { if (value.trim()) { await onAdd(value); setValue(''); } })}><Plus size={16} /></button>
+            <button
+              title={`Add ${title}`}
+              disabled={addDisabled}
+              onClick={() => run(async () => {
+                if (addDisabled) return;
+                await onAdd(value, addContext);
+                setValue('');
+                setAddContext('');
+              })}
+            >
+              <Plus size={16} />
+            </button>
+            {addContextLabel && (
+              <label className="context-description-field add-context-field">
+                <span>{addContextLabel}{addContextRequired ? ' *' : ''}</span>
+                <textarea value={addContext} onChange={(event) => setAddContext(event.target.value)} />
+              </label>
+            )}
           </div>
           <div className="option-list">
             {items.map((item) => (

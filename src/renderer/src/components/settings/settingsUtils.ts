@@ -23,24 +23,19 @@ export function hasSettingsMutationBridge(): boolean {
     typeof api.deleteConfigOption === 'function' &&
     typeof api.createPreset === 'function' &&
     typeof api.updatePreset === 'function' &&
-    typeof api.deletePreset === 'function'
+    typeof api.deletePreset === 'function' &&
+    typeof api.updateSupabaseSettings === 'function' &&
+    typeof api.testSupabaseConnection === 'function' &&
+    typeof api.authSignIn === 'function' &&
+    typeof api.authSignUp === 'function' &&
+    typeof api.authSignOut === 'function' &&
+    typeof api.getSyncSessionStatus === 'function'
   );
 }
 
-export function getSettingsPreviewItems<T>(items: T[], labelFor: (item: T) => string): T[] {
-  if (items.length <= 4) return items;
-  const maxPreviewTextUnits = 30;
-  const moreChipUnits = 10;
-  const preview: T[] = [];
-  let usedUnits = 0;
+const VISIBLE_PILL_LIMIT = 6;
 
-  for (const item of items) {
-    const labelUnits = Math.min(labelFor(item).trim().length, 16);
-    const separatorUnits = preview.length ? 2 : 0;
-    if (preview.length && usedUnits + separatorUnits + labelUnits + moreChipUnits > maxPreviewTextUnits) break;
-    preview.push(item);
-    usedUnits += separatorUnits + labelUnits;
-  }
-
-  return preview.length ? preview : items.slice(0, 1);
+export function getSettingsPreviewItems<T>(items: T[]): T[] {
+  return items.slice(0, VISIBLE_PILL_LIMIT);
 }
+

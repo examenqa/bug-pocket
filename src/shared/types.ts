@@ -128,6 +128,7 @@ export interface CapturePreset {
   application_id: number | null;
   module_id: number | null;
   environment_id: number | null;
+  user_role_id: number | null;
   entry_type_id: number | null;
   created_at: string;
   updated_at: string;
@@ -138,6 +139,7 @@ export interface CapturePresetInput {
   application_id: number | null;
   module_id: number | null;
   environment_id: number | null;
+  user_role_id: number | null;
   entry_type_id: number | null;
 }
 
@@ -194,6 +196,9 @@ export interface SettingsData {
   runOnSystemStartup: boolean;
   aiTriageEnabled: boolean;
   ollamaModelName: string;
+  supabaseProjectUrl: string | null;
+  supabaseAnonKey: string | null;
+  currentWorkspaceId: string | null;
   presets: CapturePreset[];
 }
 
@@ -248,6 +253,76 @@ export interface AttachmentDownloadResult {
   error?: string;
 }
 
+export interface SyncConnectionResult {
+  success: boolean;
+  configured: boolean;
+  message: string;
+  error?: string;
+}
+
+export interface SyncSessionStatus {
+  authenticated: boolean;
+  email?: string;
+  workspaceId?: string;
+}
+
+export interface SyncAuthResult extends SyncSessionStatus {
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+
+
+export type AiProvider = 'OpenAI' | 'Grok' | 'OpenRouter' | 'Gemini' | 'Custom/Local';
+
+export interface AiConfigSaveInput {
+  provider: AiProvider;
+  baseUrl: string;
+  modelId: string;
+  apiKey?: string;
+  clearApiKey?: boolean;
+  customSystemPrompt: string;
+}
+
+export interface AiByokConfig {
+  provider: AiProvider;
+  baseUrl: string;
+  modelId: string;
+  hasApiKey: boolean;
+  hasApiKeys?: Partial<Record<AiProvider, boolean>>;
+  apiKey?: string;
+  apiKeys?: Partial<Record<AiProvider, string>>;
+  customSystemPrompt: string;
+}
+
+export interface AiIssueProcessPayload {
+  rawInput: string;
+  taxonomy: {
+    application?: string;
+    module?: string;
+    environment?: string;
+    user_role?: string;
+    device?: string;
+    browser?: string;
+    entry_type?: string;
+    severity?: string;
+  };
+}
+
+export interface AiIssueProcessResult {
+  success: boolean;
+  output?: string;
+  provider?: AiProvider;
+  error?: string;
+}
+export interface FeedbackPayload {
+  type: 'Bug' | 'Feature';
+  message: string;
+  user_email?: string;
+  image_base64?: string;
+  image_url?: string;
+}
 export interface AiTriageBugPayload {
   id?: number;
   title?: string;

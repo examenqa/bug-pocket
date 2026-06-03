@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Check, ChevronLeft, ChevronRight, Clipboard, Download, Gauge, Save, Trash2, X } from 'lucide-react';
-import type { AiTriageResponse, Attachment, AttachmentDownloadResult, BugDetails, CaptureStatus, SettingsData } from '../../../shared/types';
+import type { AiByokConfig, AiIssueProcessResult, Attachment, AttachmentDownloadResult, BugDetails, CaptureStatus, SettingsData } from '../../../shared/types';
 import { Badge, SyncBadge } from '../components/shared/Badge';
 import { PillDropdown } from '../components/shared/PillDropdown';
+import { useToast } from '../components/shared/ToastContext';
 import { OptionSelect, ReferenceSelect } from '../components/shared/OptionSelect';
 import { ScreenshotAnnotator } from '../components/ScreenshotAnnotator';
 import { formatDate, generateReport, buildIssueDeepLink, IssuePlatformLink } from '../services/reports';
@@ -19,31 +20,6 @@ import { buildBugUpdateInput, serializeBugUpdateInput, DetailsSaveState, AiTriag
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
 import { useDebounce } from '../hooks/useDebounce';
 
-const AI_TRIAGE_AVAILABLE = false;
-
-export function BugDetailsHost({
-  bugId,
-  settings,
-  onClose
-}: {
-  bugId: number;
-  settings: SettingsData;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && !document.querySelector('.spotlight-backdrop')) onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  return (
-    <section className="details-route-view" aria-label="Entry details">
-      <BugDetailsView bugId={bugId} settings={settings} onBack={onClose} />
-    </section>
-  );
-}
 
 export function BugDetailsView({
   bugId,
@@ -57,13 +33,13 @@ export function BugDetailsView({
   const [bug, setBug] = useState<BugDetails | null>(null);
   const [attachmentPreviews, setAttachmentPreviews] = useState<Record<number, string>>({});
   const [copied, setCopied] = useState('');
-  const [detailsToast, setDetailsToast] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [spotlight, setSpotlight] = useState<SpotlightState | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [saveState, setSaveState] = useState<DetailsSaveState>('idle');
   const [aiStatus, setAiStatus] = useState<AiTriageStatus>('idle');
+  const [byokAiReady, setByokAiReady] = useState(false);
   const [showAiRefinement, setShowAiRefinement] = useState(false);
   const [aiRefinementNote, setAiRefinementNote] = useState('');
   const [lastEditedField, setLastEditedField] = useState<keyof BugDetails | null>(null);
@@ -72,10 +48,35 @@ export function BugDetailsView({
   const lastSavedPayloadRef = useRef('');
   const saveStateTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef<Promise<BugDetails | null> | null>(null);
+  const showDetailsToast = useToast();
 
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
   const triaging = aiStatus === 'loading';
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkAiStatus = async (): Promise<void> => {
+      try {
+        const config = (await window.bugPocket.getAiConfig()) as AiByokConfig;
+        if (!cancelled) setByokAiReady(Boolean(config?.hasApiKey || config?.apiKey));
+      } catch {
+        if (!cancelled) setByokAiReady(false);
+      }
+    };
+    void checkAiStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && !document.querySelector('.spotlight-backdrop')) onBack();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onBack]);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,8 +132,7 @@ export function BugDetailsView({
       isDirtyRef.current = false;
       void window.bugPocket.setDetailsDirty(false);
       if (showToast) {
-        setDetailsToast('Details already saved.');
-        window.setTimeout(() => setDetailsToast(''), 1400);
+        showDetailsToast('Details already saved.');
       }
       return currentBug;
     }
@@ -158,15 +158,13 @@ export function BugDetailsView({
       void window.bugPocket.setDetailsDirty(false);
       markSavedSoon();
       if (showToast) {
-        setDetailsToast('Details saved successfully.');
-        window.setTimeout(() => setDetailsToast(''), 1800);
+        showDetailsToast('Details saved successfully.');
       }
       return updated;
     } catch (caught) {
       setSaveState('error');
       const message = caught instanceof Error ? caught.message : 'Unable to save details.';
-      setDetailsToast(message);
-      window.setTimeout(() => setDetailsToast(''), 2600);
+      showDetailsToast(message, 'error');
       throw caught;
     } finally {
       saveInFlightRef.current = null;
@@ -254,7 +252,7 @@ export function BugDetailsView({
     const created = (await window.bugPocket.saveAnnotatedAttachment(currentSpotlightAttachment.id, dataUrl)) as Attachment;
     const updatedBug = await window.bugPocket.getBug(bug.id);
     const lineageData = await loadAttachmentLineage(created.id);
-    setBug(updatedBug);
+    if (updatedBug) setBug(updatedBug);
     setAttachmentPreviews((current) => ({ ...current, [created.id]: dataUrl }));
     setSpotlight((current) => {
       if (!current) return current;
@@ -297,21 +295,26 @@ export function BugDetailsView({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [spotlight]);
 
-  const updateField = (key: keyof BugDetails, value: string | number | boolean | null, options: { trackStatus?: boolean } = {}): void => {
+  const updateField = (key: keyof BugDetails, value: string | number | boolean | null, options: { trackStatus?: boolean; autoSave?: boolean } = {}): void => {
     setBug((current) => {
       if (!current || current[key] === value) return current;
       const nextBug = { ...current, [key]: value };
       bugRef.current = nextBug;
-      isDirtyRef.current = true;
-      setIsDirty(true);
-      setSaveState('dirty');
-      if (options.trackStatus !== false) setLastEditedField(key);
-      void window.bugPocket.setDetailsDirty(true);
+      if (options.autoSave === false) {
+        setSaveState('dirty');
+        if (options.trackStatus !== false) setLastEditedField(key);
+      } else {
+        isDirtyRef.current = true;
+        setIsDirty(true);
+        setSaveState('dirty');
+        if (options.trackStatus !== false) setLastEditedField(key);
+        void window.bugPocket.setDetailsDirty(true);
+      }
       return nextBug;
     });
   };
 
-  if (!bug) return <section className="page">Loading...</section>;
+  if (!bug) return <section className="details-route-view page">Loading...</section>;
 
   const entryDisplay = getEntryDisplay(bug);
   const detailTitleValue = entryDisplay.isDerived ? entryDisplay.title : bug.title;
@@ -336,13 +339,38 @@ export function BugDetailsView({
   };
   const openIssuePlatform = async (platform: IssuePlatformLink): Promise<void> => {
     const templateName = `${platform} Format`;
-    const url = buildIssueDeepLink(platform, reportBug, report(templateName), { jiraWorkspaceUrl: settings.jiraWorkspaceUrl });
+    let issueBody = report(templateName);
+    const aiConfig = (await window.bugPocket.getAiConfig()) as AiByokConfig;
+    if (aiConfig.hasApiKey) {
+      showDetailsToast(`Formatting ${platform} issue with ${aiConfig.provider}...`, 'info');
+      const aiResult = (await window.bugPocket.processIssueWithByokAi({
+        rawInput: issueBody,
+        taxonomy: {
+          application: reportBug.application_name ?? undefined,
+          module: reportBug.module_name ?? undefined,
+          environment: reportBug.environment || undefined,
+          user_role: reportBug.user_role || undefined,
+          device: reportBug.device || undefined,
+          browser: reportBug.browser || undefined,
+          entry_type: reportBug.entry_type || undefined,
+          severity: reportBug.severity || undefined
+        }
+      })) as AiIssueProcessResult;
+      if (aiResult.success && aiResult.output?.trim()) {
+        issueBody = aiResult.output.trim();
+      } else if (aiResult.error) {
+        showDetailsToast(`AI formatting skipped: ${aiResult.error}`, 'error');
+      }
+    }
+    const url = buildIssueDeepLink(platform, reportBug, issueBody, { jiraWorkspaceUrl: settings.jiraWorkspaceUrl });
     if (!url) {
-      setDetailsToast('Configure your Jira workspace URL in Settings before opening Jira.');
-      window.setTimeout(() => setDetailsToast(''), 2600);
+      showDetailsToast('Configure your Jira workspace URL in Settings before opening Jira.', 'error');
       return;
     }
     await window.bugPocket.openExternalUrl(url);
+    if (aiConfig.hasApiKey) {
+      showDetailsToast(`${platform} issue opened with AI-formatted content.`);
+    }
   };
   const openTicketUrl = async (): Promise<void> => {
     const url = bug.issue_url.trim();
@@ -350,48 +378,97 @@ export function BugDetailsView({
     await window.bugPocket.openExternalUrl(url);
   };
   const triageWithLocalAi = async (refinementNote = ''): Promise<void> => {
-    if (!settings.aiTriageEnabled || triaging) return;
+    if (triaging) return;
     const currentBug = bugRef.current ?? bug;
     if (!currentBug) return;
     const currentEntryDisplay = getEntryDisplay(currentBug);
-    const currentTitle = currentEntryDisplay.isDerived ? currentEntryDisplay.title : currentBug.title;
+    const currentApplication = settings.applications.find((application) => application.id === currentBug.application_id);
+    const currentModule = settings.modules.find((module) => module.id === currentBug.module_id);
     setAiStatus('loading');
     try {
       const imagePath = currentBug.attachments[0] ? String((await window.bugPocket.resolveAttachmentPath(currentBug.attachments[0].id)) || '') : '';
-      const currentApplication = settings.applications.find((application) => application.id === currentBug.application_id);
-      const currentModule = settings.modules.find((module) => module.id === currentBug.module_id);
-      const response = (await window.bugPocket.triageWithOllama({
-        id: currentBug.id, title: currentTitle, note: currentBug.note,
-        application: currentBug.application_name || '', application_context: currentApplication?.context_description ?? '',
-        module: currentBug.module_name || '', module_context: currentModule?.context_description ?? '',
-        environment: currentBug.environment, device: currentBug.device, browser: currentBug.browser, user_role: currentBug.user_role,
-        entry_type: currentBug.entry_type, severity: currentBug.severity, status: currentBug.status,
-        steps_to_reproduce: currentBug.steps_to_reproduce, expected_result: currentBug.expected_result,
-        actual_result: currentBug.actual_result, other_details: currentBug.other_details,
-        image_file_path: imagePath || undefined, refinement_note: refinementNote.trim() || undefined
-      })) as AiTriageResponse;
-      const nextSeverity = settings.severities.find((severity) => severity.value.toLowerCase() === response.result.severity_level.toLowerCase())?.value;
-      if (response.result.bug_title.trim()) updateField('title', response.result.bug_title);
-      if (response.result.refined_summary.trim()) updateField('note', response.result.refined_summary, { trackStatus: false });
-      if (nextSeverity) updateField('severity', nextSeverity, { trackStatus: false });
-      if (response.result.steps_to_reproduce.trim()) updateField('steps_to_reproduce', formatStepsAsNumberedList(response.result.steps_to_reproduce), { trackStatus: false });
-      if (response.result.expected_result.trim()) updateField('expected_result', response.result.expected_result, { trackStatus: false });
-      if (response.result.actual_result.trim()) updateField('actual_result', response.result.actual_result, { trackStatus: false });
-      if (response.success) { setAiStatus('completed'); setShowAiRefinement(false); setAiRefinementNote(''); }
-      else setAiStatus('idle');
-      setDetailsToast(response.success ? `Local AI triage applied with ${response.model}.` : `Local AI fallback used: ${response.error || 'Ollama unavailable.'}`);
-      window.setTimeout(() => setDetailsToast(''), 3200);
+      const triageText = String(await window.bugPocket.triageBug({
+        id: currentBug.id,
+        title: currentEntryDisplay.title,
+        note: currentBug.note,
+        other_details: currentBug.other_details,
+        steps_to_reproduce: currentBug.steps_to_reproduce,
+        expected_result: currentBug.expected_result,
+        actual_result: currentBug.actual_result,
+        application: currentBug.application_name || '',
+        application_context: currentApplication?.context_description ?? '',
+        module: currentBug.module_name || '',
+        module_context: currentModule?.context_description ?? '',
+        environment: currentBug.environment,
+        device: currentBug.device,
+        browser: currentBug.browser,
+        user_role: currentBug.user_role,
+        entry_type: currentBug.entry_type,
+        severity: currentBug.severity,
+        status: currentBug.status,
+        image_file_path: imagePath || undefined,
+        refinement_note: refinementNote.trim() || undefined
+      })).trim();
+      if (!triageText) throw new Error('AI triage returned an empty response.');
+      const cleanJsonString = triageText.match(/\{[\s\S]*\}/)?.[0] || triageText;
+      let aiAppliedBug: BugDetails = currentBug;
+      try {
+        const triageData = JSON.parse(cleanJsonString) as Partial<Record<'title' | 'bugNote' | 'stepsToReproduce' | 'expectedResult' | 'actualResult', unknown>>;
+        const title = typeof triageData.title === 'string' ? triageData.title.trim() : '';
+        const bugNote = typeof triageData.bugNote === 'string' ? triageData.bugNote.trim() : '';
+        const stepsToReproduce = typeof triageData.stepsToReproduce === 'string' ? triageData.stepsToReproduce.trim() : '';
+        const expectedResult = typeof triageData.expectedResult === 'string' ? triageData.expectedResult.trim() : '';
+        const actualResult = typeof triageData.actualResult === 'string' ? triageData.actualResult.trim() : '';
+        aiAppliedBug = {
+          ...currentBug,
+          ...(title ? { title } : {}),
+          ...(bugNote ? { note: bugNote } : {}),
+          ...(stepsToReproduce ? { steps_to_reproduce: formatStepsAsNumberedList(stepsToReproduce) } : {}),
+          ...(expectedResult ? { expected_result: expectedResult } : {}),
+          ...(actualResult ? { actual_result: actualResult } : {})
+        };
+      } catch (error) {
+        console.error('AI returned malformed JSON', error);
+        aiAppliedBug = { ...currentBug, note: cleanJsonString };
+      }
+
+      if (saveInFlightRef.current) await saveInFlightRef.current;
+      setBug(aiAppliedBug);
+      bugRef.current = aiAppliedBug;
+      setSaveState('saving');
+      const savePromise = window.bugPocket.updateBug(aiAppliedBug.id, buildBugUpdateInput(aiAppliedBug)) as Promise<BugDetails>;
+      saveInFlightRef.current = savePromise;
+      let updated: BugDetails;
+      try {
+        updated = await savePromise;
+      } finally {
+        saveInFlightRef.current = null;
+      }
+      setBug(updated);
+      bugRef.current = updated;
+      lastSavedPayloadRef.current = serializeBugUpdateInput(buildBugUpdateInput(updated));
+      setIsDirty(false);
+      isDirtyRef.current = false;
+      void window.bugPocket.setDetailsDirty(false);
+      markSavedSoon();
+      setAiStatus('completed');
+      setShowAiRefinement(false);
+      setAiRefinementNote('');
+      showDetailsToast('AI Triage applied and saved.');
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Local AI triage failed.';
+      const message = caught instanceof Error ? caught.message : 'AI triage failed.';
       setAiStatus('idle');
-      setDetailsToast(message);
-      window.setTimeout(() => setDetailsToast(''), 3200);
+      showDetailsToast(message, 'error');
     }
   };
   const addScreenshot = async (): Promise<void> => { await window.bugPocket.startScreenshotCapture(bug.id); };
   const removeAttachment = async (attachmentId: number): Promise<void> => {
     await window.bugPocket.deleteAttachment(attachmentId);
-    setBug(await window.bugPocket.getBug(bug.id));
+    const updated = await window.bugPocket.getBug(bug.id);
+    if (updated) {
+      setBug(updated);
+      bugRef.current = updated;
+    }
     setSpotlight(null);
   };
   const downloadAttachment = async (attachmentId: number): Promise<void> => { await window.bugPocket.downloadAttachment(attachmentId) as AttachmentDownloadResult; };
@@ -401,15 +478,8 @@ export function BugDetailsView({
     finally { setDeleting(false); }
   };
   const convertScenarioToBug = async (): Promise<void> => {
-    const updated = await window.bugPocket.updateBug(bug.id, {
-      entry_type: 'Bug', application_id: bug.application_id, module_id: bug.module_id,
-      environment_id: bug.environment_id, device_id: bug.device_id, browser_id: bug.browser_id, user_role_id: bug.user_role_id,
-      title: detailTitleValue, note: bug.note, other_details: bug.other_details,
-      steps_to_reproduce: bug.steps_to_reproduce, expected_result: bug.expected_result,
-      actual_result: bug.actual_result, status: 'Draft', severity: bug.severity || 'Medium',
-      reported: !!bug.reported, issue_platform: bug.issue_platform, issue_id: bug.issue_id,
-      issue_url: bug.issue_url, tags: bug.tags
-    });
+    const convertedBug: BugDetails = { ...bug, entry_type: 'Bug', title: detailTitleValue, status: 'Draft', severity: bug.severity || 'Medium' };
+    const updated = await window.bugPocket.updateBug(bug.id, buildBugUpdateInput(convertedBug));
     setBug(updated);
     bugRef.current = updated;
     lastSavedPayloadRef.current = serializeBugUpdateInput(buildBugUpdateInput(updated));
@@ -420,7 +490,6 @@ export function BugDetailsView({
 
   const statusOptions = statusOptionsForEntryType(bug.entry_type, settings);
   const workflowStatusOptions = getWorkflowStatusOptions(statusOptions, bug.status);
-  const currentStatusIndex = Math.max(0, workflowStatusOptions.findIndex((status) => status.value === bug.status));
   const updateStatus = (status: string): void => {
     updateField('status', status as CaptureStatus);
     updateField('reported', status === 'Reported' ? 1 : 0, { trackStatus: false });
@@ -434,7 +503,7 @@ export function BugDetailsView({
   };
 
   return (
-    <section className="page details">
+    <section className="details-route-view page details">
       <header className="page-header">
         <div>
           <button className="text-button" onClick={() => void backToDashboard()}>Back to dashboard</button>
@@ -457,10 +526,10 @@ export function BugDetailsView({
         </div>
       </header>
       <div className="detail-workflow" aria-label="Report workflow">
-        <div className="workflow-steps">
-          {workflowStatusOptions.map((status, index) => (
+        <div className="workflow-steps workflow-steps-branch">
+          {workflowStatusOptions.filter((status) => status.value === 'Draft').map((status) => (
             <button
-              className={['workflow-step', 'workflow-step-button', index < currentStatusIndex ? 'complete' : '', status.value === bug.status ? 'active' : ''].filter(Boolean).join(' ')}
+              className={['workflow-step', 'workflow-step-button', bug.status !== 'Draft' ? 'complete' : '', status.value === bug.status ? 'active' : ''].filter(Boolean).join(' ')}
               key={`${status.type}-${status.value}`}
               onClick={() => updateStatus(status.value)}
               type="button"
@@ -468,9 +537,20 @@ export function BugDetailsView({
               {status.value}
             </button>
           ))}
+          <div className="workflow-branch-endpoints" aria-label="Workflow endpoints">
+            {workflowStatusOptions.filter((status) => status.value === 'Reported' || status.value === 'Discarded').map((status) => (
+              <button
+                className={['workflow-step', 'workflow-step-button', 'workflow-endpoint', status.value === bug.status ? 'active' : ''].filter(Boolean).join(' ')}
+                key={`${status.type}-${status.value}`}
+                onClick={() => updateStatus(status.value)}
+                type="button"
+              >
+                {status.value}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="workflow-pill-controls">
-          <div className="field-with-status pill-field-status">
+        <div className="workflow-pill-controls"><div className="field-with-status pill-field-status">
             <PillDropdown label="Severity" value={bug.severity} options={settings.severities.map((severity) => ({ value: severity.value, label: severity.value }))} colorClass={severityPillClass(bug.severity)} onChange={(value) => updateField('severity', value)} />
             {fieldSaveStatus('severity')}
           </div>
@@ -549,11 +629,11 @@ export function BugDetailsView({
             <h2>Generated report preview</h2>
             <textarea className="report-preview" readOnly value={generateReport(reportBug, settings.reportTemplates.find((template) => template.name === 'Full Bug Report'))} />
             <div className="copy-grid">
-              {AI_TRIAGE_AVAILABLE && settings.aiTriageEnabled && (
+              {(byokAiReady || settings.aiTriageEnabled) && (
                 <div className="ai-triage-panel">
                   {aiStatus !== 'completed' ? (
                     <button className="ai-triage-button" disabled={triaging} onClick={() => void triageWithLocalAi()}>
-                      <Gauge size={16} /> {triaging ? 'Triaging...' : 'Triage with Local AI'}
+                      <Gauge size={16} /> {triaging ? 'Triaging...' : 'AI Triage'}
                     </button>
                   ) : (
                     <>
@@ -613,7 +693,12 @@ export function BugDetailsView({
           </div>
         </div>
       )}
-      {detailsToast && <div className="toast">{detailsToast}</div>}
     </section>
   );
 }
+
+
+
+
+
+

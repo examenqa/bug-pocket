@@ -23,7 +23,9 @@ import type {
   ShortcutAction,
   ShortcutSetting,
   SyncQueueEntityType,
-  SyncQueueOperation
+  SyncQueueEvent,
+  SyncQueueOperation,
+  AiProvider
 } from '../shared/types';
 
 const now = (): string => new Date().toISOString();
@@ -417,6 +419,7 @@ export class BugPocketDatabase {
         application_id INTEGER NULL REFERENCES applications(id) ON DELETE RESTRICT,
         module_id INTEGER NULL REFERENCES modules(id) ON DELETE RESTRICT,
         environment_id INTEGER NULL REFERENCES environments(id) ON DELETE RESTRICT,
+        user_role_id INTEGER NULL REFERENCES user_roles(id) ON DELETE RESTRICT,
         entry_type_id INTEGER NULL REFERENCES config_options(id) ON DELETE RESTRICT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -461,6 +464,7 @@ export class BugPocketDatabase {
     this.ensureColumn('bugs', 'device_id', 'INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'browser_id', 'INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'user_role_id', 'INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL');
+    this.ensureColumn('presets', 'user_role_id', 'INTEGER NULL REFERENCES user_roles(id) ON DELETE RESTRICT');
     this.ensureColumn('bugs', 'steps_to_reproduce', "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn('bugs', 'expected_result', "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn('bugs', 'actual_result', "TEXT NOT NULL DEFAULT ''");
@@ -499,6 +503,7 @@ export class BugPocketDatabase {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_application_id ON presets(application_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_module_id ON presets(module_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_environment_id ON presets(environment_id)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_user_role_id ON presets(user_role_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_entry_type_id ON presets(entry_type_id)');
   }
 
@@ -543,7 +548,16 @@ export class BugPocketDatabase {
       'quick_capture_annotate_screenshots',
       'run_on_system_startup',
       'ai_triage_enabled',
-      'ollama_model_name'
+      'ollama_model_name',
+      'supabase_project_url',
+      'supabase_anon_key',
+      'current_workspace_id',
+      'byok_ai_provider',
+      'byok_ai_base_url',
+      'byok_ai_model_id',
+      'byok_ai_api_key_encrypted',
+      'byok_ai_api_keys_encrypted',
+      'byok_ai_custom_system_prompt'
     ];
 
     const defaults: Record<string, string> = {
@@ -552,7 +566,16 @@ export class BugPocketDatabase {
       quick_capture_annotate_screenshots: 'true',
       run_on_system_startup: 'false',
       ai_triage_enabled: 'false',
-      ollama_model_name: 'qwen3-vl:8b'
+      ollama_model_name: 'qwen3-vl:8b',
+      supabase_project_url: '',
+      supabase_anon_key: '',
+      current_workspace_id: '',
+      byok_ai_provider: 'OpenRouter',
+      byok_ai_base_url: 'https://openrouter.ai/api/v1',
+      byok_ai_model_id: 'google/gemma-4-31b-it:free',
+      byok_ai_api_key_encrypted: '',
+      byok_ai_api_keys_encrypted: '{}',
+      byok_ai_custom_system_prompt: ''
     };
 
     const tx = this.db.transaction(() => {
@@ -1127,6 +1150,9 @@ Attachments:
       runOnSystemStartup: this.getRunOnSystemStartup(),
       aiTriageEnabled: this.getAiTriageEnabled(),
       ollamaModelName: this.getOllamaModelName(),
+      supabaseProjectUrl: this.getSupabaseProjectUrl(),
+      supabaseAnonKey: this.getSupabaseAnonKey(),
+      currentWorkspaceId: this.getCurrentWorkspaceId(),
       presets: this.getPresets()
     };
   }
@@ -1221,6 +1247,128 @@ Attachments:
     return { enabled, modelName: cleanedModel };
   }
 
+  getSupabaseProjectUrl(): string | null {
+    const value = this.getSetting('supabase_project_url').trim();
+    return value || null;
+  }
+
+  getSupabaseAnonKey(): string | null {
+    const value = this.getSetting('supabase_anon_key').trim();
+    return value || null;
+  }
+
+  updateSupabaseSettings(projectUrl: string, anonKey: string): { projectUrl: string | null; anonKey: string | null } {
+    const cleanedUrl = projectUrl.trim();
+    const cleanedKey = anonKey.trim();
+    this.setSetting('supabase_project_url', cleanedUrl);
+    this.setSetting('supabase_anon_key', cleanedKey);
+    return { projectUrl: cleanedUrl || null, anonKey: cleanedKey || null };
+  }
+
+  getCurrentWorkspaceId(): string | null {
+    const value = this.getSetting('current_workspace_id').trim();
+    return value || null;
+  }
+
+  updateCurrentWorkspaceId(workspaceId: string | null): string | null {
+    const cleaned = (workspaceId ?? '').trim();
+    this.setSetting('current_workspace_id', cleaned);
+    return cleaned || null;
+  }
+  getByokAiProvider(): AiProvider {
+    const value = this.getSetting('byok_ai_provider').trim();
+    if (value === 'Grok' || value === 'OpenRouter' || value === 'Gemini' || value === 'Custom/Local') return value;
+    return 'OpenRouter';
+  }
+
+  getByokAiBaseUrl(): string {
+    return this.getSetting('byok_ai_base_url').trim() || 'https://openrouter.ai/api/v1';
+  }
+
+  getByokAiModelId(): string {
+    const modelId = this.getSetting('byok_ai_model_id').trim();
+    return !modelId || modelId === 'openrouter/free' ? 'google/gemma-4-31b-it:free' : modelId;
+  }
+
+  private getEncryptedByokAiApiKeyMap(): Partial<Record<AiProvider, string>> {
+    const value = this.getSetting('byok_ai_api_keys_encrypted').trim();
+    if (value) {
+      try {
+        const parsed = JSON.parse(value) as Partial<Record<AiProvider, string>>;
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) return parsed;
+      } catch {
+        // Fall through to the legacy single-key setting below.
+      }
+    }
+
+    const legacyKey = this.getSetting('byok_ai_api_key_encrypted').trim();
+    return legacyKey ? { [this.getByokAiProvider()]: legacyKey } : {};
+  }
+
+  getEncryptedByokAiApiKey(provider = this.getByokAiProvider()): string {
+    return this.getEncryptedByokAiApiKeyMap()[provider]?.trim() ?? '';
+  }
+
+  getEncryptedByokAiApiKeys(): Partial<Record<AiProvider, string>> {
+    return this.getEncryptedByokAiApiKeyMap();
+  }
+
+  getByokAiCustomSystemPrompt(): string {
+    return this.getSetting('byok_ai_custom_system_prompt');
+  }
+
+  updateByokAiConfig(
+    provider: AiProvider,
+    baseUrl: string,
+    modelId: string,
+    encryptedApiKey: string | null | undefined,
+    customSystemPrompt: string
+  ): void {
+    this.setSetting('byok_ai_provider', provider);
+    this.setSetting('byok_ai_base_url', baseUrl.trim());
+    this.setSetting('byok_ai_model_id', modelId.trim());
+    if (encryptedApiKey !== undefined) {
+      const keyMap = this.getEncryptedByokAiApiKeyMap();
+      if (encryptedApiKey) keyMap[provider] = encryptedApiKey;
+      else delete keyMap[provider];
+      this.setSetting('byok_ai_api_keys_encrypted', JSON.stringify(keyMap));
+    }
+    this.setSetting('byok_ai_custom_system_prompt', customSystemPrompt);
+  }
+
+  getPendingSyncQueue(limit = 25): SyncQueueEvent[] {
+    return this.db
+      .prepare('SELECT id, local_seq, op_id, entity_type, entity_id, operation, payload, created_at FROM sync_queue ORDER BY local_seq, id LIMIT ?')
+      .all(limit) as SyncQueueEvent[];
+  }
+
+  markSyncEventSucceeded(event: Pick<SyncQueueEvent, 'id' | 'entity_type' | 'entity_id' | 'operation'>): void {
+    const stamp = now();
+    const tx = this.db.transaction(() => {
+      if (event.operation !== 'DELETE') {
+        if (event.entity_type === 'bug') {
+          this.db.prepare("UPDATE bugs SET sync_status = 'Synced', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
+        } else if (event.entity_type === 'attachment') {
+          this.db.prepare("UPDATE attachments SET sync_status = 'Synced', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
+        }
+      }
+      this.db.prepare('DELETE FROM sync_queue WHERE id = ?').run(event.id);
+    });
+    tx();
+  }
+
+  markSyncEventFailed(event: Pick<SyncQueueEvent, 'entity_type' | 'entity_id'>): void {
+    const stamp = now();
+    const tx = this.db.transaction(() => {
+      if (event.entity_type === 'bug') {
+        this.db.prepare("UPDATE bugs SET sync_status = 'Sync Failed', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
+      } else if (event.entity_type === 'attachment') {
+        this.db.prepare("UPDATE attachments SET sync_status = 'Sync Failed', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
+      }
+    });
+    tx();
+  }
+
   getPresets(): CapturePreset[] {
     return this.db.prepare('SELECT * FROM presets ORDER BY id LIMIT ?').all(MAX_CAPTURE_PRESETS) as CapturePreset[];
   }
@@ -1250,18 +1398,18 @@ Attachments:
       this.db
         .prepare(
           `UPDATE presets
-           SET name = ?, application_id = ?, module_id = ?, environment_id = ?, entry_type_id = ?, updated_at = ?
+           SET name = ?, application_id = ?, module_id = ?, environment_id = ?, user_role_id = ?, entry_type_id = ?, updated_at = ?
            WHERE id = ?`
         )
-        .run(name, input.application_id, input.module_id, input.environment_id, input.entry_type_id, stamp, id);
+        .run(name, input.application_id, input.module_id, input.environment_id, input.user_role_id, input.entry_type_id, stamp, id);
       return this.db.prepare('SELECT * FROM presets WHERE id = ?').get(id) as CapturePreset;
     }
     this.db
       .prepare(
-        `INSERT INTO presets (name, application_id, module_id, environment_id, entry_type_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO presets (name, application_id, module_id, environment_id, user_role_id, entry_type_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(name, input.application_id, input.module_id, input.environment_id, input.entry_type_id, stamp, stamp);
+      .run(name, input.application_id, input.module_id, input.environment_id, input.user_role_id, input.entry_type_id, stamp, stamp);
     return this.db.prepare('SELECT * FROM presets WHERE id = last_insert_rowid()').get() as CapturePreset;
   }
 
@@ -1269,6 +1417,7 @@ Attachments:
     if (input.application_id != null) this.requireExists('applications', input.application_id, 'Application');
     if (input.module_id != null) this.requireExists('modules', input.module_id, 'Module');
     if (input.environment_id != null) this.requireExists('environments', input.environment_id, 'Environment');
+    if (input.user_role_id != null) this.requireExists('user_roles', input.user_role_id, 'User role');
     if (input.entry_type_id != null) {
       const entryType = this.db.prepare("SELECT id FROM config_options WHERE id = ? AND type = 'entry_type' AND is_active = 1").get(input.entry_type_id);
       if (!entryType) throw new Error('Entry type was not found.');
@@ -1280,7 +1429,7 @@ Attachments:
     if (!row) throw new Error(`${label} was not found.`);
   }
 
-  private assertNotUsedByPreset(column: 'application_id' | 'module_id' | 'environment_id' | 'entry_type_id', id: number): void {
+  private assertNotUsedByPreset(column: 'application_id' | 'module_id' | 'environment_id' | 'user_role_id' | 'entry_type_id', id: number): void {
     const row = this.db.prepare(`SELECT COUNT(*) AS count FROM presets WHERE ${column} = ?`).get(id) as { count: number };
     if (row.count > 0) throw new Error('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.');
   }
@@ -1361,6 +1510,7 @@ Attachments:
   }
 
   deleteUserRole(id: number): void {
+    this.assertNotUsedByPreset('user_role_id', id);
     this.deleteReferenceOption('user_role', id);
   }
 
@@ -1426,8 +1576,13 @@ Attachments:
       this.db.prepare('UPDATE applications SET context_description = COALESCE(?, context_description), is_active = 1, updated_at = ? WHERE id = ?').run(context, stamp, existing.id);
       return this.db.prepare('SELECT * FROM applications WHERE id = ?').get(existing.id) as Application;
     }
-    this.db.prepare('INSERT INTO applications (name, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, 1, 1, ?, ?)').run(cleaned, context, stamp, stamp);
-    return this.db.prepare('SELECT * FROM applications WHERE name = ?').get(cleaned) as Application;
+    const tx = this.db.transaction(() => {
+      this.db.prepare('INSERT INTO applications (name, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, 1, 1, ?, ?)').run(cleaned, context, stamp, stamp);
+      const application = this.db.prepare('SELECT * FROM applications WHERE id = last_insert_rowid()').get() as Application;
+      this.db.prepare('INSERT INTO modules (application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)').run(application.id, 'General', null, stamp, stamp);
+      return application;
+    });
+    return tx();
   }
 
   updateApplication(id: number, name: string, contextDescription = ''): Application {
@@ -1890,3 +2045,4 @@ Attachments:
     return firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine;
   }
 }
+

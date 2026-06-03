@@ -5,7 +5,7 @@ import { DataManagementPanel } from './DataManagementPanel';
 interface StorageSettingsProps {
   settings: SettingsData;
   refresh: () => Promise<void>;
-  showToast: (message: string) => void;
+  showToast: (message: string, variant?: 'success' | 'info' | 'error') => void;
 }
 
 export function StorageSettings({ settings, refresh, showToast }: StorageSettingsProps) {
@@ -15,3 +15,4 @@ export function StorageSettings({ settings, refresh, showToast }: StorageSetting
     </div>
   );
 }
+
