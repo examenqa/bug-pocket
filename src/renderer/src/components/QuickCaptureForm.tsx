@@ -271,7 +271,7 @@ export function QuickCaptureForm({
     };
     document.addEventListener('keydown', handleDocumentKeyDown);
     return () => document.removeEventListener('keydown', handleDocumentKeyDown);
-  });
+  }, [reviewScreenshot, onCancel]);
 
   return (
     <div ref={quickWindowRef} tabIndex={-1} className={reviewScreenshot ? 'quick-window review-mode' : 'quick-window'} onKeyDown={handlePanelKeyDown}>

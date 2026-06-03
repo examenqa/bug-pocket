@@ -1,21 +1,20 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { HelpCircle, Home, Settings as SettingsIcon } from 'lucide-react';
-import type { ScreenshotResult } from '../../shared/types';
+import React, { useEffect, useState } from 'react';
+import { Bot, ChevronDown, Cloud, Database, FileText, HelpCircle, Home, Keyboard, Settings as SettingsIcon, SlidersHorizontal } from 'lucide-react';
+import type { ScreenshotResult, SettingsData } from '../../shared/types';
 import { QuickCaptureDraft, QuickCaptureForm } from './components/QuickCaptureForm';
 import { useSettings } from './hooks/useSettings';
 import { useHashRoute } from './hooks/useHashRoute';
 import { createQuickBugRecord } from './services/bugRecords';
 import { Dashboard } from './pages/DashboardPage';
-import { BugDetailsHost } from './pages/BugDetailPage';
+import { BugDetailsView } from './pages/BugDetailPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SnipOverlay } from './pages/SnipOverlay';
 import { SupportModal } from './components/shared/SupportModal';
-import { ToastBanner, type ToastVariant } from './components/shared/ToastBanner';
+import { ToastProvider } from './components/shared/ToastContext';
 import iconUrl from './assets/bug-pocket-icon.png';
 import titleUrl from './assets/bug-pocket-title.png';
 
-function CaptureRoute() {
-  const { settings, refresh } = useSettings();
+function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: () => Promise<void> }) {
   const [attachments, setAttachments] = useState<ScreenshotResult[]>([]);
   const [saving, setSaving] = useState(false);
   const [focusToken, setFocusToken] = useState(0);
@@ -75,18 +74,31 @@ function CaptureRoute() {
   );
 }
 
-function MainShell({ route, navigate }: { route: string; navigate: (route: string) => void }) {
-  const { settings, refresh } = useSettings();
+const settingsNavItems = [
+  { route: '/settings/workspace', label: 'Workspace & Hotkeys', icon: Keyboard },
+  { route: '/settings/presets', label: 'Capture Presets', icon: SlidersHorizontal },
+  { route: '/settings/ai', label: 'AI Processing', icon: Bot },
+  { route: '/settings/output', label: 'Output & Templates', icon: FileText },
+  { route: '/settings/storage', label: 'Storage & Backups', icon: Database },
+  { route: '/settings/sync', label: 'Cloud Sync', icon: Cloud }
+];
+
+function MainShell({ route, navigate, settings, refresh }: { route: string; navigate: (route: string) => void; settings: SettingsData; refresh: () => Promise<void> }) {
   const bugMatch = route.match(/^\/bugs\/(\d+)$/);
   const bugId = bugMatch ? Number(bugMatch[1]) : null;
   const [selectedBugId, setSelectedBugId] = useState<number | null>(bugId);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [isSettingsExpanded, setIsSettingsExpanded] = useState(route.startsWith('/settings'));
   const showingDetails = selectedBugId != null && !route.startsWith('/settings');
   const activeView = route.startsWith('/settings') ? 'settings' : 'dashboard';
 
   useEffect(() => {
     if (bugId) setSelectedBugId(bugId);
   }, [bugId]);
+
+  useEffect(() => {
+    if (route.startsWith('/settings')) setIsSettingsExpanded(true);
+  }, [route]);
 
   const closeBugDetails = (): void => {
     setSelectedBugId(null);
@@ -109,15 +121,40 @@ function MainShell({ route, navigate }: { route: string; navigate: (route: strin
         >
           <Home size={17} /> Dashboard
         </button>
-        <button
-          className={activeView === 'settings' ? 'nav active' : 'nav'}
-          onClick={() => {
-            setSelectedBugId(null);
-            navigate('/settings');
-          }}
-        >
-          <SettingsIcon size={17} /> Settings
-        </button>
+        <div className="settings-nav-group">
+          <button
+            className={activeView === 'settings' ? 'nav settings-parent active' : 'nav settings-parent'}
+            aria-expanded={isSettingsExpanded}
+            onClick={() => {
+              setSelectedBugId(null);
+              setIsSettingsExpanded((expanded) => !expanded);
+              if (!route.startsWith('/settings')) navigate('/settings/workspace');
+            }}
+          >
+            <SettingsIcon size={17} /> Settings <ChevronDown className={isSettingsExpanded ? 'settings-chevron expanded' : 'settings-chevron'} size={15} />
+          </button>
+          {isSettingsExpanded && (
+            <div className="settings-subnav" aria-label="Settings sections">
+              {settingsNavItems.map((item) => {
+                const Icon = item.icon;
+                const active = route.split('?')[0] === item.route || (item.route === '/settings/workspace' && route === '/settings');
+                return (
+                  <button
+                    key={item.route}
+                    className={active ? 'settings-subnav-link active' : 'settings-subnav-link'}
+                    type="button"
+                    onClick={() => {
+                      setSelectedBugId(null);
+                      navigate(item.route);
+                    }}
+                  >
+                    <Icon size={14} /> {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <div className="sidebar-support-area">
           <button className="nav support-nav" type="button" onClick={() => setIsSupportModalOpen(true)}>
             <HelpCircle size={17} /> Help & Support
@@ -133,7 +170,7 @@ function MainShell({ route, navigate }: { route: string; navigate: (route: strin
             <div className={showingDetails ? 'dashboard-view hidden' : 'dashboard-view'}>
               <Dashboard settings={settings} onSelect={setSelectedBugId} />
             </div>
-            {showingDetails && <BugDetailsHost bugId={selectedBugId} settings={settings} onClose={closeBugDetails} />}
+            {showingDetails && <BugDetailsView bugId={selectedBugId} settings={settings} onBack={closeBugDetails} />}
           </>
         )}
       </main>
@@ -143,26 +180,16 @@ function MainShell({ route, navigate }: { route: string; navigate: (route: strin
 
 export function App() {
   const { route, navigate } = useHashRoute();
-  const [toast, setToast] = useState<{ message: string; variant: ToastVariant } | null>(null);
-  const closeToast = useCallback(() => setToast(null), []);
-
-  useEffect(() => window.bugPocket.onToast((message, variant = 'success') => {
-    setToast({ message, variant });
-  }), []);
+  const { settings, refresh } = useSettings();
 
   let content: React.ReactNode;
-  if (route.startsWith('/capture')) content = <CaptureRoute />;
+  if (route.startsWith('/capture')) content = <CaptureRoute settings={settings} refresh={refresh} />;
   else if (route.startsWith('/snip')) content = <SnipOverlay />;
-  else content = <MainShell route={route} navigate={navigate} />;
+  else content = <MainShell route={route} navigate={navigate} settings={settings} refresh={refresh} />;
 
   return (
-    <>
+    <ToastProvider suppressToast={route.startsWith('/snip')}>
       {content}
-      {toast && !route.startsWith('/snip') && (
-        <ToastBanner message={toast.message} variant={toast.variant} onClose={closeToast} />
-      )}
-    </>
+    </ToastProvider>
   );
 }
-
-

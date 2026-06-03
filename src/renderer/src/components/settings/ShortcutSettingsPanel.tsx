@@ -4,6 +4,12 @@ import type { ShortcutAction, ShortcutSetting } from '../../../../shared/types';
 import { shortcutDisplay } from '../../utils/display';
 import { eventToAccelerator, isModifierOnlyKey } from '../../utils/shortcuts';
 
+const DEFAULT_SHORTCUTS: Record<ShortcutAction, { accelerator: string; enabled: boolean }> = {
+  quick_capture: { accelerator: 'CommandOrControl+Alt+P', enabled: true },
+  global_screenshot: { accelerator: 'CommandOrControl+Alt+S', enabled: true },
+  main_panel: { accelerator: 'CommandOrControl+Alt+M', enabled: true }
+};
+
 export function ShortcutSettingsPanel({
   shortcuts,
   refresh
@@ -13,16 +19,17 @@ export function ShortcutSettingsPanel({
 }) {
   const [recordingAction, setRecordingAction] = useState<ShortcutAction | null>(null);
   const [error, setError] = useState('');
-  const defaultShortcuts: Record<ShortcutAction, string> = {
-    quick_capture: 'CommandOrControl+Alt+P',
-    global_screenshot: 'CommandOrControl+Alt+S',
-    main_panel: 'CommandOrControl+Alt+M'
-  };
   const shortcutDescriptions: Record<ShortcutAction, string> = {
     quick_capture: 'Opens the Quick Capture Panel',
     global_screenshot: 'Starts global screenshot snip directly',
     main_panel: 'Opens the Main App Panel'
   };
+
+  const areShortcutsModified = shortcuts.some((shortcut) => {
+    const defaultShortcut = DEFAULT_SHORTCUTS[shortcut.action];
+    if (!defaultShortcut) return false;
+    return shortcut.accelerator !== defaultShortcut.accelerator || Boolean(shortcut.is_enabled) !== defaultShortcut.enabled;
+  });
 
   const updateShortcut = async (shortcut: ShortcutSetting, accelerator: string, enabled = true): Promise<void> => {
     setError('');
@@ -34,8 +41,8 @@ export function ShortcutSettingsPanel({
     setRecordingAction(null);
     setError('');
     await Promise.all(
-      Object.entries(defaultShortcuts).map(([action, accelerator]) =>
-        window.bugPocket.updateShortcut(action as ShortcutAction, accelerator, true)
+      Object.entries(DEFAULT_SHORTCUTS).map(([action, shortcut]) =>
+        window.bugPocket.updateShortcut(action as ShortcutAction, shortcut.accelerator, shortcut.enabled)
       )
     );
     await refresh();
@@ -77,7 +84,7 @@ export function ShortcutSettingsPanel({
       </div>
       <div className="shortcut-helper-row">
         <p className="settings-helper">Recommended defaults: Ctrl+Alt+P for Quick Capture, Ctrl+Alt+S for Global Screenshot, and Ctrl+Alt+M for the Main App Panel.</p>
-        <button className="shortcut-reset-button" onClick={() => void resetShortcuts()}>
+        <button className="shortcut-reset-button" disabled={!areShortcutsModified} onClick={() => void resetShortcuts()}>
           <RefreshCw size={14} />
           Reset Shortcuts
         </button>

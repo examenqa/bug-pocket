@@ -22,6 +22,7 @@ export function ModuleManager({
 }) {
   const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(applications[0]?.id ?? null);
   const [value, setValue] = useState('');
+  const [addContext, setAddContext] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editContext, setEditContext] = useState('');
@@ -41,7 +42,7 @@ export function ModuleManager({
     modules: modules.filter((module) => module.application_id === application.id)
   }));
   const unassignedModules = modules.filter((module) => module.application_id == null);
-  const previewItems = getSettingsPreviewItems(modules, (module) => module.name);
+  const previewItems = getSettingsPreviewItems(modules);
   const hiddenCount = Math.max(0, modules.length - previewItems.length);
 
   const run = async (action: () => Promise<void>): Promise<void> => {
@@ -59,8 +60,9 @@ export function ModuleManager({
     if (!mutationReady) { setError('Restart Bug Pocket to enable editing and removing settings.'); return; }
     if (!selectedApplicationId) { setError('Choose an application before adding a module.'); return; }
     if (!value.trim()) return;
-    await window.bugPocket.addModule(value, selectedApplicationId);
+    await window.bugPocket.addModule(value, selectedApplicationId, addContext);
     setValue('');
+    setAddContext('');
     await refresh();
   };
 
@@ -139,12 +141,16 @@ export function ModuleManager({
       )}
       {open && (
         <div className="settings-option-body">
-          <div className="module-add-row">
+          <div className="module-add-row module-add-row-with-context">
             <select value={selectedApplicationId ?? ''} onChange={(event) => setSelectedApplicationId(Number(event.target.value) || null)}>
               {applications.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
             </select>
             <input value={value} onChange={(event) => setValue(event.target.value)} placeholder={selectedApplication ? `Add module for ${selectedApplication.name}` : 'Choose an application'} />
             <button title="Add module" onClick={() => run(addModule)}><Plus size={16} /></button>
+            <label className="context-description-field add-context-field module-add-context-field">
+              <span>Module Description</span>
+              <textarea value={addContext} onChange={(event) => setAddContext(event.target.value)} />
+            </label>
           </div>
           <div className="module-group-list">
             {groupedModules.map(({ application, modules: applicationModules }) => (

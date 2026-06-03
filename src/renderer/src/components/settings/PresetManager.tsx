@@ -112,7 +112,7 @@ export function PresetManager({
     if (editingId === id) reset();
   };
 
-  const previewItems = getSettingsPreviewItems(settings.presets, (preset) => preset.name);
+  const previewItems = getSettingsPreviewItems(settings.presets);
   const hiddenCount = Math.max(0, settings.presets.length - previewItems.length);
   const formDisabled = !mutationReady || presetLimitReached;
 
