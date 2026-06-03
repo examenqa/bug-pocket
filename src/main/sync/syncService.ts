@@ -41,6 +41,7 @@ export class SyncEngine {
     this.anonKey = this.database.getSupabaseAnonKey() ?? '';
 
     if (!this.projectUrl || !this.anonKey) {
+      this.database.setCloudSyncSessionActive(false);
       this.client = null;
       this.initializedProjectUrl = '';
       this.initializedAnonKey = '';
@@ -138,6 +139,7 @@ export class SyncEngine {
     try {
       const workspaceId = await this.captureCurrentWorkspaceId(client);
       if (!workspaceId) {
+        this.database.setCloudSyncSessionActive(false);
         this.stopBackgroundSync();
         return {
           success: false,
@@ -147,6 +149,7 @@ export class SyncEngine {
         };
       }
 
+      this.database.setCloudSyncSessionActive(true);
       this.startBackgroundSync();
       return {
         success: true,
@@ -156,6 +159,7 @@ export class SyncEngine {
         message: 'Signed in and workspace captured locally.'
       };
     } catch (caught) {
+      this.database.setCloudSyncSessionActive(false);
       this.stopBackgroundSync();
       return {
         success: false,
@@ -173,6 +177,7 @@ export class SyncEngine {
     if (error) return this.authFailure(error.message);
 
     if (!data.session) {
+      this.database.setCloudSyncSessionActive(false);
       this.database.updateCurrentWorkspaceId(null);
       this.stopBackgroundSync();
       return {
@@ -185,6 +190,7 @@ export class SyncEngine {
 
     try {
       const workspaceId = await this.captureCurrentWorkspaceId(client);
+      this.database.setCloudSyncSessionActive(Boolean(workspaceId));
       if (workspaceId) this.startBackgroundSync();
       else this.stopBackgroundSync();
       return {
@@ -197,6 +203,7 @@ export class SyncEngine {
           : 'Account created, but no workspace membership was found yet.'
       };
     } catch (caught) {
+      this.database.setCloudSyncSessionActive(false);
       this.stopBackgroundSync();
       return {
         success: false,
@@ -212,6 +219,7 @@ export class SyncEngine {
     const client = this.requireClient();
     const { error } = await client.auth.signOut();
     if (error) return this.authFailure(error.message);
+    this.database.setCloudSyncSessionActive(false);
     this.stopBackgroundSync();
     this.database.updateCurrentWorkspaceId(null);
     return {
@@ -229,10 +237,12 @@ export class SyncEngine {
 
     const { data, error } = await this.client.auth.getUser();
     if (error || !data.user) {
+      this.database.setCloudSyncSessionActive(false);
       this.stopBackgroundSync();
       return { authenticated: false, workspaceId: this.database.getCurrentWorkspaceId() ?? undefined };
     }
 
+    this.database.setCloudSyncSessionActive(Boolean(this.database.getCurrentWorkspaceId()));
     if (this.database.getCurrentWorkspaceId()) this.startBackgroundSync();
 
     return {
@@ -503,6 +513,7 @@ export class SyncEngine {
   }
 
   private authFailure(message: string): SyncAuthResult {
+    this.database.setCloudSyncSessionActive(false);
     return {
       success: false,
       authenticated: false,

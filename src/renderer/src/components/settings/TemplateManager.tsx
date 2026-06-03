@@ -160,6 +160,7 @@ export function TemplateManager({
         {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
       </select>
       <input value={name} onChange={(event) => setName(event.target.value)} />
+      <p className="settings-helper template-token-helper">Template variables insert at your cursor. Unrecognized tokens remain as raw text in the final export.</p>
       <div className="template-token-toolbar" aria-label="Template variables">
         {availableTemplateTokens.map((token) => (
           <button key={token} type="button" className="template-token-pill" onClick={() => insertToken(token)}>+ {token}</button>

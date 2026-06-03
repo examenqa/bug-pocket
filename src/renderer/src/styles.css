@@ -446,6 +446,7 @@ button:disabled {
 }
 
 .state-pill {
+  display: inline-flex;
   justify-content: space-between;
   align-items: center;
   min-height: 30px;
@@ -461,16 +462,17 @@ button:disabled {
     0 4px 10px rgba(6, 27, 66, 0.08);
 }
 
-.state-pill.status-new {
-  border-color: #9bc9ff;
-  background: #dceeff;
-  color: #064b9f;
+.state-pill.status-new,
+.state-pill.status-draft {
+  border-color: #f0d77a;
+  background: #fff1af;
+  color: #715100;
 }
 
 .state-pill.status-reported {
-  border-color: #b6dafd;
-  background: #e6f3ff;
-  color: #0756bb;
+  border-color: #bfe6a5;
+  background: #e5f8d3;
+  color: #2f7800;
 }
 
 .state-pill.status-positive {
@@ -4524,8 +4526,6 @@ button.danger-soft {
     grid-template-columns: 1fr;
   }
 }
-
-
 
 
 
