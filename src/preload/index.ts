@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AiByokConfig, AiIssueProcessPayload, AiProvider, AiTriageBugPayload, BugFilters, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction } from '../shared/types';
+import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction } from '../shared/types';
 
 const api = {
   openQuickCapture: () => ipcRenderer.invoke('window:openQuickCapture'),
@@ -40,7 +40,7 @@ const api = {
   updateQuickCaptureAnnotationReview: (enabled: boolean) => ipcRenderer.invoke('settings:updateQuickCaptureAnnotationReview', enabled),
   updateAiTriageOptions: (enabled: boolean, modelName: string) => ipcRenderer.invoke('settings:updateAiTriageOptions', enabled, modelName),
   getAiConfig: () => ipcRenderer.invoke('get-ai-config'),
-  saveAiConfig: (input: { provider: AiProvider; baseUrl: string; modelId: string; apiKey?: string; clearApiKey?: boolean; customSystemPrompt: string }) => ipcRenderer.invoke('save-ai-config', input),
+  saveAiConfig: (input: AiConfigSaveInput): Promise<AiByokConfig> => ipcRenderer.invoke('save-ai-config', input),
   updateSupabaseSettings: (projectUrl: string, anonKey: string) => ipcRenderer.invoke('settings:updateSupabaseSettings', projectUrl, anonKey),
   testSupabaseConnection: () => ipcRenderer.invoke('sync:testConnection'),
   authSignIn: (email: string, password: string) => ipcRenderer.invoke('sync:authSignIn', email, password),
@@ -80,7 +80,6 @@ const api = {
   exportBackup: () => ipcRenderer.invoke('backup:export'),
   importBackup: () => ipcRenderer.invoke('backup:import'),
   chooseBackupDirectory: () => ipcRenderer.invoke('backup:chooseDirectory'),
-  triageWithOllama: (payload: AiTriageBugPayload) => ipcRenderer.invoke('ai:triageWithOllama', payload),
   triageBug: (bugData: unknown) => ipcRenderer.invoke('ai:triageBug', bugData),
   processIssueWithByokAi: (payload: AiIssueProcessPayload) => ipcRenderer.invoke('ai:processIssueWithByok', payload),
   onQuickScreenshotReviewReady: (callback: () => void) => {

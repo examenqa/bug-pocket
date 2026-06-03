@@ -8,7 +8,7 @@ import { BugPocketDatabase } from './database';
 import { triageBugWithOllama } from './ai/ollamaTriage';
 import { getByokAiConfig, processIssueWithByokAi, saveByokAiConfig, triageBugWithByokAi } from './ai/byokIssueProcessor';
 import { SyncEngine } from './sync/syncService';
-import type { AiIssueProcessPayload, AiProvider, AiTriageBugPayload, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting } from '../shared/types';
+import type { AiIssueProcessPayload, AiProvider, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting } from '../shared/types';
 
 if (!app.isPackaged) {
   app.setPath('userData', `${app.getPath('userData')}-dev`);
@@ -86,6 +86,17 @@ function createMainWindow(route = '/dashboard', showOnReady = true): void {
       contextIsolation: true,
       nodeIntegration: false
     }
+  });
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    if (!params.isEditable && !params.selectionText.trim()) return;
+    const menu = Menu.buildFromTemplate([
+      { role: 'cut', enabled: params.isEditable },
+      { role: 'copy', enabled: params.selectionText.trim().length > 0 },
+      { role: 'paste', enabled: params.isEditable },
+      { type: 'separator' },
+      { role: 'selectAll' }
+    ]);
+    menu.popup({ window: mainWindow ?? undefined });
   });
   mainWindow.loadURL(rendererUrl(route));
   mainWindow.once('ready-to-show', () => {
@@ -232,9 +243,20 @@ function openMainWindow(route = '/dashboard'): void {
   mainWindow?.focus();
 }
 
-function openSettings(section?: string): void {
+function settingsRouteForSection(section?: string): string {
   const safeSection = typeof section === 'string' && /^[a-z0-9_-]+$/i.test(section) ? section : '';
-  const route = safeSection ? `/settings?card=${safeSection}` : '/settings';
+  if (!safeSection) return '/settings/workspace';
+  if (safeSection === 'presets') return '/settings/presets?card=presets';
+  if (safeSection === 'ai-options') return '/settings/ai?card=ai-options';
+  if (safeSection === 'templates') return '/settings/output?card=templates';
+  if (['backup', 'data-management', 'storage'].includes(safeSection)) return `/settings/storage?card=${safeSection}`;
+  if (['cloud-sync', 'sync'].includes(safeSection)) return `/settings/sync?card=${safeSection}`;
+  if (['issue-platforms', 'jira-workspace'].includes(safeSection)) return `/settings/output?card=${safeSection}`;
+  return `/settings/workspace?card=${safeSection}`;
+}
+
+function openSettings(section?: string): void {
+  const route = settingsRouteForSection(section);
   openMainWindow(route);
   setTimeout(() => {
     mainWindow?.show();
@@ -382,8 +404,6 @@ async function importBackup(): Promise<BackupImportResult> {
     const message = caught instanceof Error ? caught.message : 'Backup import failed.';
     try {
       db = new BugPocketDatabase();
-    syncEngine = new SyncEngine(db);
-    syncEngine.initialize();
       registerAppShortcuts();
     } catch {
       // If reopening fails, surface the original restore error.
@@ -583,7 +603,7 @@ function suspendAppShortcuts(): void {
   globalShortcut.unregisterAll();
 }
 
-function cancelScreenshotCapture(): void {
+async function cancelScreenshotCapture(): Promise<void> {
   snipWindow?.close();
   snipWindow = null;
   if (screenshotBugId) {
@@ -593,7 +613,7 @@ function cancelScreenshotCapture(): void {
     return;
   }
   restoreMainAfterSnip();
-  openQuickCapture();
+  await openQuickCapture();
   resetSnipWindowState();
 }
 
@@ -665,7 +685,7 @@ async function startScreenshotCapture(bugId?: number): Promise<void> {
   snipWindow.webContents.on('before-input-event', (event, input) => {
     if (input.key === 'Escape' && input.type === 'keyDown') {
       event.preventDefault();
-      cancelScreenshotCapture();
+      void cancelScreenshotCapture();
     }
   });
   await snipWindow.loadURL(rendererUrl('/snip'));
@@ -768,6 +788,30 @@ async function discardPendingQuickScreenshot(): Promise<void> {
   pendingQuickScreenshotDataUrl = '';
   restoreQuickCaptureCompactSize();
   await openQuickCapture();
+}
+
+
+async function triageBugWithConfiguredAi(bugData: unknown): Promise<string> {
+  const byokConfig = getByokAiConfig(db);
+  if (byokConfig.hasApiKey) return triageBugWithByokAi(db, bugData);
+
+  if (db.getAiTriageEnabled()) {
+    const localResult = await triageBugWithOllama(bugData as AiTriageBugPayload, db.getOllamaModelName());
+    if (!localResult.success) throw new Error(localResult.error || 'Local AI triage failed.');
+    return JSON.stringify(normalizeOllamaTriageResult(localResult.result));
+  }
+
+  throw new Error('AI triage is not configured. Add a BYOK API key or enable local Ollama triage in Settings.');
+}
+
+function normalizeOllamaTriageResult(result: AiTriageResult): Record<string, string> {
+  return {
+    title: result.bug_title || '',
+    bugNote: result.refined_summary || '',
+    stepsToReproduce: result.steps_to_reproduce || '',
+    expectedResult: result.expected_result || '',
+    actualResult: result.actual_result || ''
+  };
 }
 
 function registerIpc(): void {
@@ -916,10 +960,7 @@ function registerIpc(): void {
   ipcMain.handle('sync:authSignUp', (_event, email: string, password: string) => syncEngine.authSignUp(email, password));
   ipcMain.handle('sync:authSignOut', () => syncEngine.authSignOut());
   ipcMain.handle('sync:getSessionStatus', () => syncEngine.getSyncSessionStatus());
-  ipcMain.handle('ai:triageWithOllama', (_event, _payload: AiTriageBugPayload) => {
-    throw new Error('Legacy Ollama triage is disabled. Use universal AI triage instead.');
-  });
-  ipcMain.handle('ai:triageBug', (_event, bugData: unknown) => triageBugWithByokAi(db, bugData));
+  ipcMain.handle('ai:triageBug', (_event, bugData: unknown) => triageBugWithConfiguredAi(bugData));
   ipcMain.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => processIssueWithByokAi(db, payload));
 }
 
@@ -953,4 +994,8 @@ app.on('window-all-closed', () => {});
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
+
+
+
+
 

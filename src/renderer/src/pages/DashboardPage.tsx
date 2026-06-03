@@ -6,9 +6,8 @@ import { Badge } from '../components/shared/Badge';
 import { Select } from '../components/shared/Select';
 import { ScreenshotAnnotator } from '../components/ScreenshotAnnotator';
 import { formatDate } from '../services/reports';
-import { getEntryDisplay, formatTableDate, severityClass, syncClass, syncStatuses, captureStatusOptions } from '../utils/display';
+import { getEntryDisplay, formatTableDate, severityClass, syncClass, syncStatuses, captureStatusOptions, shortcutDisplay } from '../utils/display';
 import { getActiveFilterChips, getModulesForApplication } from '../utils/filters';
-import { shortcutDisplay } from '../utils/display';
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
 
 export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSelect: (id: number) => void }) {
@@ -17,14 +16,13 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [spotlight, setSpotlight] = useState<SpotlightState | null>(null);
 
-  const refresh = async (): Promise<void> => {
-    setBugs(await window.bugPocket.listBugs(filters));
-  };
-
   useEffect(() => {
-    refresh();
-    return window.bugPocket.onBugsChanged(() => { refresh(); });
-  }, [filters.search, filters.entryType, filters.applicationId, filters.moduleId, filters.environmentId, filters.status, filters.severity, filters.syncStatus, filters.reported]);
+    const refresh = async (): Promise<void> => {
+      setBugs(await window.bugPocket.listBugs(filters));
+    };
+    void refresh();
+    return window.bugPocket.onBugsChanged(() => { void refresh(); });
+  }, [filters]);
 
   const statusFilterOptions = captureStatusOptions;
   const moduleFilterOptions = getModulesForApplication(settings, filters.applicationId === 'all' ? null : filters.applicationId ?? null);

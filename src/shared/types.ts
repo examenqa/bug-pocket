@@ -276,12 +276,23 @@ export interface SyncAuthResult extends SyncSessionStatus {
 
 export type AiProvider = 'OpenAI' | 'Grok' | 'OpenRouter' | 'Gemini' | 'Custom/Local';
 
+export interface AiConfigSaveInput {
+  provider: AiProvider;
+  baseUrl: string;
+  modelId: string;
+  apiKey?: string;
+  clearApiKey?: boolean;
+  customSystemPrompt: string;
+}
+
 export interface AiByokConfig {
   provider: AiProvider;
   baseUrl: string;
   modelId: string;
   hasApiKey: boolean;
+  hasApiKeys?: Partial<Record<AiProvider, boolean>>;
   apiKey?: string;
+  apiKeys?: Partial<Record<AiProvider, string>>;
   customSystemPrompt: string;
 }
 

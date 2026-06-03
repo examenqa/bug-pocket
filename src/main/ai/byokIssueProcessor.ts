@@ -10,7 +10,7 @@ const legacyDefaultSystemPrompts = [
   'You are a Senior QA Engineer. Analyze the user\'s text and the provided Base64 screenshot. You must be highly descriptive. Identify the exact UI elements, button states, and error messages visible in the image. Expand the user\'s brief notes into a comprehensive, professional bug report. Extract the details into a strict JSON object with exactly these keys: title (a concise technical summary), bugNote (a highly detailed description of the failure and visual UI state), stepsToReproduce (numbered, granular steps), expectedResult, actualResult. Do not output any markdown outside this JSON object.',
   'You are a Senior QA Engineer. Analyze the user\'s text and the provided Base64 screenshot. You must be highly descriptive. Identify the exact UI elements, button states, and error messages visible in the image. If explicit steps to reproduce are missing, reverse-engineer the logical user journey required to reach the failed state shown in the UI. Extract the details into a strict JSON object with exactly these keys: title, bugNote, stepsToReproduce (numbered, granular steps), expectedResult, actualResult. Do not output any markdown outside this JSON object.',
 ];
-const defaultSystemPrompt = 'You are a Senior QA Engineer. Analyze the user\'s text and the provided Base64 screenshot. Identify exact UI elements, button states, and error messages. You MUST generate the following details as a strict JSON object with exactly these keys:\n\ntitle: A strict limit of 100 characters maximum (7-10 words). Do not include error codes or lengthy descriptions here.\n\nbugNote: A highly detailed description of the failure and visual UI state.\n\nstepsToReproduce: You MUST write 3 to 5 numbered steps reverse-engineered from the visual context. NEVER leave this blank and NEVER use placeholders. Assume the logical journey required to reach the screen.\n\nexpectedResult: What should have happened.\n\nactualResult: What actually happened.\nDo not output any markdown outside this JSON object.';
+const defaultSystemPrompt = 'You are a Senior QA Engineer. Analyze the user\'s text and the provided Base64 screenshot. Identify exact UI elements, button states, and error messages. You MUST generate the following details as a strict JSON object with exactly these keys:\n\ntitle: A strict limit of 50 characters maximum (5-7 words). Do not include error codes or lengthy descriptions here.\n\nbugNote: A highly detailed description of the failure and visual UI state.\n\nstepsToReproduce: You MUST write 3 to 5 numbered steps reverse-engineered from the visual context. NEVER leave this blank and NEVER use placeholders. Assume the logical journey required to reach the screen.\n\nexpectedResult: What should have happened.\n\nactualResult: What actually happened.\nDo not output any markdown outside this JSON object.';
 
 type ChatCompletionResponse = {
   choices?: Array<{ message?: { content?: string } }>;
@@ -20,11 +20,21 @@ type ChatCompletionResponse = {
 };
 
 export function getByokAiConfig(database: BugPocketDatabase): AiByokConfig {
+  const provider = database.getByokAiProvider();
+  const encryptedKeys = database.getEncryptedByokAiApiKeys();
+  const apiKeys = decryptApiKeyMap(encryptedKeys);
+  const hasApiKeys = Object.fromEntries(
+    Object.entries(encryptedKeys).map(([key, value]) => [key, Boolean(value)])
+  ) as Partial<Record<AiProvider, boolean>>;
+
   return {
-    provider: database.getByokAiProvider(),
+    provider,
     baseUrl: database.getByokAiBaseUrl(),
     modelId: database.getByokAiModelId(),
-    hasApiKey: Boolean(database.getEncryptedByokAiApiKey()),
+    hasApiKey: Boolean(encryptedKeys[provider]),
+    hasApiKeys,
+    apiKey: apiKeys[provider] ?? '',
+    apiKeys,
     customSystemPrompt: database.getByokAiCustomSystemPrompt()
   };
 }
@@ -43,7 +53,7 @@ export function saveByokAiConfig(
 
 export async function processIssueWithByokAi(database: BugPocketDatabase, payload: AiIssueProcessPayload): Promise<AiIssueProcessResult> {
   const config = getByokAiConfig(database);
-  const apiKey = decryptApiKey(database.getEncryptedByokAiApiKey());
+  const apiKey = decryptApiKey(database.getEncryptedByokAiApiKey(config.provider));
   if (!apiKey) return { success: false, provider: config.provider, error: 'AI API key is not configured.' };
 
   const baseUrl = normalizeBaseUrl(config.baseUrl);
@@ -70,7 +80,7 @@ export async function processIssueWithByokAi(database: BugPocketDatabase, payloa
 }
 export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: unknown): Promise<string> {
   const config = getByokAiConfig(database);
-  const apiKey = decryptApiKey(database.getEncryptedByokAiApiKey());
+  const apiKey = decryptApiKey(database.getEncryptedByokAiApiKey(config.provider));
   if (!apiKey) throw new Error('AI API key is not configured. Add one in Settings > AI Processing.');
 
   const baseUrl = normalizeBaseUrl(config.baseUrl);
@@ -99,6 +109,15 @@ function decryptApiKey(encryptedValue: string): string {
   }
 }
 
+function decryptApiKeyMap(encryptedKeys: Partial<Record<AiProvider, string>>): Partial<Record<AiProvider, string>> {
+  const decrypted: Partial<Record<AiProvider, string>> = {};
+  (Object.entries(encryptedKeys) as Array<[AiProvider, string]>).forEach(([provider, encryptedValue]) => {
+    const apiKey = decryptApiKey(encryptedValue);
+    if (apiKey) decrypted[provider] = apiKey;
+  });
+  return decrypted;
+}
+
 function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, '');
 }
@@ -116,10 +135,13 @@ function extractJsonObjectString(value: string): string {
 function readBugImageDataUrl(bugData: unknown): string | undefined {
   const payload = bugData as { image_file_path?: unknown } | null;
   const imageFilePath = typeof payload?.image_file_path === 'string' ? payload.image_file_path : '';
+  console.log('Attached image path:', imageFilePath || '[none]');
   if (!imageFilePath) return undefined;
 
   const image = nativeImage.createFromPath(imageFilePath);
-  if (image.isEmpty()) return undefined;
+  if (image.isEmpty()) {
+    throw new Error('Image payload failed to encode. The AI cannot process this request without visual context.');
+  }
 
   const size = image.getSize();
   const optimizedImage = size.width > 1024 ? image.resize({ width: 1024 }) : image;
@@ -238,7 +260,8 @@ async function callOpenAiCompatibleChat(input: {
             : input.userPrompt
         }
       ],
-      temperature: 0.2
+      temperature: 0.2,
+      response_format: { type: 'json_object' }
     })
   });
 
@@ -276,6 +299,7 @@ function createAiProviderError(status: number, statusText: string, data: ChatCom
     })
   );
 }
+
 
 
 

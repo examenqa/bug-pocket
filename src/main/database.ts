@@ -24,7 +24,8 @@ import type {
   ShortcutSetting,
   SyncQueueEntityType,
   SyncQueueEvent,
-  SyncQueueOperation
+  SyncQueueOperation,
+  AiProvider
 } from '../shared/types';
 
 const now = (): string => new Date().toISOString();
@@ -555,6 +556,7 @@ export class BugPocketDatabase {
       'byok_ai_base_url',
       'byok_ai_model_id',
       'byok_ai_api_key_encrypted',
+      'byok_ai_api_keys_encrypted',
       'byok_ai_custom_system_prompt'
     ];
 
@@ -572,6 +574,7 @@ export class BugPocketDatabase {
       byok_ai_base_url: 'https://openrouter.ai/api/v1',
       byok_ai_model_id: 'google/gemma-4-31b-it:free',
       byok_ai_api_key_encrypted: '',
+      byok_ai_api_keys_encrypted: '{}',
       byok_ai_custom_system_prompt: ''
     };
 
@@ -1272,7 +1275,7 @@ Attachments:
     this.setSetting('current_workspace_id', cleaned);
     return cleaned || null;
   }
-  getByokAiProvider(): 'OpenAI' | 'Grok' | 'OpenRouter' | 'Gemini' | 'Custom/Local' {
+  getByokAiProvider(): AiProvider {
     const value = this.getSetting('byok_ai_provider').trim();
     if (value === 'Grok' || value === 'OpenRouter' || value === 'Gemini' || value === 'Custom/Local') return value;
     return 'OpenRouter';
@@ -1287,8 +1290,27 @@ Attachments:
     return !modelId || modelId === 'openrouter/free' ? 'google/gemma-4-31b-it:free' : modelId;
   }
 
-  getEncryptedByokAiApiKey(): string {
-    return this.getSetting('byok_ai_api_key_encrypted').trim();
+  private getEncryptedByokAiApiKeyMap(): Partial<Record<AiProvider, string>> {
+    const value = this.getSetting('byok_ai_api_keys_encrypted').trim();
+    if (value) {
+      try {
+        const parsed = JSON.parse(value) as Partial<Record<AiProvider, string>>;
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) return parsed;
+      } catch {
+        // Fall through to the legacy single-key setting below.
+      }
+    }
+
+    const legacyKey = this.getSetting('byok_ai_api_key_encrypted').trim();
+    return legacyKey ? { [this.getByokAiProvider()]: legacyKey } : {};
+  }
+
+  getEncryptedByokAiApiKey(provider = this.getByokAiProvider()): string {
+    return this.getEncryptedByokAiApiKeyMap()[provider]?.trim() ?? '';
+  }
+
+  getEncryptedByokAiApiKeys(): Partial<Record<AiProvider, string>> {
+    return this.getEncryptedByokAiApiKeyMap();
   }
 
   getByokAiCustomSystemPrompt(): string {
@@ -1296,7 +1318,7 @@ Attachments:
   }
 
   updateByokAiConfig(
-    provider: 'OpenAI' | 'Grok' | 'OpenRouter' | 'Gemini' | 'Custom/Local',
+    provider: AiProvider,
     baseUrl: string,
     modelId: string,
     encryptedApiKey: string | null | undefined,
@@ -1305,7 +1327,12 @@ Attachments:
     this.setSetting('byok_ai_provider', provider);
     this.setSetting('byok_ai_base_url', baseUrl.trim());
     this.setSetting('byok_ai_model_id', modelId.trim());
-    if (encryptedApiKey !== undefined) this.setSetting('byok_ai_api_key_encrypted', encryptedApiKey ?? '');
+    if (encryptedApiKey !== undefined) {
+      const keyMap = this.getEncryptedByokAiApiKeyMap();
+      if (encryptedApiKey) keyMap[provider] = encryptedApiKey;
+      else delete keyMap[provider];
+      this.setSetting('byok_ai_api_keys_encrypted', JSON.stringify(keyMap));
+    }
     this.setSetting('byok_ai_custom_system_prompt', customSystemPrompt);
   }
 
@@ -1549,8 +1576,13 @@ Attachments:
       this.db.prepare('UPDATE applications SET context_description = COALESCE(?, context_description), is_active = 1, updated_at = ? WHERE id = ?').run(context, stamp, existing.id);
       return this.db.prepare('SELECT * FROM applications WHERE id = ?').get(existing.id) as Application;
     }
-    this.db.prepare('INSERT INTO applications (name, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, 1, 1, ?, ?)').run(cleaned, context, stamp, stamp);
-    return this.db.prepare('SELECT * FROM applications WHERE name = ?').get(cleaned) as Application;
+    const tx = this.db.transaction(() => {
+      this.db.prepare('INSERT INTO applications (name, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, 1, 1, ?, ?)').run(cleaned, context, stamp, stamp);
+      const application = this.db.prepare('SELECT * FROM applications WHERE id = last_insert_rowid()').get() as Application;
+      this.db.prepare('INSERT INTO modules (application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)').run(application.id, 'General', null, stamp, stamp);
+      return application;
+    });
+    return tx();
   }
 
   updateApplication(id: number, name: string, contextDescription = ''): Application {

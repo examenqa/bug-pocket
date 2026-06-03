@@ -1,11 +1,9 @@
 import React from 'react';
 import type { SettingsData } from '../../../../shared/types';
 import { CapturePreferencesPanel } from './CapturePreferencesPanel';
-import { JiraWorkspacePanel } from './JiraWorkspacePanel';
 import { ModuleManager } from './ModuleManager';
 import { OptionManager } from './OptionManager';
 import { ShortcutSettingsPanel } from './ShortcutSettingsPanel';
-import { TemplateManager } from './TemplateManager';
 
 interface GeneralSettingsProps {
   settings: SettingsData;
@@ -30,7 +28,6 @@ export function GeneralSettings({
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Could not update setting.';
       if (message.includes('active preset')) showToast('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.', 'error');
-      throw caught;
     }
   };
 
@@ -59,7 +56,9 @@ export function GeneralSettings({
             onToggle={() => toggleSettingsCard('applications')}
             mutationReady={mutationReady}
             items={settings.applications.map((item) => ({ id: item.id, label: item.name, contextDescription: item.context_description ?? '', isSynced: item.is_synced !== 0 }))}
-            onAdd={async (value) => { await window.bugPocket.addApplication(value); await refresh(); }}
+            addContextLabel="Application Description"
+            addContextRequired={true}
+            onAdd={async (value, contextDescription = '') => { await window.bugPocket.addApplication(value, contextDescription); await refresh(); }}
             onUpdate={async (id, value, item) => { await window.bugPocket.updateApplication(id, value, item.contextDescription ?? ''); await refresh(); }}
             onUpdateContext={async (id, contextDescription) => { await window.bugPocket.updateApplicationContext(id, contextDescription); await refresh(); }}
             onDelete={async (id) => runPresetLockedDelete(async () => { await window.bugPocket.deleteApplication(id); await refresh(); })}
@@ -132,31 +131,9 @@ export function GeneralSettings({
           />
         </div>
       </section>
-
-      <section className="settings-section-group" aria-labelledby="settings-output-heading">
-        <div className="settings-section-heading">
-          <h2 id="settings-output-heading">Report Output</h2>
-          <p>Manage issue destinations, Jira workspace routing, and copy/export report templates.</p>
-        </div>
-        <div className="settings-grid outbound-grid">
-          <OptionManager
-            title="Report Destinations"
-            open={openSettingsCard === 'issue-platforms'}
-            onToggle={() => toggleSettingsCard('issue-platforms')}
-            mutationReady={mutationReady}
-            items={settings.issuePlatforms.map((item) => ({ id: item.id, label: item.value }))}
-            onAdd={async (value) => { await window.bugPocket.addConfigOption('issue_platform', value); await refresh(); }}
-            onUpdate={async (id, value) => { await window.bugPocket.updateConfigOption(id, value); await refresh(); }}
-            onDelete={async (id) => { await window.bugPocket.deleteConfigOption(id); await refresh(); }}
-          />
-          {settings.issuePlatforms.some((platform) => platform.value.toLowerCase() === 'jira') && (
-            <JiraWorkspacePanel value={settings.jiraWorkspaceUrl} mutationReady={mutationReady} refresh={refresh} />
-          )}
-          <TemplateManager templates={settings.reportTemplates} refresh={refresh} />
-        </div>
-      </section>
-    </div>
+</div>
   );
 }
+
 
 

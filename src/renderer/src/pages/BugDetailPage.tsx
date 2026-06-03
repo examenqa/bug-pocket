@@ -3,7 +3,7 @@ import { Camera, Check, ChevronLeft, ChevronRight, Clipboard, Download, Gauge, S
 import type { AiByokConfig, AiIssueProcessResult, Attachment, AttachmentDownloadResult, BugDetails, CaptureStatus, SettingsData } from '../../../shared/types';
 import { Badge, SyncBadge } from '../components/shared/Badge';
 import { PillDropdown } from '../components/shared/PillDropdown';
-import { ToastBanner, type ToastVariant } from '../components/shared/ToastBanner';
+import { useToast } from '../components/shared/ToastContext';
 import { OptionSelect, ReferenceSelect } from '../components/shared/OptionSelect';
 import { ScreenshotAnnotator } from '../components/ScreenshotAnnotator';
 import { formatDate, generateReport, buildIssueDeepLink, IssuePlatformLink } from '../services/reports';
@@ -20,31 +20,6 @@ import { buildBugUpdateInput, serializeBugUpdateInput, DetailsSaveState, AiTriag
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
 import { useDebounce } from '../hooks/useDebounce';
 
-const AI_TRIAGE_AVAILABLE = true;
-
-export function BugDetailsHost({
-  bugId,
-  settings,
-  onClose
-}: {
-  bugId: number;
-  settings: SettingsData;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && !document.querySelector('.spotlight-backdrop')) onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  return (
-    <section className="details-route-view" aria-label="Entry details">
-      <BugDetailsView bugId={bugId} settings={settings} onBack={onClose} />
-    </section>
-  );
-}
 
 export function BugDetailsView({
   bugId,
@@ -58,14 +33,13 @@ export function BugDetailsView({
   const [bug, setBug] = useState<BugDetails | null>(null);
   const [attachmentPreviews, setAttachmentPreviews] = useState<Record<number, string>>({});
   const [copied, setCopied] = useState('');
-  const [detailsToast, setDetailsToast] = useState('');
-  const [detailsToastVariant, setDetailsToastVariant] = useState<ToastVariant>('success');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [spotlight, setSpotlight] = useState<SpotlightState | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [saveState, setSaveState] = useState<DetailsSaveState>('idle');
   const [aiStatus, setAiStatus] = useState<AiTriageStatus>('idle');
+  const [byokAiReady, setByokAiReady] = useState(false);
   const [showAiRefinement, setShowAiRefinement] = useState(false);
   const [aiRefinementNote, setAiRefinementNote] = useState('');
   const [lastEditedField, setLastEditedField] = useState<keyof BugDetails | null>(null);
@@ -74,15 +48,35 @@ export function BugDetailsView({
   const lastSavedPayloadRef = useRef('');
   const saveStateTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef<Promise<BugDetails | null> | null>(null);
-  const showDetailsToast = useCallback((message: string, variant: ToastVariant = 'success'): void => {
-    setDetailsToastVariant(variant);
-    setDetailsToast(message);
-  }, []);
-  const closeDetailsToast = useCallback(() => setDetailsToast(''), []);
+  const showDetailsToast = useToast();
 
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
   const triaging = aiStatus === 'loading';
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkAiStatus = async (): Promise<void> => {
+      try {
+        const config = (await window.bugPocket.getAiConfig()) as AiByokConfig;
+        if (!cancelled) setByokAiReady(Boolean(config?.hasApiKey || config?.apiKey));
+      } catch {
+        if (!cancelled) setByokAiReady(false);
+      }
+    };
+    void checkAiStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && !document.querySelector('.spotlight-backdrop')) onBack();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onBack]);
 
   useEffect(() => {
     let cancelled = false;
@@ -258,7 +252,7 @@ export function BugDetailsView({
     const created = (await window.bugPocket.saveAnnotatedAttachment(currentSpotlightAttachment.id, dataUrl)) as Attachment;
     const updatedBug = await window.bugPocket.getBug(bug.id);
     const lineageData = await loadAttachmentLineage(created.id);
-    setBug(updatedBug);
+    if (updatedBug) setBug(updatedBug);
     setAttachmentPreviews((current) => ({ ...current, [created.id]: dataUrl }));
     setSpotlight((current) => {
       if (!current) return current;
@@ -320,7 +314,7 @@ export function BugDetailsView({
     });
   };
 
-  if (!bug) return <section className="page">Loading...</section>;
+  if (!bug) return <section className="details-route-view page">Loading...</section>;
 
   const entryDisplay = getEntryDisplay(bug);
   const detailTitleValue = entryDisplay.isDerived ? entryDisplay.title : bug.title;
@@ -417,6 +411,7 @@ export function BugDetailsView({
       })).trim();
       if (!triageText) throw new Error('AI triage returned an empty response.');
       const cleanJsonString = triageText.match(/\{[\s\S]*\}/)?.[0] || triageText;
+      let aiAppliedBug: BugDetails = currentBug;
       try {
         const triageData = JSON.parse(cleanJsonString) as Partial<Record<'title' | 'bugNote' | 'stepsToReproduce' | 'expectedResult' | 'actualResult', unknown>>;
         const title = typeof triageData.title === 'string' ? triageData.title.trim() : '';
@@ -424,19 +419,42 @@ export function BugDetailsView({
         const stepsToReproduce = typeof triageData.stepsToReproduce === 'string' ? triageData.stepsToReproduce.trim() : '';
         const expectedResult = typeof triageData.expectedResult === 'string' ? triageData.expectedResult.trim() : '';
         const actualResult = typeof triageData.actualResult === 'string' ? triageData.actualResult.trim() : '';
-        if (title) updateField('title', title, { trackStatus: false, autoSave: false });
-        if (bugNote) updateField('note', bugNote, { trackStatus: false, autoSave: false });
-        if (stepsToReproduce) updateField('steps_to_reproduce', formatStepsAsNumberedList(stepsToReproduce), { trackStatus: false, autoSave: false });
-        if (expectedResult) updateField('expected_result', expectedResult, { trackStatus: false, autoSave: false });
-        if (actualResult) updateField('actual_result', actualResult, { trackStatus: false, autoSave: false });
+        aiAppliedBug = {
+          ...currentBug,
+          ...(title ? { title } : {}),
+          ...(bugNote ? { note: bugNote } : {}),
+          ...(stepsToReproduce ? { steps_to_reproduce: formatStepsAsNumberedList(stepsToReproduce) } : {}),
+          ...(expectedResult ? { expected_result: expectedResult } : {}),
+          ...(actualResult ? { actual_result: actualResult } : {})
+        };
       } catch (error) {
         console.error('AI returned malformed JSON', error);
-        updateField('note', cleanJsonString, { trackStatus: false, autoSave: false });
+        aiAppliedBug = { ...currentBug, note: cleanJsonString };
       }
+
+      if (saveInFlightRef.current) await saveInFlightRef.current;
+      setBug(aiAppliedBug);
+      bugRef.current = aiAppliedBug;
+      setSaveState('saving');
+      const savePromise = window.bugPocket.updateBug(aiAppliedBug.id, buildBugUpdateInput(aiAppliedBug)) as Promise<BugDetails>;
+      saveInFlightRef.current = savePromise;
+      let updated: BugDetails;
+      try {
+        updated = await savePromise;
+      } finally {
+        saveInFlightRef.current = null;
+      }
+      setBug(updated);
+      bugRef.current = updated;
+      lastSavedPayloadRef.current = serializeBugUpdateInput(buildBugUpdateInput(updated));
+      setIsDirty(false);
+      isDirtyRef.current = false;
+      void window.bugPocket.setDetailsDirty(false);
+      markSavedSoon();
       setAiStatus('completed');
       setShowAiRefinement(false);
       setAiRefinementNote('');
-      showDetailsToast('AI triage draft added. Review it, then click Save Details to commit.');
+      showDetailsToast('AI Triage applied and saved.');
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'AI triage failed.';
       setAiStatus('idle');
@@ -446,7 +464,11 @@ export function BugDetailsView({
   const addScreenshot = async (): Promise<void> => { await window.bugPocket.startScreenshotCapture(bug.id); };
   const removeAttachment = async (attachmentId: number): Promise<void> => {
     await window.bugPocket.deleteAttachment(attachmentId);
-    setBug(await window.bugPocket.getBug(bug.id));
+    const updated = await window.bugPocket.getBug(bug.id);
+    if (updated) {
+      setBug(updated);
+      bugRef.current = updated;
+    }
     setSpotlight(null);
   };
   const downloadAttachment = async (attachmentId: number): Promise<void> => { await window.bugPocket.downloadAttachment(attachmentId) as AttachmentDownloadResult; };
@@ -456,15 +478,8 @@ export function BugDetailsView({
     finally { setDeleting(false); }
   };
   const convertScenarioToBug = async (): Promise<void> => {
-    const updated = await window.bugPocket.updateBug(bug.id, {
-      entry_type: 'Bug', application_id: bug.application_id, module_id: bug.module_id,
-      environment_id: bug.environment_id, device_id: bug.device_id, browser_id: bug.browser_id, user_role_id: bug.user_role_id,
-      title: detailTitleValue, note: bug.note, other_details: bug.other_details,
-      steps_to_reproduce: bug.steps_to_reproduce, expected_result: bug.expected_result,
-      actual_result: bug.actual_result, status: 'Draft', severity: bug.severity || 'Medium',
-      reported: !!bug.reported, issue_platform: bug.issue_platform, issue_id: bug.issue_id,
-      issue_url: bug.issue_url, tags: bug.tags
-    });
+    const convertedBug: BugDetails = { ...bug, entry_type: 'Bug', title: detailTitleValue, status: 'Draft', severity: bug.severity || 'Medium' };
+    const updated = await window.bugPocket.updateBug(bug.id, buildBugUpdateInput(convertedBug));
     setBug(updated);
     bugRef.current = updated;
     lastSavedPayloadRef.current = serializeBugUpdateInput(buildBugUpdateInput(updated));
@@ -488,7 +503,7 @@ export function BugDetailsView({
   };
 
   return (
-    <section className="page details">
+    <section className="details-route-view page details">
       <header className="page-header">
         <div>
           <button className="text-button" onClick={() => void backToDashboard()}>Back to dashboard</button>
@@ -614,7 +629,7 @@ export function BugDetailsView({
             <h2>Generated report preview</h2>
             <textarea className="report-preview" readOnly value={generateReport(reportBug, settings.reportTemplates.find((template) => template.name === 'Full Bug Report'))} />
             <div className="copy-grid">
-              {AI_TRIAGE_AVAILABLE && (
+              {(byokAiReady || settings.aiTriageEnabled) && (
                 <div className="ai-triage-panel">
                   {aiStatus !== 'completed' ? (
                     <button className="ai-triage-button" disabled={triaging} onClick={() => void triageWithLocalAi()}>
@@ -678,16 +693,11 @@ export function BugDetailsView({
           </div>
         </div>
       )}
-      {detailsToast && (
-        <ToastBanner
-          message={detailsToast}
-          variant={detailsToastVariant}
-          onClose={closeDetailsToast}
-        />
-      )}
     </section>
   );
 }
+
+
 
 
 
