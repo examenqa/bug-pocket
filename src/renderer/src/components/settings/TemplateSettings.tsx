@@ -22,7 +22,7 @@ export function TemplateSettings({
       <section className="settings-section-group" aria-labelledby="settings-output-heading">
         <div className="settings-section-heading">
           <h2 id="settings-output-heading">Output & Templates</h2>
-          <p>Manage report destinations, Jira routing, and copy-ready report formats.</p>
+          <p>Manage report destinations, Jira routing, and copy-ready report formats. Destinations control the export actions available in Bug Details.</p>
         </div>
         <div className="settings-grid outbound-grid">
           <OptionManager

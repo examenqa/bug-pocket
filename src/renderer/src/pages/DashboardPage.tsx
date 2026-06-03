@@ -6,7 +6,7 @@ import { Badge } from '../components/shared/Badge';
 import { Select } from '../components/shared/Select';
 import { ScreenshotAnnotator } from '../components/ScreenshotAnnotator';
 import { formatDate } from '../services/reports';
-import { getEntryDisplay, formatTableDate, severityClass, syncClass, syncStatuses, captureStatusOptions, shortcutDisplay } from '../utils/display';
+import { getEntryDisplay, formatTableDate, severityClass, statusPillClass, syncClass, syncStatuses, captureStatusOptions, shortcutDisplay, isCloudSyncActive, effectiveSyncStatus } from '../utils/display';
 import { getActiveFilterChips, getModulesForApplication } from '../utils/filters';
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
 
@@ -32,6 +32,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
   const clearFilters = (): void => setFilters({ reported: 'all', search: filters.search ?? '' });
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
+  const cloudSyncActive = isCloudSyncActive(settings);
 
   const loadSpotlightPreview = async (attachment: Attachment): Promise<void> => {
     setSpotlight((current) => (current ? { ...current, loading: true, error: '' } : current));
@@ -221,6 +222,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
           <tbody>
             {bugs.map((bug) => {
               const entryDisplay = getEntryDisplay(bug);
+              const visibleSyncStatus = effectiveSyncStatus(bug.sync_status, cloudSyncActive);
               return (
                 <tr key={bug.id} onClick={() => onSelect(bug.id)}>
                   <td className="entry-cell">
@@ -237,11 +239,11 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
                   </td>
                   <td>
                     <div className="state-stack">
-                      <Badge>{bug.status}</Badge>
+                      <span className={`state-pill ${statusPillClass(bug.status)}`}>{bug.status}</span>
                       <span className={`state-icon-pill severity-pill severity-${severityClass(bug.severity)}`} title={`Severity: ${bug.severity}`} data-tooltip={`Severity: ${bug.severity}`} aria-label={`Severity: ${bug.severity}`} tabIndex={0}>
                         <Gauge size={14} />
                       </span>
-                      <span className={`state-icon-pill sync-pill sync-${syncClass(bug.sync_status)}`} title={`Sync: ${bug.sync_status || 'Local Only'}`} data-tooltip={`Sync: ${bug.sync_status || 'Local Only'}`} aria-label={`Sync: ${bug.sync_status || 'Local Only'}`} tabIndex={0}>
+                      <span className={`state-icon-pill sync-pill sync-${syncClass(visibleSyncStatus)}`} title={`Sync: ${visibleSyncStatus}`} data-tooltip={`Sync: ${visibleSyncStatus}`} aria-label={`Sync: ${visibleSyncStatus}`} tabIndex={0}>
                         <RefreshCw size={14} />
                       </span>
                     </div>
