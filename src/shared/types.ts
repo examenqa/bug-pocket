@@ -199,6 +199,7 @@ export interface SettingsData {
   supabaseProjectUrl: string | null;
   supabaseAnonKey: string | null;
   currentWorkspaceId: string | null;
+  cloudSyncActive: boolean;
   presets: CapturePreset[];
 }
 

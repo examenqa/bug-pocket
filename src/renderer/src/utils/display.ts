@@ -1,4 +1,4 @@
-import type { Bug, CaptureStatus, ConfigOption, ShortcutSetting, SyncStatus } from '../../../shared/types';
+import type { Bug, CaptureStatus, ConfigOption, SettingsData, ShortcutSetting, SyncStatus } from '../../../shared/types';
 
 // ---------------------------------------------------------------------------
 // Sync & severity class helpers
@@ -9,6 +9,14 @@ export function syncClass(status: SyncStatus): string {
   if (status === 'Sync Pending') return 'pending';
   if (status === 'Sync Failed') return 'failed';
   return 'local';
+}
+
+export function isCloudSyncActive(settings: Pick<SettingsData, 'supabaseProjectUrl' | 'supabaseAnonKey' | 'currentWorkspaceId' | 'cloudSyncActive'>): boolean {
+  return Boolean(settings.cloudSyncActive && settings.supabaseProjectUrl?.trim() && settings.supabaseAnonKey?.trim() && settings.currentWorkspaceId?.trim());
+}
+
+export function effectiveSyncStatus(status: SyncStatus, cloudSyncActive: boolean): SyncStatus {
+  return cloudSyncActive ? status || 'Local Only' : 'Local Only';
 }
 
 export function severityClass(value: string): string {
@@ -27,7 +35,7 @@ export function statusPillClass(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'reported') return 'status-reported';
   if (normalized === 'discarded') return 'status-muted';
-  return 'status-new';
+  return 'status-draft';
 }
 
 // ---------------------------------------------------------------------------

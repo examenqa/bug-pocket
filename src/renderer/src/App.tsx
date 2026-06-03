@@ -88,7 +88,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   const bugId = bugMatch ? Number(bugMatch[1]) : null;
   const [selectedBugId, setSelectedBugId] = useState<number | null>(bugId);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
-  const [isSettingsExpanded, setIsSettingsExpanded] = useState(route.startsWith('/settings'));
+  const [isSettingsExpanded, setIsSettingsExpanded] = useState(() => route.startsWith('/settings'));
   const showingDetails = selectedBugId != null && !route.startsWith('/settings');
   const activeView = route.startsWith('/settings') ? 'settings' : 'dashboard';
 

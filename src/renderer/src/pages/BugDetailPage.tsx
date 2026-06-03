@@ -9,6 +9,7 @@ import { ScreenshotAnnotator } from '../components/ScreenshotAnnotator';
 import { formatDate, generateReport, buildIssueDeepLink, IssuePlatformLink } from '../services/reports';
 import {
   getEntryDisplay,
+  isCloudSyncActive,
   severityPillClass,
   statusPillClass,
   statusOptionsForEntryType,
@@ -19,6 +20,17 @@ import { formatStepsAsNumberedList } from '../utils/formatSteps';
 import { buildBugUpdateInput, serializeBugUpdateInput, DetailsSaveState, AiTriageStatus } from '../utils/bugUpdate';
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
 import { useDebounce } from '../hooks/useDebounce';
+
+function aiTextField(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean)
+      .join('\n');
+  }
+  return '';
+}
 
 
 export function BugDetailsView({
@@ -414,11 +426,11 @@ export function BugDetailsView({
       let aiAppliedBug: BugDetails = currentBug;
       try {
         const triageData = JSON.parse(cleanJsonString) as Partial<Record<'title' | 'bugNote' | 'stepsToReproduce' | 'expectedResult' | 'actualResult', unknown>>;
-        const title = typeof triageData.title === 'string' ? triageData.title.trim() : '';
-        const bugNote = typeof triageData.bugNote === 'string' ? triageData.bugNote.trim() : '';
-        const stepsToReproduce = typeof triageData.stepsToReproduce === 'string' ? triageData.stepsToReproduce.trim() : '';
-        const expectedResult = typeof triageData.expectedResult === 'string' ? triageData.expectedResult.trim() : '';
-        const actualResult = typeof triageData.actualResult === 'string' ? triageData.actualResult.trim() : '';
+        const title = aiTextField(triageData.title);
+        const bugNote = aiTextField(triageData.bugNote);
+        const stepsToReproduce = aiTextField(triageData.stepsToReproduce);
+        const expectedResult = aiTextField(triageData.expectedResult);
+        const actualResult = aiTextField(triageData.actualResult);
         aiAppliedBug = {
           ...currentBug,
           ...(title ? { title } : {}),
@@ -488,6 +500,7 @@ export function BugDetailsView({
     void window.bugPocket.setDetailsDirty(false);
   };
 
+  const cloudSyncActive = isCloudSyncActive(settings);
   const statusOptions = statusOptionsForEntryType(bug.entry_type, settings);
   const workflowStatusOptions = getWorkflowStatusOptions(statusOptions, bug.status);
   const updateStatus = (status: string): void => {
@@ -509,7 +522,7 @@ export function BugDetailsView({
           <button className="text-button" onClick={() => void backToDashboard()}>Back to dashboard</button>
           <h1>{entryDisplay.title}</h1>
           {entryDisplay.preview && <p className="detail-title-preview">{entryDisplay.preview}</p>}
-          <p>{bug.entry_type || 'Bug'} / {bug.environment || 'No environment'} / {bug.user_role || 'No role'} / {bug.device || 'No device'} / {bug.browser || 'No browser'} / <SyncBadge status={bug.sync_status} /> / Created {formatDate(bug.created_at)} / Updated {formatDate(bug.updated_at)}</p>
+          <p>{bug.entry_type || 'Bug'} / {bug.environment || 'No environment'} / {bug.user_role || 'No role'} / {bug.device || 'No device'} / {bug.browser || 'No browser'} / <SyncBadge status={bug.sync_status} cloudSyncActive={cloudSyncActive} /> / Created {formatDate(bug.created_at)} / Updated {formatDate(bug.updated_at)}</p>
         </div>
         <div className="header-actions">
           {bug.entry_type === 'Scenario' && <button onClick={convertScenarioToBug}>Convert to Bug</button>}
@@ -605,7 +618,7 @@ export function BugDetailsView({
                   )}
                   <figcaption>
                     <span>{attachment.file_name} / {attachment.source_type}</span>
-                    <SyncBadge status={attachment.sync_status} />
+                    <SyncBadge status={attachment.sync_status} cloudSyncActive={cloudSyncActive} />
                     <span className="attachment-actions">
                       <button className="icon-button" title="Download screenshot" onClick={() => void downloadAttachment(attachment.id)}><Download size={15} /></button>
                       <button className="icon-button danger" title="Remove attachment" onClick={() => removeAttachment(attachment.id)}><Trash2 size={15} /></button>

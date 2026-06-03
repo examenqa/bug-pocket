@@ -25,6 +25,7 @@ import type {
   SyncQueueEntityType,
   SyncQueueEvent,
   SyncQueueOperation,
+  SyncStatus,
   AiProvider
 } from '../shared/types';
 
@@ -206,6 +207,7 @@ Attachments:
 
 export class BugPocketDatabase {
   private db: Database.Database;
+  private cloudSyncSessionActive = false;
 
   constructor() {
     const dataDir = app.getPath('userData');
@@ -845,12 +847,34 @@ export class BugPocketDatabase {
     this.enqueueSyncEvent('attachment', attachmentId, operation, payload);
   }
 
+  setCloudSyncSessionActive(active: boolean): void {
+    this.cloudSyncSessionActive = active;
+  }
+
+  isCloudSyncActive(): boolean {
+    return Boolean(this.cloudSyncSessionActive && this.getSupabaseProjectUrl() && this.getSupabaseAnonKey() && this.getCurrentWorkspaceId());
+  }
+
+  private isCloudSyncReady(): boolean {
+    return this.isCloudSyncActive();
+  }
+
+  private pendingSyncStatusForBug(applicationId: number | null): SyncStatus {
+    return this.isCloudSyncReady() && this.shouldSyncApplication(applicationId) ? 'Sync Pending' : 'Local Only';
+  }
+
+  private pendingSyncStatusForBugId(bugId: number): SyncStatus {
+    return this.isCloudSyncReady() && this.shouldSyncBug(bugId) ? 'Sync Pending' : 'Local Only';
+  }
+
   private shouldSyncBugPayload(payload: unknown): boolean {
+    if (!this.isCloudSyncReady()) return false;
     const applicationId = typeof payload === 'object' && payload !== null ? (payload as { application_id?: unknown }).application_id : null;
     return this.shouldSyncApplication(typeof applicationId === 'number' ? applicationId : null);
   }
 
   private shouldSyncAttachmentPayload(payload: unknown): boolean {
+    if (!this.isCloudSyncReady()) return false;
     const bugId = typeof payload === 'object' && payload !== null ? (payload as { bug_id?: unknown }).bug_id : null;
     if (typeof bugId !== 'number') return false;
     return this.shouldSyncBug(bugId);
@@ -1153,6 +1177,7 @@ Attachments:
       supabaseProjectUrl: this.getSupabaseProjectUrl(),
       supabaseAnonKey: this.getSupabaseAnonKey(),
       currentWorkspaceId: this.getCurrentWorkspaceId(),
+      cloudSyncActive: this.isCloudSyncActive(),
       presets: this.getPresets()
     };
   }
@@ -1540,10 +1565,10 @@ Attachments:
     if (!target) throw new Error('Canonical reference item was not found.');
 
     const tx = this.db.transaction(() => {
-      const result = this.db.prepare(`UPDATE bugs SET ${foreignKey} = ?, sync_status = 'Sync Pending', updated_at = ? WHERE ${foreignKey} = ?`).run(targetId, now(), sourceId);
+      const result = this.db.prepare(`UPDATE bugs SET ${foreignKey} = ?, sync_status = CASE WHEN ? = 1 AND (application_id IS NULL OR EXISTS (SELECT 1 FROM applications WHERE applications.id = bugs.application_id AND applications.is_synced != 0)) THEN 'Sync Pending' ELSE 'Local Only' END, updated_at = ? WHERE ${foreignKey} = ?`).run(targetId, this.isCloudSyncReady() ? 1 : 0, now(), sourceId);
       const presetResult = this.db.prepare(`UPDATE presets SET ${foreignKey} = ?, updated_at = ? WHERE ${foreignKey} = ?`).run(targetId, now(), sourceId);
       this.db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(sourceId);
-      this.enqueueSyncEvent('reference', targetId, 'MERGE', {
+      if (this.isCloudSyncReady()) this.enqueueSyncEvent('reference', targetId, 'MERGE', {
         table_name: type,
         source_id: sourceId,
         target_id: targetId,
@@ -1869,7 +1894,7 @@ Attachments:
           UPDATE bugs SET entry_type = ?, application_id = ?, module_id = ?, title = ?, note = ?, other_details = ?,
             steps_to_reproduce = ?, expected_result = ?, actual_result = ?, environment_id = ?, device_id = ?, browser_id = ?, user_role_id = ?,
             status = ?, severity = ?, reported = ?, issue_platform = ?, issue_id = ?, issue_url = ?,
-            tags = ?, sync_status = 'Sync Pending', updated_at = ?
+            tags = ?, sync_status = ?, updated_at = ?
           WHERE id = ?
         `
         )
@@ -1894,6 +1919,7 @@ Attachments:
           input.issue_id,
           input.issue_url,
           input.tags,
+          this.pendingSyncStatusForBug(input.application_id),
           stamp,
           id
         );
@@ -1948,7 +1974,7 @@ Attachments:
         )
         .run(bugId, parentId, contentHash, fileExtension, mimeType, stamp);
       const attachmentId = Number(result.lastInsertRowid);
-      this.db.prepare("UPDATE bugs SET sync_status = 'Sync Pending', updated_at = ? WHERE id = ?").run(stamp, bugId);
+      this.db.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(bugId), stamp, bugId);
       this.enqueueAttachmentSyncEvent(attachmentId, 'INSERT');
       this.enqueueBugSyncEvent(bugId, 'UPDATE');
       return attachmentId;
@@ -1959,7 +1985,7 @@ Attachments:
   attachScreenshotToBug(bugId: number, attachmentId: number): BugDetails {
     const tx = this.db.transaction(() => {
       this.db.prepare('UPDATE attachments SET bug_id = ? WHERE id = ?').run(bugId, attachmentId);
-      this.db.prepare("UPDATE bugs SET sync_status = 'Sync Pending', updated_at = ? WHERE id = ?").run(now(), bugId);
+      this.db.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(bugId), now(), bugId);
       this.enqueueAttachmentSyncEvent(attachmentId, 'UPDATE');
       this.enqueueBugSyncEvent(bugId, 'UPDATE');
     });
@@ -1977,7 +2003,7 @@ Attachments:
       this.enqueueAttachmentSyncEvent(attachmentId, 'DELETE', deletedPayload);
       this.db.prepare('DELETE FROM attachments WHERE id = ?').run(attachmentId);
       if (attachment.bug_id) {
-        this.db.prepare("UPDATE bugs SET sync_status = 'Sync Pending', updated_at = ? WHERE id = ?").run(now(), attachment.bug_id);
+        this.db.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(attachment.bug_id), now(), attachment.bug_id);
         this.enqueueBugSyncEvent(attachment.bug_id, 'UPDATE');
       }
     });
