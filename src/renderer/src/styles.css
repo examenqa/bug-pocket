@@ -4309,6 +4309,51 @@ button.danger-soft {
   width: 100%;
 }
 
+.support-popover-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+  background: transparent;
+}
+
+.support-popover {
+  position: fixed;
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  border: 1px solid rgba(151, 190, 235, 0.96);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: var(--shadow-lg);
+  padding: 7px;
+}
+
+.support-popover button,
+.support-popover a {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 800;
+  padding: 9px 10px;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.support-popover button:hover,
+.support-popover button:focus-visible,
+.support-popover a:hover,
+.support-popover a:focus-visible {
+  background: rgba(34, 118, 210, 0.1);
+  color: var(--pocket-blue-dark);
+  outline: none;
+}
+
 .support-modal-backdrop {
   position: fixed;
   inset: 0;

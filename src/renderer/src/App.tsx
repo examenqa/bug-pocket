@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Bot, ChevronDown, Cloud, Database, FileText, HelpCircle, Home, Keyboard, Settings as SettingsIcon, SlidersHorizontal } from 'lucide-react';
 import type { ScreenshotResult, SettingsData } from '../../shared/types';
 import { QuickCaptureDraft, QuickCaptureForm } from './components/QuickCaptureForm';
@@ -9,7 +10,7 @@ import { Dashboard } from './pages/DashboardPage';
 import { BugDetailsView } from './pages/BugDetailPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SnipOverlay } from './pages/SnipOverlay';
-import { SupportModal } from './components/shared/SupportModal';
+import { SupportModal, type SupportModalMode } from './components/shared/SupportModal';
 import { ToastProvider } from './components/shared/ToastContext';
 import iconUrl from './assets/bug-pocket-icon.png';
 import titleUrl from './assets/bug-pocket-title.png';
@@ -83,11 +84,45 @@ const settingsNavItems = [
   { route: '/settings/sync', label: 'Cloud Sync', icon: Cloud }
 ];
 
+const howToGuideUrl = 'https://bugpocket.app/help';
+
+function SupportPopover({ anchorRect, open, onClose, onSelectMode }: { anchorRect: DOMRect | null; open: boolean; onClose: () => void; onSelectMode: (mode: SupportModalMode) => void }) {
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, open]);
+
+  if (!open || !anchorRect) return null;
+
+  const top = Math.max(12, anchorRect.top - 154);
+  const left = Math.max(12, anchorRect.left);
+  const width = Math.max(220, anchorRect.width);
+
+  return createPortal(
+    <div className="support-popover-layer" role="presentation" onMouseDown={onClose}>
+      <div className="support-popover" role="menu" aria-label="Help and support options" style={{ left, top, width }} onMouseDown={(event) => event.stopPropagation()}>
+        <button type="button" role="menuitem" onClick={() => onSelectMode('bug')}>Report a Bug</button>
+        <button type="button" role="menuitem" onClick={() => onSelectMode('feature')}>Request a Feature</button>
+        <a href={howToGuideUrl} target="_blank" rel="noreferrer" role="menuitem" onClick={(event) => { event.preventDefault(); onClose(); void window.bugPocket.openExternalUrl(howToGuideUrl); }}>How-To Guide</a>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function MainShell({ route, navigate, settings, refresh }: { route: string; navigate: (route: string) => void; settings: SettingsData; refresh: () => Promise<void> }) {
   const bugMatch = route.match(/^\/bugs\/(\d+)$/);
   const bugId = bugMatch ? Number(bugMatch[1]) : null;
   const [selectedBugId, setSelectedBugId] = useState<number | null>(bugId);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [supportModalMode, setSupportModalMode] = useState<SupportModalMode>('bug');
+  const [isSupportPopoverOpen, setIsSupportPopoverOpen] = useState(false);
+  const [supportAnchorRect, setSupportAnchorRect] = useState<DOMRect | null>(null);
+  const supportButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(() => route.startsWith('/settings'));
   const showingDetails = selectedBugId != null && !route.startsWith('/settings');
   const activeView = route.startsWith('/settings') ? 'settings' : 'dashboard';
@@ -156,12 +191,32 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
           )}
         </div>
         <div className="sidebar-support-area">
-          <button className="nav support-nav" type="button" onClick={() => setIsSupportModalOpen(true)}>
+          <button
+            ref={supportButtonRef}
+            className={isSupportPopoverOpen ? 'nav support-nav active' : 'nav support-nav'}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={isSupportPopoverOpen}
+            onClick={() => {
+              setSupportAnchorRect(supportButtonRef.current?.getBoundingClientRect() ?? null);
+              setIsSupportPopoverOpen((open) => !open);
+            }}
+          >
             <HelpCircle size={17} /> Help & Support
           </button>
         </div>
       </aside>
-      <SupportModal open={isSupportModalOpen} onClose={() => setIsSupportModalOpen(false)} />
+      <SupportPopover
+        anchorRect={supportAnchorRect}
+        open={isSupportPopoverOpen}
+        onClose={() => setIsSupportPopoverOpen(false)}
+        onSelectMode={(mode) => {
+          setSupportModalMode(mode);
+          setIsSupportPopoverOpen(false);
+          setIsSupportModalOpen(true);
+        }}
+      />
+      <SupportModal mode={supportModalMode} open={isSupportModalOpen} onClose={() => setIsSupportModalOpen(false)} />
       <main className="content">
         {route.startsWith('/settings') ? (
           <SettingsPage settings={settings} refresh={refresh} route={route} />

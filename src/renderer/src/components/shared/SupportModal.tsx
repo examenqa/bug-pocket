@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { FeedbackPayload } from '../../../../shared/types';
 
+export type SupportModalMode = 'bug' | 'feature';
+
 interface SupportModalProps {
+  mode: SupportModalMode;
   open: boolean;
   onClose: () => void;
 }
@@ -11,8 +14,15 @@ function stripImageDataUrlPrefix(value: string): string {
   return value.replace(/^data:image\/(png|jpe?g);base64,/i, '');
 }
 
-export function SupportModal({ open, onClose }: SupportModalProps) {
-  const [type, setType] = useState<FeedbackPayload['type']>('Bug');
+function supportTypeForMode(mode: SupportModalMode): FeedbackPayload['type'] {
+  return mode === 'feature' ? 'Feature' : 'Bug';
+}
+
+function titleForMode(mode: SupportModalMode): string {
+  return mode === 'feature' ? 'Request a Feature' : 'Report a Bug';
+}
+
+export function SupportModal({ mode, open, onClose }: SupportModalProps) {
   const [message, setMessage] = useState('');
   const [email, setEmail] = useState('');
   const [imageBase64, setImageBase64] = useState('');
@@ -23,7 +33,6 @@ export function SupportModal({ open, onClose }: SupportModalProps) {
 
   useEffect(() => {
     if (!open) return;
-    setType('Bug');
     setMessage('');
     setEmail('');
     setImageBase64('');
@@ -31,7 +40,7 @@ export function SupportModal({ open, onClose }: SupportModalProps) {
     setIsSubmitting(false);
     setSent(false);
     setError('');
-  }, [open]);
+  }, [mode, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -76,7 +85,7 @@ export function SupportModal({ open, onClose }: SupportModalProps) {
     setIsSubmitting(true);
     setError('');
     const result = await window.bugPocket.sendFeedback({
-      type,
+      type: supportTypeForMode(mode),
       message: cleanedMessage,
       user_email: email.trim() || undefined,
       image_base64: imageBase64 || undefined
@@ -95,19 +104,11 @@ export function SupportModal({ open, onClose }: SupportModalProps) {
       <section className="support-modal" role="dialog" aria-modal="true" aria-labelledby="support-modal-title">
         <header>
           <div>
-            <h2 id="support-modal-title">Help & Support</h2>
+            <h2 id="support-modal-title">{titleForMode(mode)}</h2>
             <p>Submit a bug report or feature request directly to the team.</p>
           </div>
           <button className="icon-button" type="button" aria-label="Close support form" disabled={isSubmitting} onClick={onClose}>x</button>
         </header>
-
-        <label>
-          <span>Type</span>
-          <select value={type} onChange={(event) => setType(event.target.value as FeedbackPayload['type'])} disabled={isSubmitting || sent}>
-            <option value="Bug">Bug</option>
-            <option value="Feature">Feature Request</option>
-          </select>
-        </label>
 
         <label>
           <span>Message</span>

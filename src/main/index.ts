@@ -1,4 +1,6 @@
 import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog } from 'electron';
+import log from 'electron-log/main';
+import { autoUpdater } from 'electron-updater';
 import { copyFileSync, createReadStream, createWriteStream, existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -54,6 +56,77 @@ function preloadPath(): string {
   if (isDev) return join(__dirname, '../preload/index.js');
   const mjsPreload = join(__dirname, '../preload/index.mjs');
   return existsSync(mjsPreload) ? mjsPreload : join(__dirname, '../preload/index.js');
+}
+
+type UpdaterEventPayload = Record<string, unknown>;
+
+function sendUpdaterEvent(eventName: string, payload: UpdaterEventPayload = {}): void {
+  mainWindow?.webContents.send('updater:event', { event: eventName, ...payload });
+}
+
+function setupAutoUpdater(): void {
+  autoUpdater.logger = log;
+  log.transports.file.level = 'info';
+
+  autoUpdater.on('checking-for-update', () => {
+    log.info('[auto-updater] Checking for updates.');
+    sendUpdaterEvent('checking-for-update');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    log.info('[auto-updater] Update available.', info);
+    sendUpdaterEvent('update-available', { info });
+    mainWindow?.webContents.send('app:toast', 'Update available. Downloading in the background...', 'info');
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    log.info('[auto-updater] No update available.', info);
+    sendUpdaterEvent('update-not-available', { info });
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    sendUpdaterEvent('download-progress', {
+      bytesPerSecond: progress.bytesPerSecond,
+      percent: progress.percent,
+      transferred: progress.transferred,
+      total: progress.total
+    });
+  });
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    log.info('[auto-updater] Update downloaded.', info);
+    sendUpdaterEvent('update-downloaded', { info });
+    const messageBoxOptions = {
+      type: 'info' as const,
+      buttons: ['Restart Now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Update Ready',
+      message: 'A Bug Pocket update has been downloaded.',
+      detail: 'Restart Bug Pocket now to install the update.'
+    };
+    const result = mainWindow
+      ? await dialog.showMessageBox(mainWindow, messageBoxOptions)
+      : await dialog.showMessageBox(messageBoxOptions);
+    if (result.response === 0) autoUpdater.quitAndInstall();
+  });
+
+  autoUpdater.on('error', (error) => {
+    log.error('[auto-updater] Update error.', error);
+    sendUpdaterEvent('error', { message: error.message });
+  });
+}
+
+function checkForUpdatesAfterStartup(): void {
+  if (!app.isPackaged) {
+    log.info('[auto-updater] Skipping update check in development.');
+    return;
+  }
+  setupAutoUpdater();
+  void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+    log.error('[auto-updater] checkForUpdatesAndNotify failed.', error);
+    sendUpdaterEvent('error', { message: error instanceof Error ? error.message : String(error) });
+  });
 }
 function iconPath(): string {
   const pngIconPath = packagedResourcePath('bug-pocket-icon.png');
@@ -983,6 +1056,9 @@ if (!gotTheLock) {
     createQuickWindow();
     createTray();
     registerAppShortcuts();
+    setTimeout(() => {
+      checkForUpdatesAfterStartup();
+    }, 2500);
     setTimeout(() => {
       void runAutomatedStartupBackup();
     }, 1500);
