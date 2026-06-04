@@ -124,6 +124,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   const [supportAnchorRect, setSupportAnchorRect] = useState<DOMRect | null>(null);
   const supportButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(() => route.startsWith('/settings'));
+  const [updateReady, setUpdateReady] = useState(false);
   const showingDetails = selectedBugId != null && !route.startsWith('/settings');
   const activeView = route.startsWith('/settings') ? 'settings' : 'dashboard';
 
@@ -134,6 +135,10 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   useEffect(() => {
     if (route.startsWith('/settings')) setIsSettingsExpanded(true);
   }, [route]);
+
+  useEffect(() => window.bugPocket.onUpdaterEvent((payload) => {
+    if (payload.event === 'update-ready') setUpdateReady(true);
+  }), []);
 
   const closeBugDetails = (): void => {
     setSelectedBugId(null);
@@ -166,10 +171,25 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
               if (!route.startsWith('/settings')) navigate('/settings/workspace');
             }}
           >
-            <SettingsIcon size={17} /> Settings <ChevronDown className={isSettingsExpanded ? 'settings-chevron expanded' : 'settings-chevron'} size={15} />
+            <SettingsIcon size={17} />
+            <span className="nav-label-with-indicator">
+              Settings
+              {updateReady && <span className="update-ready-dot" aria-label="Update ready" title="Update ready" />}
+            </span>
+            <ChevronDown className={isSettingsExpanded ? 'settings-chevron expanded' : 'settings-chevron'} size={15} />
           </button>
           {isSettingsExpanded && (
             <div className="settings-subnav" aria-label="Settings sections">
+              {updateReady && (
+                <button
+                  className="settings-update-ready"
+                  type="button"
+                  onClick={() => void window.bugPocket.quitAndInstallUpdate()}
+                >
+                  <span>Update Ready</span>
+                  <small>Restart to install</small>
+                </button>
+              )}
               {settingsNavItems.map((item) => {
                 const Icon = item.icon;
                 const active = route.split('?')[0] === item.route || (item.route === '/settings/workspace' && route === '/settings');
@@ -248,3 +268,5 @@ export function App() {
     </ToastProvider>
   );
 }
+
+

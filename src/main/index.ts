@@ -66,6 +66,8 @@ function sendUpdaterEvent(eventName: string, payload: UpdaterEventPayload = {}):
 
 function setupAutoUpdater(): void {
   autoUpdater.logger = log;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
   log.transports.file.level = 'info';
 
   autoUpdater.on('checking-for-update', () => {
@@ -76,7 +78,6 @@ function setupAutoUpdater(): void {
   autoUpdater.on('update-available', (info) => {
     log.info('[auto-updater] Update available.', info);
     sendUpdaterEvent('update-available', { info });
-    mainWindow?.webContents.send('app:toast', 'Update available. Downloading in the background...', 'info');
   });
 
   autoUpdater.on('update-not-available', (info) => {
@@ -93,22 +94,9 @@ function setupAutoUpdater(): void {
     });
   });
 
-  autoUpdater.on('update-downloaded', async (info) => {
+  autoUpdater.on('update-downloaded', (info) => {
     log.info('[auto-updater] Update downloaded.', info);
-    sendUpdaterEvent('update-downloaded', { info });
-    const messageBoxOptions = {
-      type: 'info' as const,
-      buttons: ['Restart Now', 'Later'],
-      defaultId: 0,
-      cancelId: 1,
-      title: 'Update Ready',
-      message: 'A Bug Pocket update has been downloaded.',
-      detail: 'Restart Bug Pocket now to install the update.'
-    };
-    const result = mainWindow
-      ? await dialog.showMessageBox(mainWindow, messageBoxOptions)
-      : await dialog.showMessageBox(messageBoxOptions);
-    if (result.response === 0) autoUpdater.quitAndInstall();
+    sendUpdaterEvent('update-ready', { info });
   });
 
   autoUpdater.on('error', (error) => {
@@ -123,8 +111,8 @@ function checkForUpdatesAfterStartup(): void {
     return;
   }
   setupAutoUpdater();
-  void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
-    log.error('[auto-updater] checkForUpdatesAndNotify failed.', error);
+  void autoUpdater.checkForUpdates().catch((error) => {
+    log.error('[auto-updater] checkForUpdates failed.', error);
     sendUpdaterEvent('error', { message: error instanceof Error ? error.message : String(error) });
   });
 }
@@ -899,6 +887,7 @@ function registerIpc(): void {
   ipcMain.handle('window:openMain', (_event, route = '/dashboard') => openMainWindow(route));
   ipcMain.handle('window:openSettings', (_event, section?: string) => openSettings(section));
   ipcMain.handle('settings:get', () => settingsWithShortcutStatus());
+  ipcMain.handle('updater:quitAndInstall', () => autoUpdater.quitAndInstall());
   ipcMain.handle('settings:addApplication', (_event, name: string, contextDescription = '') => mutateSettings(() => db.addApplication(name, contextDescription)));
   ipcMain.handle('settings:updateApplication', (_event, id: number, name: string, contextDescription = '') => mutateSettings(() => db.updateApplication(id, name, contextDescription)));
   ipcMain.handle('settings:updateApplicationContext', (_event, id: number, contextDescription: string) => mutateSettings(() => db.updateApplicationContext(id, contextDescription)));
@@ -1077,4 +1066,6 @@ app.on('window-all-closed', () => {});
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
+
+
 

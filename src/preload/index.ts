@@ -147,6 +147,7 @@ const api = {
       ipcRenderer.removeListener('app:toast', listener);
     };
   },
+  quitAndInstallUpdate: () => ipcRenderer.invoke('updater:quitAndInstall'),
   onUpdaterEvent: (callback: (payload: { event: string; [key: string]: unknown }) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: { event: string; [key: string]: unknown }): void => callback(payload);
     ipcRenderer.on('updater:event', listener);
@@ -166,4 +167,5 @@ const api = {
 contextBridge.exposeInMainWorld('bugPocket', api);
 
 export type BugPocketApi = typeof api;
+
 

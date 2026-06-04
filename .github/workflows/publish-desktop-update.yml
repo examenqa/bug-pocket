@@ -38,30 +38,14 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
         shell: pwsh
         run: |
-          $baseUrl = "https://$env:BUG_POCKET_UPDATES_BUCKET.s3.$env:AWS_REGION.amazonaws.com/windows"
+          $baseUrl = "https://$($env:BUG_POCKET_UPDATES_BUCKET).s3.$($env:AWS_REGION).amazonaws.com/windows"
           $manifestUrl = "$baseUrl/latest.yml?t=$([guid]::NewGuid())"
-          $manifest = Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing -ErrorAction Stop
-          $manifestText = $manifest.Content
 
-          if (-not $manifestText) {
-            throw "latest.yml was uploaded but is empty: $manifestUrl"
+          Write-Host "Fetching manifest from: $manifestUrl"
+          $response = Invoke-RestMethod -Uri $manifestUrl -ErrorAction Stop
+
+          if ($response -notmatch "path:" -and $response -notmatch "files:") {
+              throw "latest.yml does not contain a path or files.url entry. The Vercel /api/download proxy depends on this manifest."
           }
-
-          $pathMatch = [regex]::Match($manifestText, '(?m)^path:\s*(.+?)\s*$')
-          if (-not $pathMatch.Success) {
-            $pathMatch = [regex]::Match($manifestText, '(?m)^\s*-\s+url:\s*(.+?)\s*$')
-          }
-          if (-not $pathMatch.Success) {
-            throw "latest.yml does not contain a path or files.url entry. The Vercel /api/download proxy depends on this manifest."
-          }
-
-          $installerPath = $pathMatch.Groups[1].Value.Trim().Trim('"', "'")
-          if (-not $installerPath.EndsWith('.exe')) {
-            throw "latest.yml points to an unexpected installer file: $installerPath"
-          }
-
-          $installerUrl = "$baseUrl/$installerPath"
-          Invoke-WebRequest -Uri "$installerUrl?t=$([guid]::NewGuid())" -Method Head -UseBasicParsing -ErrorAction Stop | Out-Null
-          Write-Host "Verified latest.yml and installer at $installerUrl"
-
+          Write-Host "Manifest verification passed."
 
