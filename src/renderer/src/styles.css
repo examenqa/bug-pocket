@@ -4634,17 +4634,17 @@ button.danger-soft {
   width: fit-content;
   min-height: 28px;
   padding: 5px 10px;
-  border: 1px solid rgba(236, 188, 77, 0.72);
+  border: 1px solid rgba(147, 197, 253, 0.78);
   border-radius: 999px;
-  background: linear-gradient(180deg, #fff8db, #ffeaa2);
-  color: #5d3b00;
-  box-shadow: 0 8px 20px rgba(126, 82, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  background: linear-gradient(180deg, #eff6ff, #dbeafe);
+  color: #1d4ed8;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.82);
   font-size: 12px;
   font-weight: 800;
 }
 
 .dashboard-counter-badge svg {
-  color: #bd7900;
+  color: currentColor;
 }
 
 .dashboard-counter-badge strong {

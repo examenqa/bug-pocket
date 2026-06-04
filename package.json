@@ -1,6 +1,6 @@
 {
   "name": "bug-pocket",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Windows-first quick bug capture desktop app for QA testers.",
   "main": "out/main/index.js",
   "scripts": {
@@ -52,9 +52,11 @@
       "perMachine": true,
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico"
+      "installerIcon": "build/installerIcon.ico",
+      "uninstallerIcon": "build/uninstallerIcon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp"
     },
     "afterPack": "scripts/patch-windows-icon.cjs",
     "publish": [
@@ -99,5 +101,3 @@
     "preload": "fix-preload.js bridges an electron-vite@2.3.0 internal path-rewrite behavior. Do not upgrade electron-vite without re-testing the preload loading pipeline."
   }
 }
-
-
