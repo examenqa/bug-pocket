@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Attachment } from '../../../shared/types';
-import { Camera, ChevronLeft, ChevronRight, Filter, Gauge, Plus, RefreshCw, Search, X } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Filter, Gauge, Plus, RefreshCw, Search, Trophy, X } from 'lucide-react';
 import type { Bug, BugFilters, SettingsData } from '../../../shared/types';
 import { Badge } from '../components/shared/Badge';
 import { Select } from '../components/shared/Select';
@@ -15,10 +15,16 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
   const [filters, setFilters] = useState<BugFilters>({ reported: 'all' });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [spotlight, setSpotlight] = useState<SpotlightState | null>(null);
+  const [totalBugCount, setTotalBugCount] = useState(0);
 
   useEffect(() => {
     const refresh = async (): Promise<void> => {
-      setBugs(await window.bugPocket.listBugs(filters));
+      const [nextBugs, nextTotal] = await Promise.all([
+        window.bugPocket.listBugs(filters) as Promise<Bug[]>,
+        window.bugPocket.getTotalBugCount() as Promise<number>
+      ]);
+      setBugs(nextBugs);
+      setTotalBugCount(nextTotal);
     };
     void refresh();
     return window.bugPocket.onBugsChanged(() => { void refresh(); });
@@ -126,6 +132,11 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
         <div>
           <h1>Captured Entries</h1>
           <p>Capture bugs without breaking your flow.</p>
+          <div className="dashboard-counter-badge" aria-label={`${totalBugCount} active captured entries`}>
+            <Trophy size={15} />
+            <strong>{totalBugCount}</strong>
+            <span>{totalBugCount === 1 ? 'active capture' : 'active captures'}</span>
+          </div>
         </div>
         <div className="dashboard-screenshot-actions">
           <div className="dashboard-action">

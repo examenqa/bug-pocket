@@ -958,6 +958,7 @@ function registerIpc(): void {
   ipcMain.handle('shortcuts:suspend', () => suspendAppShortcuts());
   ipcMain.handle('shortcuts:resume', () => registerAppShortcuts());
   ipcMain.handle('bugs:list', (_event, filters) => db.listBugs(filters));
+  ipcMain.handle('bugs:count', () => db.getTotalBugCount());
   ipcMain.handle('bugs:get', (_event, id: number) => db.getBug(id));
   ipcMain.handle('bugs:createQuick', (_event, input) => {
     const bug = db.createQuickBug(input);
@@ -1028,6 +1029,12 @@ function registerIpc(): void {
   ipcMain.handle('backup:export', () => exportBackup());
   ipcMain.handle('backup:import', () => importBackup());
   ipcMain.handle('backup:chooseDirectory', () => chooseBackupDirectory());
+  ipcMain.handle('app:factoryReset', async () => {
+    await db.factoryReset();
+    app.relaunch();
+    app.exit(0);
+    return { success: true };
+  });
   ipcMain.handle('sync:testConnection', () => syncEngine.testConnection());
   ipcMain.handle('sync:authSignIn', (_event, email: string, password: string) => syncEngine.authSignIn(email, password));
   ipcMain.handle('sync:authSignUp', (_event, email: string, password: string) => syncEngine.authSignUp(email, password));
@@ -1070,8 +1077,4 @@ app.on('window-all-closed', () => {});
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
-
-
-
-
 

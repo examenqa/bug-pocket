@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, RefreshCw, Upload } from 'lucide-react';
+import { Download, RefreshCw, Trash2, Upload } from 'lucide-react';
 import type { BackupExportResult, BackupImportResult, SettingsData } from '../../../../shared/types';
 import { restorePendingKey, restoreSuccessKey, restoreSettingsSegmentKey } from '../../utils/settingsKeys';
 
@@ -16,6 +16,9 @@ export function DataManagementPanel({
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   const exportWorkspaceBackup = async (): Promise<void> => {
     setExporting(true);
@@ -95,6 +98,20 @@ export function DataManagementPanel({
     }
   };
 
+  const factoryResetLocalData = async (): Promise<void> => {
+    setResetting(true);
+    try {
+      await window.bugPocket.factoryReset();
+      showToast('Local data cleared. Restarting Bug Pocket...', 'info');
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Could not clear local data.';
+      showToast(message, 'error');
+      setResetting(false);
+      setResetConfirmOpen(false);
+      setResetConfirmText('');
+    }
+  };
+
   return (
     <>
     <div className="panel data-management-panel">
@@ -143,8 +160,41 @@ export function DataManagementPanel({
             </div>
           </div>
         </div>
+        <div className="data-management-row factory-reset-row">
+          <div className="data-management-copy">
+            <strong>Factory Reset</strong>
+            <p className="settings-helper">Clear all local captures, screenshots, and pending sync events while keeping settings, shortcuts, AI keys, and workspace lists.</p>
+          </div>
+          <button className="danger factory-reset-button" disabled={exporting || importing || resetting} onClick={() => { setResetConfirmText(''); setResetConfirmOpen(true); }}>
+            <Trash2 size={16} />
+            Clear All Local Data
+          </button>
+        </div>
       </div>
     </div>
+    {resetConfirmOpen && createPortal(
+      <div className="backup-restore-backdrop factory-reset-backdrop" role="alertdialog" aria-modal="true" aria-label="Confirm factory reset">
+        <div className="backup-restore-dialog factory-reset-dialog">
+          <Trash2 className="factory-reset-icon" size={28} />
+          <div>
+            <h2>Clear all local data?</h2>
+            <p>This permanently deletes every local capture, screenshot, and pending sync event. It bypasses the trash and cannot be undone. Your settings, hotkeys, AI keys, and taxonomy lists will remain.</p>
+            <label className="factory-reset-phrase">
+              <span>Type CLEAR to confirm</span>
+              <input value={resetConfirmText} onChange={(event) => setResetConfirmText(event.target.value)} disabled={resetting} autoFocus />
+            </label>
+            <div className="factory-reset-actions">
+              <button disabled={resetting} onClick={() => { setResetConfirmOpen(false); setResetConfirmText(''); }}>Cancel</button>
+              <button className="danger factory-reset-confirm" disabled={resetting || resetConfirmText.trim() !== 'CLEAR'} onClick={() => void factoryResetLocalData()}>
+                {resetting ? 'Clearing...' : 'Clear All Local Data'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+
     {importing && createPortal(
       <div className="backup-restore-backdrop" role="alertdialog" aria-modal="true" aria-label="Restoring workspace backup">
         <div className="backup-restore-dialog">
@@ -160,5 +210,4 @@ export function DataManagementPanel({
     </>
   );
 }
-
 

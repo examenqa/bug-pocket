@@ -55,6 +55,7 @@ const api = {
   suspendShortcuts: () => ipcRenderer.invoke('shortcuts:suspend'),
   resumeShortcuts: () => ipcRenderer.invoke('shortcuts:resume'),
   listBugs: (filters: BugFilters) => ipcRenderer.invoke('bugs:list', filters),
+  getTotalBugCount: () => ipcRenderer.invoke('bugs:count'),
   getBug: (id: number) => ipcRenderer.invoke('bugs:get', id),
   createQuickBug: (input: QuickBugInput) => ipcRenderer.invoke('bugs:createQuick', input),
   updateBug: (id: number, input: BugUpdateInput) => ipcRenderer.invoke('bugs:update', id, input),
@@ -80,6 +81,7 @@ const api = {
   exportBackup: () => ipcRenderer.invoke('backup:export'),
   importBackup: () => ipcRenderer.invoke('backup:import'),
   chooseBackupDirectory: () => ipcRenderer.invoke('backup:chooseDirectory'),
+  factoryReset: () => ipcRenderer.invoke('app:factoryReset'),
   triageBug: (bugData: unknown) => ipcRenderer.invoke('ai:triageBug', bugData),
   processIssueWithByokAi: (payload: AiIssueProcessPayload) => ipcRenderer.invoke('ai:processIssueWithByok', payload),
   onQuickScreenshotReviewReady: (callback: () => void) => {

@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { app } from 'electron';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import type {
@@ -277,6 +278,19 @@ export class BugPocketDatabase {
 
   close(): void {
     this.db.close();
+  }
+
+  async factoryReset(): Promise<void> {
+    const attachmentsDir = this.screenshotsDir;
+    const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM sync_queue').run();
+      this.db.prepare('DELETE FROM attachments').run();
+      this.db.prepare('DELETE FROM bugs').run();
+    });
+
+    tx();
+    await rm(attachmentsDir, { recursive: true, force: true });
+    mkdirSync(attachmentsDir, { recursive: true });
   }
 
   resolveAttachmentPath(contentHash: string | null, fileExtension: string): string {
@@ -1184,6 +1198,11 @@ Attachments:
 
   getShortcutSettings(): ShortcutSetting[] {
     return this.db.prepare('SELECT * FROM shortcut_settings ORDER BY sort_order, label').all() as ShortcutSetting[];
+  }
+
+  getTotalBugCount(): number {
+    const row = this.db.prepare("SELECT COUNT(*) AS count FROM bugs WHERE status != 'Discarded'").get() as { count: number };
+    return row.count;
   }
 
   updateShortcut(action: ShortcutAction, accelerator: string, enabled: boolean): ShortcutSetting {
