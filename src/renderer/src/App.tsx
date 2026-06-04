@@ -81,7 +81,7 @@ const settingsNavItems = [
   { route: '/settings/ai', label: 'AI Processing', icon: Bot },
   { route: '/settings/output', label: 'Output & Templates', icon: FileText },
   { route: '/settings/storage', label: 'Storage & Backups', icon: Database },
-  { route: '/settings/sync', label: 'Cloud Sync', icon: Cloud }
+  ...(import.meta.env.DEV ? [{ route: '/settings/sync', label: 'Cloud Sync', icon: Cloud }] : [])
 ];
 
 const howToGuideUrl = 'https://bugpocket.app/help';
@@ -268,5 +268,6 @@ export function App() {
     </ToastProvider>
   );
 }
+
 
 
