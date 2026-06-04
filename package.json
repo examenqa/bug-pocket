@@ -63,7 +63,7 @@
         "bucket": "bug-pocket-updates-v1",
         "region": "${env.AWS_REGION}",
         "path": "windows",
-        "acl": "public-read"
+        "acl": null
       }
     ]
   },
