@@ -1,6 +1,6 @@
 {
   "name": "bug-pocket",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Windows-first quick bug capture desktop app for QA testers.",
   "main": "out/main/index.js",
   "scripts": {
@@ -8,7 +8,8 @@
     "dev": "electron-vite dev",
     "build": "tsc --noEmit && electron-vite build && node scripts/fix-preload.js",
     "start": "electron-vite build && node scripts/fix-preload.js && electron .",
-    "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder"
+    "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder",
+    "dist:publish": "electron-vite build && node scripts/fix-preload.js && electron-builder --publish always"
   },
   "build": {
     "appId": "com.bugpocket.app",
@@ -58,9 +59,11 @@
     "afterPack": "scripts/patch-windows-icon.cjs",
     "publish": [
       {
-        "provider": "github",
-        "owner": "examenqa",
-        "repo": "bug-pocket"
+        "provider": "s3",
+        "bucket": "bug-pocket-updates-v1",
+        "region": "${env.AWS_REGION}",
+        "path": "windows",
+        "acl": "public-read"
       }
     ]
   },
