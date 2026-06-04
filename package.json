@@ -1,6 +1,6 @@
 {
   "name": "bug-pocket",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Windows-first quick bug capture desktop app for QA testers.",
   "main": "out/main/index.js",
   "scripts": {
@@ -99,3 +99,4 @@
     "preload": "fix-preload.js bridges an electron-vite@2.3.0 internal path-rewrite behavior. Do not upgrade electron-vite without re-testing the preload loading pipeline."
   }
 }
+
