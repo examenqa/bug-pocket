@@ -2,8 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { AiByokConfig, AiProvider } from '../../../../shared/types';
 
 interface AiSettingsProps {
-  enabled: boolean;
-  modelName: string;
   mutationReady: boolean;
   refresh: () => Promise<void>;
 }
@@ -259,3 +257,4 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
     </div>
   );
 }
+

@@ -128,7 +128,7 @@ export function SettingsPage({
           />
         )}
         {activeTab === 'ai' && (
-          <AiSettings enabled={settings.aiTriageEnabled} modelName={settings.ollamaModelName} mutationReady={settingsMutationBridgeReady} refresh={refresh} />
+          <AiSettings mutationReady={settingsMutationBridgeReady} refresh={refresh} />
         )}
         {activeTab === 'output' && (
           <TemplateSettings
@@ -148,6 +148,7 @@ export function SettingsPage({
     </section>
   );
 }
+
 
 
 

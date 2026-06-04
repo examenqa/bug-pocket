@@ -5,7 +5,6 @@ import type { ScreenshotResult, SettingsData } from '../../shared/types';
 import { QuickCaptureDraft, QuickCaptureForm } from './components/QuickCaptureForm';
 import { useSettings } from './hooks/useSettings';
 import { useHashRoute } from './hooks/useHashRoute';
-import { createQuickBugRecord } from './services/bugRecords';
 import { Dashboard } from './pages/DashboardPage';
 import { BugDetailsView } from './pages/BugDetailPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -26,7 +25,7 @@ function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: 
   const saveDraft = async (draft: QuickCaptureDraft): Promise<void> => {
     setSaving(true);
     try {
-      await createQuickBugRecord({
+      await window.bugPocket.createQuickBug({
         entry_type: 'Bug',
         application_id: draft.applicationId,
         module_id: draft.moduleId,
@@ -268,6 +267,7 @@ export function App() {
     </ToastProvider>
   );
 }
+
 
 
 

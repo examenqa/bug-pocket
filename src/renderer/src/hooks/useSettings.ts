@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { SettingsData } from '../../../shared/types';
 
 const emptySettings: SettingsData = {
@@ -31,9 +31,9 @@ const emptySettings: SettingsData = {
 export function useSettings() {
   const [settings, setSettings] = useState<SettingsData>(emptySettings);
 
-  const refresh = async (): Promise<void> => {
+  const refresh = useCallback(async (): Promise<void> => {
     setSettings(await window.bugPocket.getSettings());
-  };
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -43,7 +43,10 @@ export function useSettings() {
       unsubscribeShortcuts();
       unsubscribeSettings();
     };
-  }, []);
+  }, [refresh]);
 
   return { settings, refresh };
 }
+
+
+

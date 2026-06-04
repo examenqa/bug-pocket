@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 import type { FeedbackPayload } from '../../../../shared/types';
 
 export type SupportModalMode = 'bug' | 'feature';
@@ -107,7 +108,7 @@ export function SupportModal({ mode, open, onClose }: SupportModalProps) {
             <h2 id="support-modal-title">{titleForMode(mode)}</h2>
             <p>Submit a bug report or feature request directly to the team.</p>
           </div>
-          <button className="icon-button" type="button" aria-label="Close support form" disabled={isSubmitting} onClick={onClose}>x</button>
+          <button className="icon-button" type="button" aria-label="Close support form" disabled={isSubmitting} onClick={onClose}><X size={18} /></button>
         </header>
 
         <label>

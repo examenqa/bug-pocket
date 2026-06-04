@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Camera, Check, ChevronLeft, ChevronRight, Clipboard, Download, Gauge, Save, Trash2, X } from 'lucide-react';
 import type { AiByokConfig, AiIssueProcessResult, Attachment, AttachmentDownloadResult, BugDetails, CaptureStatus, SettingsData } from '../../../shared/types';
 import { Badge, SyncBadge } from '../components/shared/Badge';
@@ -17,9 +17,9 @@ import {
 } from '../utils/display';
 import { getModulesForApplication } from '../utils/filters';
 import { formatStepsAsNumberedList } from '../utils/formatSteps';
-import { buildBugUpdateInput, serializeBugUpdateInput, DetailsSaveState, AiTriageStatus } from '../utils/bugUpdate';
+import { buildBugUpdateInput, AiTriageStatus } from '../utils/bugUpdate';
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
-import { useDebounce } from '../hooks/useDebounce';
+import { useAutoSave } from '../hooks/useAutoSave';
 
 function aiTextField(value: unknown): string {
   if (typeof value === 'string') return value.trim();
@@ -48,19 +48,22 @@ export function BugDetailsView({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [spotlight, setSpotlight] = useState<SpotlightState | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
-  const [saveState, setSaveState] = useState<DetailsSaveState>('idle');
   const [aiStatus, setAiStatus] = useState<AiTriageStatus>('idle');
   const [byokAiReady, setByokAiReady] = useState(false);
   const [showAiRefinement, setShowAiRefinement] = useState(false);
   const [aiRefinementNote, setAiRefinementNote] = useState('');
   const [lastEditedField, setLastEditedField] = useState<keyof BugDetails | null>(null);
-  const bugRef = useRef<BugDetails | null>(null);
-  const isDirtyRef = useRef(false);
-  const lastSavedPayloadRef = useRef('');
-  const saveStateTimerRef = useRef<number | null>(null);
-  const saveInFlightRef = useRef<Promise<BugDetails | null> | null>(null);
   const showDetailsToast = useToast();
+  const saveBugCallback = useCallback((bugToSave: BugDetails) => window.bugPocket.updateBug(bugToSave.id, buildBugUpdateInput(bugToSave)) as Promise<BugDetails>, []);
+  const {
+    triggerSave,
+    flushSync,
+    bugRef,
+    saveState,
+    setSaveState,
+    markDirty,
+    resetSavedBaseline
+  } = useAutoSave({ bug, setBug, saveCallback: saveBugCallback, showToast: showDetailsToast });
 
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
@@ -103,109 +106,13 @@ export function BugDetailsView({
       if (cancelled) return;
       setBug(loadedBug);
       bugRef.current = loadedBug;
-      if (loadedBug) lastSavedPayloadRef.current = serializeBugUpdateInput(buildBugUpdateInput(loadedBug));
-      setIsDirty(false);
-      isDirtyRef.current = false;
-      setSaveState('idle');
-      void window.bugPocket.setDetailsDirty(false);
+      resetSavedBaseline(loadedBug);
     });
     return () => {
       cancelled = true;
       unsubscribeScreenshot();
     };
-  }, [bugId]);
-
-  useEffect(() => { bugRef.current = bug; }, [bug]);
-  useEffect(() => { isDirtyRef.current = isDirty; void window.bugPocket.setDetailsDirty(isDirty); }, [isDirty]);
-  useEffect(() => {
-    return () => {
-      if (saveStateTimerRef.current) window.clearTimeout(saveStateTimerRef.current);
-      void window.bugPocket.setDetailsDirty(false);
-    };
-  }, []);
-
-  const formPayloadKey = useMemo(() => (bug ? serializeBugUpdateInput(buildBugUpdateInput(bug)) : ''), [bug]);
-  const debouncedFormPayloadKey = useDebounce(formPayloadKey, 1500);
-
-  const markSavedSoon = (): void => {
-    setSaveState('saved');
-    if (saveStateTimerRef.current) window.clearTimeout(saveStateTimerRef.current);
-    saveStateTimerRef.current = window.setTimeout(() => setSaveState('idle'), 1600);
-  };
-
-  const saveCurrentBug = useCallback(async ({ showToast = false }: { showToast?: boolean } = {}): Promise<BugDetails | null> => {
-    if (saveInFlightRef.current) await saveInFlightRef.current;
-    const currentBug = bugRef.current;
-    if (!currentBug) return null;
-    const payload = buildBugUpdateInput(currentBug);
-    const payloadKey = serializeBugUpdateInput(payload);
-    if (payloadKey === lastSavedPayloadRef.current) {
-      setIsDirty(false);
-      isDirtyRef.current = false;
-      void window.bugPocket.setDetailsDirty(false);
-      if (showToast) {
-        showDetailsToast('Details already saved.');
-      }
-      return currentBug;
-    }
-    setSaveState('saving');
-    const savePromise = window.bugPocket.updateBug(currentBug.id, payload) as Promise<BugDetails>;
-    saveInFlightRef.current = savePromise;
-    try {
-      const updated = await savePromise;
-      const latestBug = bugRef.current;
-      const latestPayloadKey = latestBug ? serializeBugUpdateInput(buildBugUpdateInput(latestBug)) : payloadKey;
-      lastSavedPayloadRef.current = serializeBugUpdateInput(buildBugUpdateInput(updated));
-      if (latestPayloadKey !== payloadKey) {
-        setIsDirty(true);
-        isDirtyRef.current = true;
-        setSaveState('dirty');
-        void window.bugPocket.setDetailsDirty(true);
-        return latestBug;
-      }
-      setBug(updated);
-      bugRef.current = updated;
-      setIsDirty(false);
-      isDirtyRef.current = false;
-      void window.bugPocket.setDetailsDirty(false);
-      markSavedSoon();
-      if (showToast) {
-        showDetailsToast('Details saved successfully.');
-      }
-      return updated;
-    } catch (caught) {
-      setSaveState('error');
-      const message = caught instanceof Error ? caught.message : 'Unable to save details.';
-      showDetailsToast(message, 'error');
-      throw caught;
-    } finally {
-      saveInFlightRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!bugRef.current || !isDirtyRef.current || !debouncedFormPayloadKey) return;
-    if (debouncedFormPayloadKey !== formPayloadKey) return;
-    if (debouncedFormPayloadKey === lastSavedPayloadRef.current) {
-      setIsDirty(false);
-      isDirtyRef.current = false;
-      void window.bugPocket.setDetailsDirty(false);
-      return;
-    }
-    void saveCurrentBug();
-  }, [debouncedFormPayloadKey, formPayloadKey, saveCurrentBug]);
-
-  useEffect(() => {
-    return window.bugPocket.onDetailsFlushRequest(() => {
-      void (async () => {
-        try {
-          if (isDirtyRef.current) await saveCurrentBug();
-        } finally {
-          await window.bugPocket.detailsFlushComplete();
-        }
-      })();
-    });
-  }, [saveCurrentBug]);
+  }, [bugId, resetSavedBaseline]);
 
   const attachmentKey = bug?.attachments.map((attachment) => attachment.id).join(',') ?? '';
   useEffect(() => {
@@ -316,11 +223,8 @@ export function BugDetailsView({
         setSaveState('dirty');
         if (options.trackStatus !== false) setLastEditedField(key);
       } else {
-        isDirtyRef.current = true;
-        setIsDirty(true);
-        setSaveState('dirty');
+        markDirty();
         if (options.trackStatus !== false) setLastEditedField(key);
-        void window.bugPocket.setDetailsDirty(true);
       }
       return nextBug;
     });
@@ -332,8 +236,8 @@ export function BugDetailsView({
   const detailTitleValue = entryDisplay.isDerived ? entryDisplay.title : bug.title;
   const reportBug = { ...bug, title: entryDisplay.title };
 
-  const save = async (): Promise<void> => { await saveCurrentBug({ showToast: true }); };
-  const backToDashboard = async (): Promise<void> => { if (isDirtyRef.current) await saveCurrentBug(); onBack(); };
+  const save = async (): Promise<void> => { await triggerSave({ showToast: true }); };
+  const backToDashboard = async (): Promise<void> => { await flushSync(); onBack(); };
   const fieldSaveStatus = (key: keyof BugDetails): React.ReactNode => {
     if (lastEditedField !== key || (saveState !== 'saving' && saveState !== 'saved')) return null;
     return (
@@ -444,25 +348,9 @@ export function BugDetailsView({
         aiAppliedBug = { ...currentBug, note: cleanJsonString };
       }
 
-      if (saveInFlightRef.current) await saveInFlightRef.current;
       setBug(aiAppliedBug);
       bugRef.current = aiAppliedBug;
-      setSaveState('saving');
-      const savePromise = window.bugPocket.updateBug(aiAppliedBug.id, buildBugUpdateInput(aiAppliedBug)) as Promise<BugDetails>;
-      saveInFlightRef.current = savePromise;
-      let updated: BugDetails;
-      try {
-        updated = await savePromise;
-      } finally {
-        saveInFlightRef.current = null;
-      }
-      setBug(updated);
-      bugRef.current = updated;
-      lastSavedPayloadRef.current = serializeBugUpdateInput(buildBugUpdateInput(updated));
-      setIsDirty(false);
-      isDirtyRef.current = false;
-      void window.bugPocket.setDetailsDirty(false);
-      markSavedSoon();
+      await triggerSave({ bugOverride: aiAppliedBug });
       setAiStatus('completed');
       setShowAiRefinement(false);
       setAiRefinementNote('');
@@ -494,10 +382,7 @@ export function BugDetailsView({
     const updated = await window.bugPocket.updateBug(bug.id, buildBugUpdateInput(convertedBug));
     setBug(updated);
     bugRef.current = updated;
-    lastSavedPayloadRef.current = serializeBugUpdateInput(buildBugUpdateInput(updated));
-    setIsDirty(false);
-    isDirtyRef.current = false;
-    void window.bugPocket.setDetailsDirty(false);
+    resetSavedBaseline(updated);
   };
 
   const cloudSyncActive = isCloudSyncActive(settings);
@@ -709,6 +594,8 @@ export function BugDetailsView({
     </section>
   );
 }
+
+
 
 
 
