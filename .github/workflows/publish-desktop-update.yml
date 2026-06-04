@@ -33,10 +33,13 @@ jobs:
         run: npm run dist:publish
 
       - name: Verify public update manifest and installer
+        env:
+          BUG_POCKET_UPDATES_BUCKET: ${{ secrets.BUG_POCKET_UPDATES_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         shell: pwsh
         run: |
           $baseUrl = "https://$env:BUG_POCKET_UPDATES_BUCKET.s3.$env:AWS_REGION.amazonaws.com/windows"
-          $manifestUrl = "$baseUrl/latest.yml"
+          $manifestUrl = "$baseUrl/latest.yml?t=$([guid]::NewGuid())"
           $manifest = Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing -ErrorAction Stop
           $manifestText = $manifest.Content
 
@@ -58,6 +61,7 @@ jobs:
           }
 
           $installerUrl = "$baseUrl/$installerPath"
-          Invoke-WebRequest -Uri $installerUrl -Method Head -UseBasicParsing -ErrorAction Stop | Out-Null
+          Invoke-WebRequest -Uri "$installerUrl?t=$([guid]::NewGuid())" -Method Head -UseBasicParsing -ErrorAction Stop | Out-Null
           Write-Host "Verified latest.yml and installer at $installerUrl"
+
 
