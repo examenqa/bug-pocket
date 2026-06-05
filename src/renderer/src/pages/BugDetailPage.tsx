@@ -17,6 +17,7 @@ import {
 } from '../utils/display';
 import { getModulesForApplication } from '../utils/filters';
 import { formatStepsAsNumberedList } from '../utils/formatSteps';
+import { parseErrorForUI } from '../utils/errors';
 import { buildBugUpdateInput, AiTriageStatus } from '../utils/bugUpdate';
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
 import { useAutoSave } from '../hooks/useAutoSave';
@@ -68,6 +69,7 @@ export function BugDetailsView({
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
   const triaging = aiStatus === 'loading';
+  const aiTriageDisabled = triaging || !byokAiReady;
 
   useEffect(() => {
     let cancelled = false;
@@ -300,6 +302,20 @@ export function BugDetailsView({
     const currentEntryDisplay = getEntryDisplay(currentBug);
     const currentApplication = settings.applications.find((application) => application.id === currentBug.application_id);
     const currentModule = settings.modules.find((module) => module.id === currentBug.module_id);
+    let aiConfig: AiByokConfig;
+    try {
+      aiConfig = await window.bugPocket.getAiConfig() as AiByokConfig;
+    } catch (caught) {
+      showDetailsToast(parseErrorForUI(caught), 'error');
+      return;
+    }
+    const apiKeyReady = Boolean(aiConfig?.hasApiKey || aiConfig?.apiKey);
+    setByokAiReady(apiKeyReady);
+    if (!apiKeyReady) {
+      setAiStatus('idle');
+      showDetailsToast('Please configure your AI API key in Settings.', 'error');
+      return;
+    }
     setAiStatus('loading');
     try {
       const imagePath = currentBug.attachments[0] ? String((await window.bugPocket.resolveAttachmentPath(currentBug.attachments[0].id)) || '') : '';
@@ -356,9 +372,8 @@ export function BugDetailsView({
       setAiRefinementNote('');
       showDetailsToast('AI Triage applied and saved.');
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'AI triage failed.';
       setAiStatus('idle');
-      showDetailsToast(message, 'error');
+      showDetailsToast(parseErrorForUI(caught), 'error');
     }
   };
   const addScreenshot = async (): Promise<void> => { await window.bugPocket.startScreenshotCapture(bug.id); };
@@ -527,21 +542,21 @@ export function BugDetailsView({
             <h2>Generated report preview</h2>
             <textarea className="report-preview" readOnly value={generateReport(reportBug, settings.reportTemplates.find((template) => template.name === 'Full Bug Report'))} />
             <div className="copy-grid">
-              {(byokAiReady || settings.aiTriageEnabled) && (
+              {(
                 <div className="ai-triage-panel">
                   {aiStatus !== 'completed' ? (
-                    <button className="ai-triage-button" disabled={triaging} onClick={() => void triageWithLocalAi()}>
+                    <button className="ai-triage-button" disabled={aiTriageDisabled} onClick={() => void triageWithLocalAi()}>
                       <Gauge size={16} /> {triaging ? 'Triaging...' : 'AI Triage'}
                     </button>
                   ) : (
                     <>
-                      <button className="ai-triage-button secondary" disabled={triaging} onClick={() => setShowAiRefinement((visible) => !visible)}>
+                      <button className="ai-triage-button secondary" disabled={aiTriageDisabled} onClick={() => setShowAiRefinement((visible) => !visible)}>
                         <Gauge size={16} /> {triaging ? 'Refining...' : 'Refine AI Draft'}
                       </button>
                       {showAiRefinement && (
                         <div className="ai-refinement-box">
                           <textarea value={aiRefinementNote} onChange={(event) => setAiRefinementNote(event.target.value)} placeholder="E.g., Make the title more concise, or add step 4..." />
-                          <button disabled={triaging || !aiRefinementNote.trim()} onClick={() => void triageWithLocalAi(aiRefinementNote)}>Submit Correction</button>
+                          <button disabled={aiTriageDisabled || !aiRefinementNote.trim()} onClick={() => void triageWithLocalAi(aiRefinementNote)}>Submit Correction</button>
                         </div>
                       )}
                     </>

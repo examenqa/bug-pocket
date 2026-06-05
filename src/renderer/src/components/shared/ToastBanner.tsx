@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { X } from 'lucide-react';
 
 export type ToastVariant = 'success' | 'info' | 'error';
 
@@ -62,6 +63,9 @@ export function ToastBanner({ message, variant = 'success', durationMs, onClose 
       onMouseEnter={clearTimer}
       onMouseLeave={startTimer}
     >
+      <button className="toast-close" type="button" aria-label="Dismiss notification" onClick={onClose}>
+        <X size={16} />
+      </button>
       <span className="toast-message">{parsedMessage.userMessage}</span>
       {parsedMessage.rawDetails && (
         <details className="toast-details">

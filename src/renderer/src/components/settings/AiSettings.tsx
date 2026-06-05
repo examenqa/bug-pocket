@@ -37,31 +37,26 @@ function normalizePrompt(value: string | null | undefined): string {
   return !prompt || legacyDefaultPrompts.includes(prompt) ? defaultPrompt : prompt;
 }
 
-const providerPresets: Record<AiProvider, { baseUrl: string; modelId: string; helper: string }> = {
+const providerPresets: Record<AiProvider, { baseUrl: string; modelId: string }> = {
   OpenAI: {
     baseUrl: 'https://api.openai.com/v1',
-    modelId: '',
-    helper: 'OpenAI does not have a free default model. Enter a model ID only if you intend to use your OpenAI billing.'
+    modelId: ''
   },
   Grok: {
     baseUrl: 'https://api.x.ai/v1',
-    modelId: '',
-    helper: 'Grok does not have a free default model. Enter a model ID only if you intend to use your xAI billing.'
+    modelId: ''
   },
   OpenRouter: {
     baseUrl: 'https://openrouter.ai/api/v1',
-    modelId: 'google/gemma-4-31b-it:free',
-    helper: 'OpenRouter vision-capable free model. You can replace this with any OpenRouter model slug you prefer.'
+    modelId: 'google/gemma-4-31b-it:free'
   },
   Gemini: {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    modelId: 'gemini-2.0-flash',
-    helper: 'Google Gemini OpenAI-compatible endpoint.'
+    modelId: 'gemini-3.5-flash'
   },
   'Custom/Local': {
     baseUrl: 'http://localhost:11434/v1',
-    modelId: 'qwen3-vl:8b',
-    helper: 'Use any OpenAI-compatible local or hosted server.'
+    modelId: 'qwen3-vl:8b'
   }
 };
 
@@ -184,7 +179,7 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
         <div className="panel-heading">
           <div>
             <h2>AI Processing</h2>
-            <p className="settings-helper">Use any OpenAI-compatible REST endpoint. Bug Pocket stores your API key encrypted on this PC, sends cloud requests directly to your selected provider, and only uses AI for explicit issue formatting or triage actions.</p>
+            <p className="settings-helper">Bug Pocket stores your API key encrypted on this PC and only uses AI for explicit issue formatting or triage actions.</p>
           </div>
         </div>
 
@@ -192,7 +187,7 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
           <label>
             <span>Provider preset</span>
             <select value={provider} onChange={(event) => chooseProvider(event.target.value as AiProvider)} disabled={saving || !mutationReady}>
-              {Object.keys(providerPresets).map((name) => <option key={name} value={name}>{name}</option>)}
+              {Object.keys(providerPresets).map((name) => <option key={name} value={name}>{name === 'Gemini' ? 'Gemini (Recommended)' : name}</option>)}
             </select>
           </label>
           <label>
@@ -205,8 +200,6 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
           </label>
         </div>
 
-        <p className="settings-helper ai-provider-helper">{providerPresets[provider].helper} Bug Pocket calls <code>{baseUrl.replace(/\/+$/, '') || '[base-url]'}/chat/completions</code>.</p>
-
         <label className="ai-prompt-field">
           <span>API key {hasApiKey && <em>saved for {provider}</em>}</span>
           <input
@@ -218,19 +211,23 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
           />
         </label>
 
+        {provider === 'Gemini' && (
+          <p className="settings-helper ai-api-key-helper">Get a free API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>.</p>
+        )}
+
         <div className="settings-warning ai-privacy-warning">⚠️ Privacy Notice: If you are using a Free Tier Gemini key, Google's Terms of Service allow them to log and review your inputs (including screenshots and bug text) for model training. Do not use a Free Tier key for confidential, proprietary, or unreleased company data.</div>
 
         <label className="ai-prompt-field ai-system-prompt-field">
           <span className="ai-prompt-label-row">
             Custom System Prompt
             <span className="ai-prompt-button-group">
-              <button className="text-button ai-reset-prompt-button" type="button" disabled={saving || !mutationReady} onClick={resetPrompt}>Reset to Default</button>
+              <button className="ai-prompt-action-button" type="button" disabled={saving || !mutationReady} onClick={resetPrompt}>Reset to Default</button>
               {!isEditingPrompt ? (
-                <button className="text-button ai-reset-prompt-button" type="button" disabled={saving || !mutationReady} onClick={beginPromptEdit}>Edit Prompt</button>
+                <button className="ai-prompt-action-button" type="button" disabled={saving || !mutationReady} onClick={beginPromptEdit}>Edit Context</button>
               ) : (
                 <>
-                  <button className="text-button ai-reset-prompt-button" type="button" disabled={saving || !mutationReady} onClick={() => void savePromptEdit()}>Save</button>
-                  <button className="text-button ai-reset-prompt-button" type="button" disabled={saving} onClick={cancelPromptEdit}>Cancel</button>
+                  <button className="ai-prompt-action-button" type="button" disabled={saving || !mutationReady} onClick={() => void savePromptEdit()}>Save</button>
+                  <button className="ai-prompt-action-button" type="button" disabled={saving} onClick={cancelPromptEdit}>Cancel</button>
                 </>
               )}
             </span>
