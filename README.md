@@ -1,5 +1,7 @@
 # Bug Pocket
 
+**[🌐 Visit bugpocket.app to download the latest Windows installer](https://bugpocket.app)**
+
 Bug Pocket is a Windows-first, local-first desktop app for capturing bugs without interrupting active QA work. Testers can jot a short note, attach screenshots, annotate evidence, and return later to polish the report for Jira, Linear, Slack, email, or a custom template.
 
 The public repository is intentionally decoupled from Examen QA release infrastructure. It does not auto-update, publish installers, or call private download endpoints by default.
