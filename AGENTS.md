@@ -27,12 +27,11 @@ npm run dev
 npm run build
 npm run start
 npm run dist
-npm run dist:publish
 ```
 
 `npm install` runs `electron-rebuild` so `better-sqlite3` matches Electron.
 `npm run dist` runs `electron-vite build && node scripts/fix-preload.js && electron-builder` and creates the Windows NSIS installer under `release-build`.
-`npm run dist:publish` runs the same build plus `electron-builder --publish always`; CI uses it for S3 updater releases.
+The public repository intentionally does not include an auto-updater publish command or private release feed.
 
 ## Main Architecture
 
@@ -50,10 +49,6 @@ Important files:
 - `src/main/ai/ollamaTriage.ts`: legacy/local Ollama triage implementation kept in the tree for reference; it is not the primary AI path.
 - `src/main/database.ts`: SQLite schema, migrations, defaults, CRUD, content-addressed attachments, sync queue, report templates. Also owns the `app_settings` key-value table.
 - `src/main/sync/syncService.ts`: Supabase `SyncEngine`. It reads local credentials, initializes the client with Node WebSocket support, handles sign in/sign up/sign out, captures `current_workspace_id`, runs a push-only background worker that drains `sync_queue` sequentially, and sends support feedback through the Supabase Edge Function proxy.
-
-**Release / web API**
-- `api/download.js`: Vercel serverless download proxy. It fetches `windows/latest.yml` from the public S3 updater bucket, parses it with `js-yaml`, and returns a temporary redirect to the current NSIS installer.
-- `.github/workflows/publish-desktop-update.yml`: tag/manual workflow that runs `npm run dist:publish` and verifies the public `latest.yml` plus installer object after upload.
 
 **Preload & shared**
 - `src/preload/index.ts`: safe `window.bugPocket` bridge, including `startScreenshotCapture()`, BYOK AI config/triage methods, support feedback, toast variants, sync auth, backup/restore, and settings IPC.
@@ -950,6 +945,4 @@ Potential technical work:
 * **Custom Icon:** `build/icon.ico` is the Windows application icon. Keep `package.json > build.directories.buildResources` pointed at `build`, and keep `win.icon` pointed at `build/icon.ico`.
 * **Packaging Gotcha:** `npm run dist` cannot overwrite `release-build/win-unpacked/resources/app.asar` while an unpacked or installed Bug Pocket process is using it. Close running Bug Pocket instances before packaging.
 * **Preload Path Split:** `npm run dev` uses `out/preload/index.js`, while `npm run start`/packaged builds use `out/preload/index.mjs` after `scripts/fix-preload.js`. Keep `preloadPath()` environment-aware; do not hardcode only `.mjs` or dev can white-screen.
-* **S3 Updater Storage Contract:** `npm run dist:publish` must keep uploading the NSIS `.exe` and `latest.yml` to the `windows/` prefix of the public `bug-pocket-updates-v1` bucket on every release. Do not rename `latest.yml`; the Vercel website `/api/download` proxy depends on that exact manifest path to route users to the current installer.
-* **S3 ACLs Disabled:** The updater bucket uses Bucket Owner Enforced permissions, so `package.json > build.publish[0].acl` must stay `null`. Do not restore `public-read` ACL publishing; public access should be handled by bucket policy.
-* **Release Verification:** `.github/workflows/publish-desktop-update.yml` intentionally checks the public `windows/latest.yml` and resolved `.exe` after publishing. Keep this guard in place so broken update/download releases fail visibly.
+* **No Bundled Private Updater:** The open-source repository must not include Examen QA's private S3/Vercel update feed, `electron-updater` runtime checks, or publish workflow. `npm run dist` should build a local NSIS installer only.

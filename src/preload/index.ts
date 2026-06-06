@@ -147,14 +147,6 @@ const api = {
       ipcRenderer.removeListener('app:toast', listener);
     };
   },
-  quitAndInstallUpdate: () => ipcRenderer.invoke('updater:quitAndInstall'),
-  onUpdaterEvent: (callback: (payload: { event: string; [key: string]: unknown }) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: { event: string; [key: string]: unknown }): void => callback(payload);
-    ipcRenderer.on('updater:event', listener);
-    return () => {
-      ipcRenderer.removeListener('updater:event', listener);
-    };
-  },
   onDetailsFlushRequest: (callback: () => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('details:flush-save-request', listener);

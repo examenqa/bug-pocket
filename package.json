@@ -8,8 +8,7 @@
     "dev": "electron-vite dev",
     "build": "tsc --noEmit && electron-vite build && node scripts/fix-preload.js",
     "start": "electron-vite build && node scripts/fix-preload.js && electron .",
-    "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder",
-    "dist:publish": "electron-vite build && node scripts/fix-preload.js && electron-builder --publish always"
+    "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder"
   },
   "build": {
     "appId": "com.bugpocket.app",
@@ -58,25 +57,14 @@
       "installerSidebar": "build/installerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp"
     },
-    "afterPack": "scripts/patch-windows-icon.cjs",
-    "publish": [
-      {
-        "provider": "s3",
-        "bucket": "bug-pocket-updates-v1",
-        "region": "${env.AWS_REGION}",
-        "path": "windows",
-        "acl": null
-      }
-    ]
+    "afterPack": "scripts/patch-windows-icon.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.106.2",
     "archiver": "^8.0.0",
     "better-sqlite3": "^12.10.0",
     "electron-log": "5.4.4",
-    "electron-updater": "6.8.3",
     "extract-zip": "^2.0.1",
-    "js-yaml": "4.2.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

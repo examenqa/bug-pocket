@@ -321,48 +321,6 @@ button:disabled {
   min-width: 0;
 }
 
-.update-ready-dot {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: #35b94b;
-  box-shadow: 0 0 0 3px rgba(53, 185, 75, 0.16), 0 0 10px rgba(53, 185, 75, 0.28);
-}
-
-.settings-update-ready {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  min-height: 34px;
-  padding: 7px 9px;
-  border: 1px solid rgba(78, 176, 68, 0.34);
-  border-radius: 9px;
-  background: linear-gradient(180deg, rgba(240, 252, 236, 0.98), rgba(224, 247, 216, 0.94));
-  color: #216c1f;
-  font-size: 12px;
-  font-weight: 850;
-  text-align: left;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 8px 18px rgba(44, 139, 38, 0.08);
-}
-
-.settings-update-ready:hover,
-.settings-update-ready:focus-visible {
-  border-color: rgba(78, 176, 68, 0.54);
-  background: linear-gradient(180deg, rgba(233, 251, 228, 0.98), rgba(214, 242, 205, 0.96));
-  color: #185e18;
-  outline: none;
-}
-
-.settings-update-ready small {
-  color: #3d7c38;
-  font-size: 10px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
 .content {
   min-width: 0;
   height: 100vh;
