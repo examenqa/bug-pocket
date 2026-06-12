@@ -30,6 +30,8 @@ export function GeneralSettings({
       if (message.includes('active preset')) showToast('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.', 'error');
     }
   };
+  const taxonomyReadOnly = settings.currentWorkspaceRole === 'member';
+  const taxonomyReadOnlyMessage = 'Taxonomy is managed by workspace admins.';
 
   return (
     <div className="settings-tab-stack">
@@ -58,19 +60,23 @@ export function GeneralSettings({
             items={settings.applications.map((item) => ({ id: item.id, label: item.name, contextDescription: item.context_description ?? '', isSynced: item.is_synced !== 0 }))}
             addContextLabel="Application Description"
             addContextRequired={true}
+            readOnly={taxonomyReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             onAdd={async (value, contextDescription = '') => { await window.bugPocket.addApplication(value, contextDescription); await refresh(); }}
             onUpdate={async (id, value, item) => { await window.bugPocket.updateApplication(id, value, item.contextDescription ?? ''); await refresh(); }}
             onUpdateContext={async (id, contextDescription) => { await window.bugPocket.updateApplicationContext(id, contextDescription); await refresh(); }}
             onDelete={async (id) => runPresetLockedDelete(async () => { await window.bugPocket.deleteApplication(id); await refresh(); })}
             onToggleSync={async (id, isSynced) => { await window.bugPocket.updateApplicationSync(id, isSynced); await refresh(); }}
           />
-          <ModuleManager open={openSettingsCard === 'modules'} onToggle={() => toggleSettingsCard('modules')} applications={settings.applications} modules={settings.modules} mutationReady={mutationReady} refresh={refresh} showToast={showToast} />
+          <ModuleManager open={openSettingsCard === 'modules'} onToggle={() => toggleSettingsCard('modules')} applications={settings.applications} modules={settings.modules} mutationReady={mutationReady} refresh={refresh} showToast={showToast} readOnly={taxonomyReadOnly} readOnlyMessage={taxonomyReadOnlyMessage} />
           <OptionManager
             title="Environments"
             open={openSettingsCard === 'environments'}
             onToggle={() => toggleSettingsCard('environments')}
             mutationReady={mutationReady}
             items={settings.environments.map((item) => ({ id: item.id, label: item.value }))}
+            readOnly={taxonomyReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             onAdd={async (value) => { await window.bugPocket.addEnvironment(value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateEnvironment(id, value); await refresh(); }}
             onDelete={async (id) => runPresetLockedDelete(async () => { await window.bugPocket.deleteEnvironment(id); await refresh(); })}

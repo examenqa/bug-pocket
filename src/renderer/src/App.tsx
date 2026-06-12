@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, ChevronDown, Cloud, Database, FileText, HelpCircle, Home, Keyboard, Settings as SettingsIcon, SlidersHorizontal } from 'lucide-react';
+import { Bot, ChevronDown, Cloud, CloudOff, Database, FileText, HelpCircle, Home, Keyboard, Settings as SettingsIcon, SlidersHorizontal } from 'lucide-react';
 import type { ScreenshotResult, SettingsData } from '../../shared/types';
 import { QuickCaptureDraft, QuickCaptureForm } from './components/QuickCaptureForm';
 import { useSettings } from './hooks/useSettings';
@@ -11,8 +11,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { SnipOverlay } from './pages/SnipOverlay';
 import { SupportModal, type SupportModalMode } from './components/shared/SupportModal';
 import { ToastProvider } from './components/shared/ToastContext';
-import iconUrl from './assets/bug-pocket-icon.png';
-import titleUrl from './assets/bug-pocket-title.png';
+import { BrandMark } from './components/shared/BrandMark';
 
 function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: () => Promise<void> }) {
   const [attachments, setAttachments] = useState<ScreenshotResult[]>([]);
@@ -51,7 +50,7 @@ function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: 
       onSave={saveDraft}
       onCancel={() => window.bugPocket.hideQuickCapture()}
       onCreateApplication={async (name) => {
-        const application = await window.bugPocket.addApplication(name);
+        const application = await window.bugPocket.addApplication(name, '');
         await refresh();
         return application.id;
       }}
@@ -125,6 +124,8 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(() => route.startsWith('/settings'));
   const showingDetails = selectedBugId != null && !route.startsWith('/settings');
   const activeView = route.startsWith('/settings') ? 'settings' : 'dashboard';
+  const activeWorkspaceId = settings.currentWorkspaceId?.trim() ?? '';
+  const cloudWorkspaceActive = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(activeWorkspaceId);
 
   useEffect(() => {
     if (bugId) setSelectedBugId(bugId);
@@ -143,8 +144,8 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <img className="brand-logo" src={iconUrl} alt="" />
-          <img className="brand-title-logo" src={titleUrl} alt="Bug Pocket" />
+          <BrandMark className="brand-logo" />
+          <span className="brand-title-logo" aria-hidden="true">Bug Pocket</span>
         </div>
         <button
           className={activeView === 'dashboard' ? 'nav active' : 'nav'}
@@ -192,6 +193,10 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
           )}
         </div>
         <div className="sidebar-support-area">
+          <div className={cloudWorkspaceActive ? 'workspace-status-badge synced' : 'workspace-status-badge local'} title={cloudWorkspaceActive ? `Workspace ${activeWorkspaceId}` : 'Local-only workspace'}>
+            {cloudWorkspaceActive ? <Cloud size={15} /> : <CloudOff size={15} />}
+            <span>{cloudWorkspaceActive ? 'Cloud Synced' : 'Local Mode'}</span>
+          </div>
           <button
             ref={supportButtonRef}
             className={isSupportPopoverOpen ? 'nav support-nav active' : 'nav support-nav'}

@@ -4,7 +4,7 @@ export type SyncStatus = 'Local Only' | 'Sync Pending' | 'Synced' | 'Sync Failed
 export type AttachmentSourceType = 'snip' | 'screenshot' | 'clipboard' | 'uploaded_image' | 'camera_photo' | 'annotation' | 'other';
 export type ShortcutAction = 'quick_capture' | 'main_panel' | 'global_screenshot';
 export type ReferenceTable = 'environment' | 'device' | 'browser' | 'user_role';
-export type SyncQueueEntityType = 'bug' | 'attachment' | 'reference';
+export type SyncQueueEntityType = 'application' | 'module' | 'environment' | 'bug' | 'attachment' | 'reference';
 export type SyncQueueOperation = 'INSERT' | 'UPDATE' | 'DELETE' | 'MERGE';
 
 export interface Application {
@@ -148,7 +148,11 @@ export interface QuickBugInput {
   application_id: number | null;
   module_id: number | null;
   environment_id: number | null;
+  device_id?: number | string | null;
+  browser_id?: number | string | null;
   user_role_id: number | null;
+  workspace_id?: number | string | null;
+  created_by?: number | string | null;
   note: string;
   attachment_ids: number[];
 }
@@ -199,6 +203,7 @@ export interface SettingsData {
   supabaseProjectUrl: string | null;
   supabaseAnonKey: string | null;
   currentWorkspaceId: string | null;
+  currentWorkspaceRole: WorkspaceRole;
   cloudSyncActive: boolean;
   presets: CapturePreset[];
 }
@@ -226,10 +231,25 @@ export interface SyncQueueEvent {
   local_seq: number;
   op_id: string;
   entity_type: SyncQueueEntityType;
-  entity_id: number;
+  entity_id: number | string;
   operation: SyncQueueOperation;
   payload: string;
   created_at: string;
+  retry_count: number;
+  last_error: string | null;
+}
+
+export interface SyncDiagnosticsRow {
+  id: number;
+  local_seq: number;
+  op_id: string;
+  entity_type: SyncQueueEntityType;
+  entity_id: number | string;
+  operation: SyncQueueOperation;
+  created_at: string;
+  retry_count: number;
+  last_error: string | null;
+  label: string;
 }
 
 export interface BackupExportResult {
@@ -265,6 +285,14 @@ export interface SyncSessionStatus {
   authenticated: boolean;
   email?: string;
   workspaceId?: string;
+  workspaceRole?: WorkspaceRole;
+}
+
+export type WorkspaceRole = 'owner' | 'admin' | 'member';
+
+export interface SyncWorkspaceOption {
+  workspaceId: string;
+  name?: string;
 }
 
 export interface SyncAuthResult extends SyncSessionStatus {

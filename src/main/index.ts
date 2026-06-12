@@ -41,14 +41,11 @@ const quickCaptureReviewSize = { width: 880, height: 760 };
 
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 const backgroundStartArg = '--background-start';
+const windowBackgroundColor = '#F8FAFC';
 
 function rendererUrl(route: string): string {
   if (isDev) return `${process.env['ELECTRON_RENDERER_URL']}#${route}`;
   return `${pathToFileURL(join(__dirname, '../renderer/index.html')).toString()}#${route}`;
-}
-
-function packagedResourcePath(fileName: string): string {
-  return app.isPackaged ? join(process.resourcesPath, fileName) : join(__dirname, '../../resources', fileName);
 }
 
 function preloadPath(): string {
@@ -58,8 +55,6 @@ function preloadPath(): string {
 }
 
 function iconPath(): string {
-  const pngIconPath = packagedResourcePath('bug-pocket-icon.png');
-  if (existsSync(pngIconPath)) return pngIconPath;
   return app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '../../build/icon.ico');
 }
 
@@ -81,7 +76,7 @@ function createMainWindow(route = '/dashboard', showOnReady = true): void {
     show: false,
     icon: iconPath(),
     resizable: true,
-    backgroundColor: '#f9fafb',
+    backgroundColor: windowBackgroundColor,
     autoHideMenuBar: true,
     webPreferences: {
       preload: preloadPath(),
@@ -145,7 +140,7 @@ function createQuickWindow(): void {
     title: 'Quick Capture - Bug Pocket',
     show: false,
     icon: iconPath(),
-    backgroundColor: '#f8fbff',
+    backgroundColor: '#022F63',
     autoHideMenuBar: true,
     skipTaskbar: false,
     webPreferences: {
@@ -380,6 +375,7 @@ async function importBackup(): Promise<BackupImportResult> {
     if (typeof extractZip !== 'function') throw new Error('Backup extractor could not be loaded.');
 
     try {
+      syncEngine?.stop();
       db.checkpoint();
       db.close();
     } catch {
@@ -391,7 +387,8 @@ async function importBackup(): Promise<BackupImportResult> {
     cleanupSqliteSidecars(userDataPath);
 
     db = new BugPocketDatabase();
-    syncEngine = new SyncEngine(db);
+    db.applyAfterRestorePatch();
+    syncEngine = new SyncEngine(db, () => mainWindow?.webContents.send('bugs:changed'));
     syncEngine.initialize();
     registerAppShortcuts();
 
@@ -406,6 +403,8 @@ async function importBackup(): Promise<BackupImportResult> {
     const message = caught instanceof Error ? caught.message : 'Backup import failed.';
     try {
       db = new BugPocketDatabase();
+      syncEngine = new SyncEngine(db, () => mainWindow?.webContents.send('bugs:changed'));
+      syncEngine.initialize();
       registerAppShortcuts();
     } catch {
       // If reopening fails, surface the original restore error.
@@ -415,8 +414,10 @@ async function importBackup(): Promise<BackupImportResult> {
 }
 
 function cleanupSqliteSidecars(userDataPath: string): void {
-  ['bug-pocket.sqlite-wal', 'bug-pocket.sqlite-shm'].forEach((fileName) => {
-    const filePath = join(userDataPath, fileName);
+  readdirSync(userDataPath, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && (/\.sqlite-wal$/i.test(entry.name) || /\.sqlite-shm$/i.test(entry.name)))
+    .forEach((entry) => {
+    const filePath = join(userDataPath, entry.name);
     if (!existsSync(filePath)) return;
     try {
       unlinkSync(filePath);
@@ -427,12 +428,18 @@ function cleanupSqliteSidecars(userDataPath: string): void {
 }
 
 async function writeBackupArchive(filePath: string): Promise<BackupExportResult> {
-  let tempDatabasePath = '';
+  const tempDatabasePaths: string[] = [];
   try {
     db.checkpoint();
-    const databasePath = db.databasePath;
-    tempDatabasePath = join(app.getPath('userData'), `bug-pocket-temp-${Date.now()}-${randomUUID()}.sqlite`);
-    copyFileSync(databasePath, tempDatabasePath);
+    const databaseFiles = db.getBackupDatabaseFiles();
+    const archiveDatabaseFiles = databaseFiles
+      .filter((file) => existsSync(file.filePath))
+      .map((file) => {
+        const tempPath = join(app.getPath('userData'), `bug-pocket-temp-${file.role}-${Date.now()}-${randomUUID()}.sqlite`);
+        copyFileSync(file.filePath, tempPath);
+        tempDatabasePaths.push(tempPath);
+        return { ...file, tempPath };
+      });
     const attachmentsDir = db.screenshotsDir;
     const referencedAttachments = db.listBackupAttachmentFiles();
     const uniqueReferencedAttachments = new Map<string, { fileName: string; filePath: string }>();
@@ -452,7 +459,17 @@ async function writeBackupArchive(filePath: string): Promise<BackupExportResult>
     }
     const attachmentManifest = {
       exported_at: new Date().toISOString(),
-      database: 'bug-pocket.sqlite',
+      database: archiveDatabaseFiles.find((file) => file.role === 'workspace')?.archiveName ?? archiveDatabaseFiles[0]?.archiveName ?? 'local.sqlite',
+      databases: {
+        local_db: archiveDatabaseFiles.find((file) => file.role === 'local')?.archiveName ?? null,
+        workspace_db: archiveDatabaseFiles.find((file) => file.role === 'workspace')?.archiveName ?? null,
+        current_workspace_id: archiveDatabaseFiles.find((file) => file.role === 'workspace')?.workspaceId ?? null,
+        files: archiveDatabaseFiles.map((file) => ({
+          role: file.role,
+          path: file.archiveName,
+          workspace_id: file.workspaceId ?? null
+        }))
+      },
       attachment_directory: 'attachments',
       referenced_attachment_count: referencedAttachments.length,
       archived_attachment_count: archivedAttachmentFiles.size,
@@ -507,7 +524,9 @@ async function writeBackupArchive(filePath: string): Promise<BackupExportResult>
       });
 
       archive.pipe(output);
-      archive.append(createReadStream(tempDatabasePath), { name: 'bug-pocket.sqlite' });
+      archiveDatabaseFiles.forEach((databaseFile) => {
+        archive.append(createReadStream(databaseFile.tempPath), { name: databaseFile.archiveName });
+      });
       archivedAttachmentFiles.forEach((attachment) => {
         if (!existsSync(attachment.filePath) || !statSync(attachment.filePath).isFile()) return;
         archive.append(createReadStream(attachment.filePath), { name: `attachments/${attachment.fileName}` });
@@ -534,13 +553,14 @@ async function writeBackupArchive(filePath: string): Promise<BackupExportResult>
     }
     return { success: false, filePath, error: message };
   } finally {
-    if (tempDatabasePath && existsSync(tempDatabasePath)) {
+    tempDatabasePaths.forEach((tempDatabasePath) => {
+      if (!existsSync(tempDatabasePath)) return;
       try {
         unlinkSync(tempDatabasePath);
       } catch {
         // Temporary backup copies are best-effort cleanup.
       }
-    }
+    });
   }
 }
 
@@ -828,7 +848,7 @@ function registerIpc(): void {
   ipcMain.handle('window:openMain', (_event, route = '/dashboard') => openMainWindow(route));
   ipcMain.handle('window:openSettings', (_event, section?: string) => openSettings(section));
   ipcMain.handle('settings:get', () => settingsWithShortcutStatus());
-  ipcMain.handle('settings:addApplication', (_event, name: string, contextDescription = '') => mutateSettings(() => db.addApplication(name, contextDescription)));
+  ipcMain.handle('settings:addApplication', (_event, name: string, contextDescription?: string | null) => mutateSettings(() => db.addApplication(name, contextDescription ?? '')));
   ipcMain.handle('settings:updateApplication', (_event, id: number, name: string, contextDescription = '') => mutateSettings(() => db.updateApplication(id, name, contextDescription)));
   ipcMain.handle('settings:updateApplicationContext', (_event, id: number, contextDescription: string) => mutateSettings(() => db.updateApplicationContext(id, contextDescription)));
   ipcMain.handle('settings:updateApplicationSync', (_event, id: number, isSynced: boolean) => mutateSettings(() => db.updateApplicationSync(id, isSynced)));
@@ -969,6 +989,20 @@ function registerIpc(): void {
   ipcMain.handle('sync:authSignUp', (_event, email: string, password: string) => syncEngine.authSignUp(email, password));
   ipcMain.handle('sync:authSignOut', () => syncEngine.authSignOut());
   ipcMain.handle('sync:getSessionStatus', () => syncEngine.getSyncSessionStatus());
+  ipcMain.handle('sync:listWorkspaces', () => syncEngine.listWorkspaceMemberships());
+  ipcMain.handle('sync:updateWorkspaceName', (_event, workspaceId: string, name: string) => syncEngine.updateWorkspaceName(workspaceId, name));
+  ipcMain.handle('sync:getWorkspaceRole', (_event, workspaceId: string | null) => db.getWorkspaceRole(workspaceId));
+  ipcMain.handle('sync:getDiagnostics', () => db.getSyncDiagnostics());
+  ipcMain.handle('sync:forceRetry', async () => {
+    db.resetSyncQueueRetries();
+    await syncEngine.retrySyncQueueNow();
+    return db.getSyncDiagnostics();
+  });
+  ipcMain.handle('sync:switchWorkspace', async (_event, workspaceId: string) => {
+    const result = await syncEngine.switchWorkspace(workspaceId);
+    if (result.success) mainWindow?.webContents.send('bugs:changed');
+    return result;
+  });
   ipcMain.handle('ai:triageBug', (_event, bugData: unknown) => triageBugWithConfiguredAi(bugData));
   ipcMain.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => processIssueWithByokAi(db, payload));
 }
@@ -984,7 +1018,7 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     db = new BugPocketDatabase();
-    syncEngine = new SyncEngine(db);
+    syncEngine = new SyncEngine(db, () => mainWindow?.webContents.send('bugs:changed'));
     syncEngine.initialize();
     enforceStartupPreference(db.getRunOnSystemStartup());
     registerIpc();
@@ -1001,6 +1035,7 @@ if (!gotTheLock) {
 app.on('window-all-closed', () => {});
 
 app.on('will-quit', () => {
+  syncEngine?.stop();
   globalShortcut.unregisterAll();
 });
 

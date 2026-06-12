@@ -30,7 +30,10 @@ interface TextDraft {
   caretVisible: boolean;
 }
 
-const annotationColor = '#e53935';
+function annotationColor(): string {
+  if (typeof window === 'undefined') return 'rgb(229, 57, 53)';
+  return getComputedStyle(document.documentElement).getPropertyValue('--annotation-red').trim() || 'rgb(229, 57, 53)';
+}
 const strokeShadow = 'rgba(6, 27, 66, 0.18)';
 
 export const ScreenshotAnnotator = forwardRef<ScreenshotAnnotatorHandle, ScreenshotAnnotatorProps>(function ScreenshotAnnotator(
@@ -53,8 +56,8 @@ export const ScreenshotAnnotator = forwardRef<ScreenshotAnnotatorHandle, Screens
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 4;
-    ctx.strokeStyle = annotationColor;
-    ctx.fillStyle = annotationColor;
+    ctx.strokeStyle = annotationColor();
+    ctx.fillStyle = annotationColor();
     ctx.shadowColor = strokeShadow;
     ctx.shadowBlur = 1;
     ctx.font = '700 18px system-ui, sans-serif';
@@ -256,7 +259,7 @@ export const ScreenshotAnnotator = forwardRef<ScreenshotAnnotatorHandle, Screens
     const caretX = draft.point.x + width + 2;
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = annotationColor;
+    ctx.strokeStyle = annotationColor();
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(caretX, draft.point.y - 20);

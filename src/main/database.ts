@@ -24,9 +24,11 @@ import type {
   ShortcutAction,
   ShortcutSetting,
   SyncQueueEntityType,
+  SyncDiagnosticsRow,
   SyncQueueEvent,
   SyncQueueOperation,
   SyncStatus,
+  WorkspaceRole,
   AiProvider
 } from '../shared/types';
 
@@ -41,6 +43,7 @@ const defaultEnvironments = ['Production', 'Staging', 'QA', 'UAT', 'Development'
 const defaultDevices = ['Desktop', 'Laptop', 'Tablet', 'Mobile', 'Other'];
 const defaultBrowsers = ['Chrome', 'Edge', 'Firefox', 'Safari', 'Other'];
 const defaultUserRoles = ['Admin', 'Standard User', 'Guest', 'Read-Only'];
+const defaultLocalWorkspaceId = 'default-local';
 const referenceTables: Record<ReferenceTable, string> = {
   environment: 'environments',
   device: 'devices',
@@ -61,6 +64,7 @@ const defaultShortcuts: Array<Pick<ShortcutSetting, 'action' | 'label' | 'accele
   { action: 'global_screenshot', label: 'Global Screenshot', accelerator: 'CommandOrControl+Alt+S', is_enabled: 1, sort_order: 2 }
 ];
 const MAX_CAPTURE_PRESETS = 3;
+const DATABASE_SCHEMA_VERSION = 1;
 
 const quickReportTemplate = `🚨 *[{{severity}}] {{title}}*
 *Context:* {{application}} > {{module}} | {{environment}} | {{user_role}}
@@ -207,16 +211,28 @@ Attachments:
 {{attachments}}`;
 
 export class BugPocketDatabase {
+  private localDb: Database.Database;
+  private workspaceDb: Database.Database | null = null;
   private db: Database.Database;
+  private readonly dataDir: string;
+  private readonly localDbPath: string;
   private cloudSyncSessionActive = false;
 
   constructor() {
-    const dataDir = app.getPath('userData');
-    mkdirSync(dataDir, { recursive: true });
-    this.db = new Database(join(dataDir, 'bug-pocket.sqlite'));
-    this.db.pragma('journal_mode = WAL');
-    this.migrate();
+    this.dataDir = app.getPath('userData');
+    mkdirSync(this.dataDir, { recursive: true });
+    this.localDbPath = join(this.dataDir, 'local.sqlite');
+    const legacyDbPath = join(this.dataDir, 'bug-pocket.sqlite');
+    if (!existsSync(this.localDbPath) && existsSync(legacyDbPath)) {
+      copyFileSync(legacyDbPath, this.localDbPath);
+    }
+
+    this.localDb = this.openDatabase(this.localDbPath);
+    this.db = this.localDb;
+    this.migrateConnection(this.localDb, false);
     this.seedDefaults();
+    const workspaceId = this.getCurrentWorkspaceId();
+    if (workspaceId) this.connectToWorkspace(workspaceId);
     try {
       this.pruneStaleAttachments();
     } catch {
@@ -231,7 +247,23 @@ export class BugPocketDatabase {
   }
 
   get databasePath(): string {
-    return join(app.getPath('userData'), 'bug-pocket.sqlite');
+    return this.workspaceDb ? this.workspaceDatabasePath(this.getCurrentWorkspaceId() ?? '') : this.localDbPath;
+  }
+
+  getBackupDatabaseFiles(): Array<{ archiveName: string; filePath: string; role: 'local' | 'workspace'; workspaceId?: string }> {
+    const files: Array<{ archiveName: string; filePath: string; role: 'local' | 'workspace'; workspaceId?: string }> = [
+      { archiveName: 'local.sqlite', filePath: this.localDbPath, role: 'local' }
+    ];
+    const workspaceId = this.getCurrentWorkspaceId();
+    if (workspaceId && this.workspaceDb) {
+      files.push({
+        archiveName: `ws_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}.sqlite`,
+        filePath: this.workspaceDatabasePath(workspaceId),
+        role: 'workspace',
+        workspaceId
+      });
+    }
+    return files;
   }
 
   listBackupAttachmentFiles(): Array<{
@@ -244,7 +276,8 @@ export class BugPocketDatabase {
     file_path: string;
     created_at: string;
   }> {
-    const rows = this.db
+    const dataDb = this.workspaceDataDb();
+    const rows = dataDb
       .prepare(
         `SELECT id, bug_id, parent_id, content_hash, file_extension, created_at
          FROM attachments
@@ -273,19 +306,27 @@ export class BugPocketDatabase {
   }
 
   checkpoint(): void {
-    this.db.pragma('wal_checkpoint(FULL)');
+    this.localDb.pragma('wal_checkpoint(FULL)');
+    this.workspaceDb?.pragma('wal_checkpoint(FULL)');
   }
 
   close(): void {
-    this.db.close();
+    this.workspaceDb?.close();
+    this.workspaceDb = null;
+    this.localDb.close();
+  }
+
+  isOpen(): boolean {
+    return (this.localDb as unknown as { open?: boolean }).open !== false;
   }
 
   async factoryReset(): Promise<void> {
     const attachmentsDir = this.screenshotsDir;
-    const tx = this.db.transaction(() => {
-      this.db.prepare('DELETE FROM sync_queue').run();
-      this.db.prepare('DELETE FROM attachments').run();
-      this.db.prepare('DELETE FROM bugs').run();
+    const dataDb = this.workspaceDataDb();
+    const tx = dataDb.transaction(() => {
+      dataDb.prepare('DELETE FROM sync_queue').run();
+      dataDb.prepare('DELETE FROM attachments').run();
+      dataDb.prepare('DELETE FROM bugs').run();
     });
 
     tx();
@@ -293,10 +334,312 @@ export class BugPocketDatabase {
     mkdirSync(attachmentsDir, { recursive: true });
   }
 
+  applyAfterRestorePatch(): void {
+    const manifestPath = join(this.dataDir, 'backup-manifest.json');
+    const restoredSingleDatabasePath = join(this.dataDir, 'bug-pocket.sqlite');
+    const defaultWorkspacePath = this.workspaceDatabasePath(defaultLocalWorkspaceId);
+    const restoredManifest = this.readRestoreManifest(manifestPath);
+
+    if (restoredManifest?.databases) {
+      const currentWorkspaceId = typeof restoredManifest.databases.current_workspace_id === 'string'
+        ? restoredManifest.databases.current_workspace_id.trim()
+        : '';
+      const workspaceDbName = typeof restoredManifest.databases.workspace_db === 'string'
+        ? restoredManifest.databases.workspace_db.trim()
+        : '';
+
+      if (currentWorkspaceId && workspaceDbName) {
+        const extractedWorkspacePath = join(this.dataDir, workspaceDbName);
+        const targetWorkspacePath = this.workspaceDatabasePath(currentWorkspaceId);
+        if (!existsSync(extractedWorkspacePath)) {
+          throw new Error(`Backup restore failed: workspace database '${workspaceDbName}' is missing from the archive.`);
+        }
+        if (existsSync(extractedWorkspacePath) && extractedWorkspacePath !== targetWorkspacePath) {
+          this.workspaceDb?.close();
+          this.workspaceDb = null;
+          copyFileSync(extractedWorkspacePath, targetWorkspacePath);
+        }
+        this.connectToWorkspace(currentWorkspaceId);
+      } else {
+        this.connectToWorkspace(defaultLocalWorkspaceId);
+        this.copyLegacyLocalRowsToWorkspace();
+      }
+
+      this.clearLegacyLocalWorkspaceRows();
+      return;
+    }
+
+    const restoredSingleDatabaseExists = existsSync(restoredSingleDatabasePath);
+
+    if (restoredSingleDatabaseExists) {
+      this.workspaceDb?.close();
+      this.workspaceDb = null;
+      copyFileSync(restoredSingleDatabasePath, defaultWorkspacePath);
+    }
+
+    this.connectToWorkspace(defaultLocalWorkspaceId);
+    if (!restoredSingleDatabaseExists) {
+      this.copyLegacyLocalRowsToWorkspace();
+    }
+    this.clearLegacyLocalWorkspaceRows();
+    this.updateCurrentWorkspaceId(defaultLocalWorkspaceId);
+  }
+
+  private readRestoreManifest(manifestPath: string): { databases?: { local_db?: unknown; workspace_db?: unknown; current_workspace_id?: unknown } } | null {
+    if (!existsSync(manifestPath)) return null;
+    try {
+      const parsed = JSON.parse(readFileSync(manifestPath, 'utf8')) as { databases?: { local_db?: unknown; workspace_db?: unknown; current_workspace_id?: unknown } };
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
   resolveAttachmentPath(contentHash: string | null, fileExtension: string): string {
     if (!contentHash) return '';
     const extension = fileExtension.startsWith('.') ? fileExtension : `.${fileExtension}`;
     return join(this.screenshotsDir, `${contentHash}${extension}`);
+  }
+
+  attachmentFileExists(contentHash: string | null, fileExtension: string): boolean {
+    const filePath = this.resolveAttachmentPath(contentHash, fileExtension);
+    return Boolean(filePath && existsSync(filePath));
+  }
+
+  connectToWorkspace(workspaceId: string): string | null {
+    const cleaned = workspaceId.trim();
+    if (!cleaned) {
+      this.workspaceDb?.close();
+      this.workspaceDb = null;
+      this.updateCurrentWorkspaceId(null);
+      return null;
+    }
+
+    const nextPath = this.workspaceDatabasePath(cleaned);
+    this.workspaceDb?.close();
+    // Workspace databases are a loose offline cache. Taxonomy/config tables are exposed from
+    // local.sqlite via attached temp views, and SQLite cannot enforce REFERENCES across attached
+    // database files. Keep workspace FK checks disabled here; Supabase remains the authoritative
+    // relational integrity layer for cloud sync. Re-enabling this breaks Quick Panel inserts.
+    this.workspaceDb = this.openDatabase(nextPath, false);
+    this.migrateConnection(this.workspaceDb, true);
+    this.attachLocalTaxonomyViews(this.workspaceDb);
+    this.workspaceDb.pragma('foreign_keys = OFF');
+    this.updateCurrentWorkspaceId(cleaned);
+    return cleaned;
+  }
+
+  private openDatabase(path: string, enforceForeignKeys = true): Database.Database {
+    const connection = new Database(path);
+    connection.pragma('journal_mode = WAL');
+    connection.pragma(`foreign_keys = ${enforceForeignKeys ? 'ON' : 'OFF'}`);
+    return connection;
+  }
+
+  private migrateConnection(connection: Database.Database, workspace: boolean): void {
+    const previous = this.db;
+    this.db = connection;
+    try {
+      const version = Number(connection.pragma('user_version', { simple: true }) ?? 0);
+      this.migrate();
+      if (workspace) this.ensureWorkspaceUuidTaxonomySchema();
+      if (version < DATABASE_SCHEMA_VERSION) {
+        connection.pragma(`user_version = ${DATABASE_SCHEMA_VERSION}`);
+      }
+      if (workspace) connection.pragma('foreign_keys = OFF');
+    } finally {
+      this.db = previous;
+    }
+  }
+
+  private workspaceDatabasePath(workspaceId: string): string {
+    const safeId = workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_');
+    return join(this.dataDir, `ws_${safeId}.sqlite`);
+  }
+
+  private copyLegacyLocalRowsToWorkspace(): void {
+    if (!this.workspaceDb) return;
+    const legacyTables = ['applications', 'modules', 'environments', 'bugs', 'attachments', 'sync_queue'];
+    this.workspaceDb.exec('PRAGMA foreign_keys = OFF');
+    try {
+      for (const table of legacyTables) {
+        if (!this.tableExists(this.localDb, table) || !this.tableExists(this.workspaceDb, table)) continue;
+        const localCount = this.localDb.prepare(`SELECT COUNT(*) AS count FROM ${this.quoteIdentifier(table)}`).get() as { count: number };
+        if (!localCount.count) continue;
+
+        const commonColumns = this.commonColumns(this.localDb, this.workspaceDb, table);
+        if (!commonColumns.length) continue;
+
+        const columnSql = commonColumns.map((column) => this.quoteIdentifier(column)).join(', ');
+        const placeholders = commonColumns.map((column) => `@${column}`).join(', ');
+        const rows = this.localDb.prepare(`SELECT ${columnSql} FROM ${this.quoteIdentifier(table)}`).all() as Array<Record<string, unknown>>;
+        const insert = this.workspaceDb.prepare(`INSERT OR IGNORE INTO ${this.quoteIdentifier(table)} (${columnSql}) VALUES (${placeholders})`);
+        const copyRows = this.workspaceDb.transaction((values: Array<Record<string, unknown>>) => {
+          values.forEach((row) => insert.run(row));
+        });
+        copyRows(rows);
+      }
+    } finally {
+      this.workspaceDb.exec('PRAGMA foreign_keys = OFF');
+    }
+  }
+
+  private clearLegacyLocalWorkspaceRows(): void {
+    const clearRows = this.localDb.transaction(() => {
+      ['sync_queue', 'attachments', 'bugs'].forEach((table) => {
+        if (!this.tableExists(this.localDb, table)) return;
+        this.localDb.prepare(`DELETE FROM ${this.quoteIdentifier(table)}`).run();
+      });
+    });
+    clearRows();
+  }
+
+  private tableExists(connection: Database.Database, table: string): boolean {
+    const row = connection
+      .prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?")
+      .get(table) as { name: string } | undefined;
+    return Boolean(row);
+  }
+
+  private commonColumns(left: Database.Database, right: Database.Database, table: string): string[] {
+    const leftColumns = new Set(
+      (left.prepare(`PRAGMA table_info(${this.quoteIdentifier(table)})`).all() as Array<{ name: string }>).map((column) => column.name)
+    );
+    return (right.prepare(`PRAGMA table_info(${this.quoteIdentifier(table)})`).all() as Array<{ name: string }>)
+      .map((column) => column.name)
+      .filter((column) => leftColumns.has(column));
+  }
+
+  private quoteIdentifier(identifier: string): string {
+    return `"${identifier.replace(/"/g, '""')}"`;
+  }
+
+  private attachLocalTaxonomyViews(connection: Database.Database): void {
+    const escapedPath = this.localDbPath.replace(/'/g, "''");
+    connection.exec(`ATTACH DATABASE '${escapedPath}' AS local_config`);
+    const viewTables = [
+      'devices',
+      'browsers',
+      'user_roles',
+      'config_options',
+      'report_templates',
+      'presets',
+      'shortcut_settings',
+      'app_settings'
+    ];
+    for (const table of viewTables) {
+      connection.exec(`DROP VIEW IF EXISTS temp.${table}`);
+      connection.exec(`CREATE TEMP VIEW ${table} AS SELECT * FROM local_config.${table}`);
+    }
+  }
+
+  private ensureWorkspaceUuidTaxonomySchema(): void {
+    const applicationIdColumn = this.db.prepare('PRAGMA table_info(applications)').all() as Array<{ name: string; type: string }>;
+    const alreadyUuid = applicationIdColumn.some((column) => column.name === 'id' && column.type.toUpperCase().includes('TEXT'));
+    if (alreadyUuid) return;
+
+    this.db.exec(`
+      PRAGMA foreign_keys = OFF;
+
+      CREATE TABLE IF NOT EXISTS applications_uuid (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        context_description TEXT NULL DEFAULT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        is_synced INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT OR IGNORE INTO applications_uuid (id, name, context_description, is_active, is_synced, created_at, updated_at)
+      SELECT CAST(id AS TEXT), name, context_description, is_active, is_synced, created_at, updated_at FROM applications;
+
+      CREATE TABLE IF NOT EXISTS modules_uuid (
+        id TEXT PRIMARY KEY,
+        application_id TEXT NULL REFERENCES applications(id) ON DELETE SET NULL,
+        name TEXT NOT NULL,
+        context_description TEXT NULL DEFAULT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT OR IGNORE INTO modules_uuid (id, application_id, name, context_description, is_active, created_at, updated_at)
+      SELECT CAST(id AS TEXT), CASE WHEN application_id IS NULL THEN NULL ELSE CAST(application_id AS TEXT) END, name, context_description, is_active, created_at, updated_at FROM modules;
+
+      CREATE TABLE IF NOT EXISTS environments_uuid (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        value TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT OR IGNORE INTO environments_uuid (id, name, value, sort_order, is_active, created_at, updated_at)
+      SELECT CAST(id AS TEXT), name, value, sort_order, is_active, created_at, updated_at FROM environments;
+
+      CREATE TABLE IF NOT EXISTS bugs_uuid (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        application_id TEXT NULL REFERENCES applications(id) ON DELETE SET NULL,
+        module_id TEXT NULL REFERENCES modules(id) ON DELETE SET NULL,
+        environment_id TEXT NULL REFERENCES environments(id) ON DELETE SET NULL,
+        device_id INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL,
+        browser_id INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL,
+        user_role_id INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL,
+        entry_type TEXT NOT NULL DEFAULT 'Bug',
+        title TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        other_details TEXT NOT NULL DEFAULT '',
+        steps_to_reproduce TEXT NOT NULL DEFAULT '',
+        expected_result TEXT NOT NULL DEFAULT '',
+        actual_result TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'Draft' CHECK (status IN ('Draft', 'Reported', 'Discarded')),
+        severity TEXT NOT NULL DEFAULT 'Medium',
+        reported INTEGER NOT NULL DEFAULT 0,
+        issue_platform TEXT NOT NULL DEFAULT '',
+        issue_id TEXT NOT NULL DEFAULT '',
+        issue_url TEXT NOT NULL DEFAULT '',
+        tags TEXT NOT NULL DEFAULT '',
+        sync_status TEXT NOT NULL DEFAULT 'Local Only',
+        last_sync_at TEXT NOT NULL DEFAULT '',
+        remote_id TEXT NOT NULL DEFAULT '',
+        workspace_id TEXT NULL DEFAULT NULL,
+        created_by TEXT NULL DEFAULT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT OR IGNORE INTO bugs_uuid (
+        id, application_id, module_id, environment_id, device_id, browser_id, user_role_id,
+        entry_type, title, note, other_details, steps_to_reproduce, expected_result, actual_result,
+        status, severity, reported, issue_platform, issue_id, issue_url, tags, sync_status, last_sync_at, remote_id, workspace_id, created_by, created_at, updated_at
+      )
+      SELECT
+        id,
+        CASE WHEN application_id IS NULL THEN NULL ELSE CAST(application_id AS TEXT) END,
+        CASE WHEN module_id IS NULL THEN NULL ELSE CAST(module_id AS TEXT) END,
+        CASE WHEN environment_id IS NULL THEN NULL ELSE CAST(environment_id AS TEXT) END,
+        device_id, browser_id, user_role_id,
+        entry_type, title, note, other_details, steps_to_reproduce, expected_result, actual_result,
+        status, severity, reported, issue_platform, issue_id, issue_url, tags, sync_status, last_sync_at, remote_id, workspace_id, created_by, created_at, updated_at
+      FROM bugs;
+
+      DROP TABLE bugs;
+      DROP TABLE modules;
+      DROP TABLE applications;
+      DROP TABLE environments;
+      ALTER TABLE applications_uuid RENAME TO applications;
+      ALTER TABLE modules_uuid RENAME TO modules;
+      ALTER TABLE environments_uuid RENAME TO environments;
+      ALTER TABLE bugs_uuid RENAME TO bugs;
+
+      CREATE INDEX IF NOT EXISTS idx_modules_application_id ON modules(application_id);
+      CREATE INDEX IF NOT EXISTS idx_bugs_application_id ON bugs(application_id);
+      CREATE INDEX IF NOT EXISTS idx_bugs_module_id ON bugs(module_id);
+      CREATE INDEX IF NOT EXISTS idx_bugs_environment_id ON bugs(environment_id);
+      CREATE INDEX IF NOT EXISTS idx_bugs_sync_status ON bugs(sync_status);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_bugs_remote_id ON bugs(remote_id) WHERE remote_id != '';
+
+      PRAGMA foreign_keys = ON;
+    `);
   }
 
   private migrate(): void {
@@ -385,6 +728,8 @@ export class BugPocketDatabase {
         tags TEXT NOT NULL DEFAULT '',
         sync_status TEXT NOT NULL DEFAULT 'Local Only',
         last_sync_at TEXT NOT NULL DEFAULT '',
+        workspace_id TEXT NULL DEFAULT NULL,
+        created_by TEXT NULL DEFAULT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -449,7 +794,9 @@ export class BugPocketDatabase {
         entity_id INTEGER NOT NULL,
         operation TEXT NOT NULL,
         payload TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT NULL DEFAULT NULL
       );
 
       CREATE TABLE IF NOT EXISTS app_settings (
@@ -486,14 +833,21 @@ export class BugPocketDatabase {
     this.ensureColumn('bugs', 'actual_result', "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn('bugs', 'sync_status', "TEXT NOT NULL DEFAULT 'Local Only'");
     this.ensureColumn('bugs', 'last_sync_at', "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumn('bugs', 'remote_id', "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumn('bugs', 'workspace_id', 'TEXT NULL DEFAULT NULL');
+    this.ensureColumn('bugs', 'created_by', 'TEXT NULL DEFAULT NULL');
     this.ensureColumn('attachments', 'source_type', "TEXT NOT NULL DEFAULT 'snip'");
     this.ensureColumn('attachments', 'sync_status', "TEXT NOT NULL DEFAULT 'Local Only'");
     this.ensureColumn('attachments', 'last_sync_at', "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumn('attachments', 'remote_id', "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumn('attachments', 'updated_at', "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn('attachments', 'content_hash', 'TEXT NULL DEFAULT NULL');
     this.ensureColumn('attachments', 'file_extension', "TEXT NOT NULL DEFAULT '.png'");
     this.ensureColumn('attachments', 'parent_id', 'INTEGER NULL REFERENCES attachments(id) ON DELETE SET NULL');
     this.ensureColumn('sync_queue', 'local_seq', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureColumn('sync_queue', 'op_id', "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumn('sync_queue', 'retry_count', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('sync_queue', 'last_error', 'TEXT NULL DEFAULT NULL');
     this.ensureClientId();
     this.migrateToAppSettings();
     this.backfillSyncQueueDeterminism();
@@ -509,8 +863,10 @@ export class BugPocketDatabase {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_browser_id ON bugs(browser_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_user_role_id ON bugs(user_role_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_sync_status ON bugs(sync_status)');
+    this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bugs_remote_id ON bugs(remote_id) WHERE remote_id != ''");
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_attachments_bug_id ON attachments(bug_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_attachments_content_hash ON attachments(content_hash)');
+    this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_attachments_remote_id ON attachments(remote_id) WHERE remote_id != ''");
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_sync_queue_created_at ON sync_queue(created_at)');
     this.db.exec('DROP INDEX IF EXISTS idx_sync_queue_local_seq');
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_local_seq ON sync_queue(local_seq) WHERE local_seq > 0');
@@ -802,6 +1158,9 @@ export class BugPocketDatabase {
         tags TEXT NOT NULL DEFAULT '',
         sync_status TEXT NOT NULL DEFAULT 'Local Only',
         last_sync_at TEXT NOT NULL DEFAULT '',
+        remote_id TEXT NOT NULL DEFAULT '',
+        workspace_id TEXT NULL DEFAULT NULL,
+        created_by TEXT NULL DEFAULT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -809,7 +1168,7 @@ export class BugPocketDatabase {
       INSERT INTO bugs_status_limited (
         id, application_id, module_id, environment_id, device_id, browser_id, user_role_id, entry_type, title, note, other_details,
         steps_to_reproduce, expected_result, actual_result, status, severity, reported, issue_platform, issue_id,
-        issue_url, tags, sync_status, last_sync_at, created_at, updated_at
+        issue_url, tags, sync_status, last_sync_at, remote_id, workspace_id, created_by, created_at, updated_at
       )
       SELECT
         id, application_id, module_id, environment_id, device_id, browser_id, user_role_id, entry_type, title, note, other_details,
@@ -824,7 +1183,7 @@ export class BugPocketDatabase {
           WHEN LOWER(TRIM(status)) IN ('reported', 'fixed', 'verified', 'done', 'converted to bug') THEN 1
           ELSE 0
         END,
-        issue_platform, issue_id, issue_url, tags, sync_status, last_sync_at, created_at, updated_at
+        issue_platform, issue_id, issue_url, tags, sync_status, last_sync_at, remote_id, workspace_id, created_by, created_at, updated_at
       FROM bugs;
 
       DROP TABLE bugs;
@@ -834,19 +1193,19 @@ export class BugPocketDatabase {
 
   private deleteAttachmentBlobIfUnused(contentHash: string | null, fileExtension: string): void {
     if (!contentHash) return;
-    const remaining = this.db.prepare('SELECT COUNT(*) AS count FROM attachments WHERE content_hash = ?').get(contentHash) as { count: number };
+    const remaining = this.workspaceDataDb().prepare('SELECT COUNT(*) AS count FROM attachments WHERE content_hash = ?').get(contentHash) as { count: number };
     if (remaining.count > 0) return;
     const filePath = this.resolveAttachmentPath(contentHash, fileExtension);
     if (existsSync(filePath)) unlinkSync(filePath);
   }
 
   private nextLocalSeq(): number {
-    const row = this.db.prepare('SELECT COALESCE(MAX(local_seq), 0) + 1 AS next_seq FROM sync_queue').get() as { next_seq: number };
+    const row = this.workspaceDataDb().prepare('SELECT COALESCE(MAX(local_seq), 0) + 1 AS next_seq FROM sync_queue').get() as { next_seq: number };
     return row.next_seq;
   }
 
-  private enqueueSyncEvent(entityType: SyncQueueEntityType, entityId: number, operation: SyncQueueOperation, payload: unknown): void {
-    this.db
+  private enqueueSyncEvent(entityType: SyncQueueEntityType, entityId: number | string, operation: SyncQueueOperation, payload: unknown): void {
+    this.workspaceDataDb()
       .prepare('INSERT INTO sync_queue (local_seq, op_id, entity_type, entity_id, operation, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(this.nextLocalSeq(), randomUUID(), entityType, entityId, operation, JSON.stringify(payload ?? {}), now());
   }
@@ -861,6 +1220,24 @@ export class BugPocketDatabase {
     this.enqueueSyncEvent('attachment', attachmentId, operation, payload);
   }
 
+  private enqueueApplicationSyncEvent(applicationId: number | string, operation: SyncQueueOperation, payload = this.applicationPayload(applicationId)): void {
+    if (!this.isCloudSyncReady()) return;
+    if (payload && Number(payload.is_synced ?? 1) === 0) return;
+    this.enqueueSyncEvent('application', applicationId, operation, payload);
+  }
+
+  private enqueueModuleSyncEvent(moduleId: number | string, operation: SyncQueueOperation, payload = this.modulePayload(moduleId)): void {
+    if (!this.isCloudSyncReady()) return;
+    const applicationId = payload?.application_id ?? null;
+    if (!this.shouldSyncApplication(this.sanitizeOptionalForeignKey(applicationId))) return;
+    this.enqueueSyncEvent('module', moduleId, operation, payload);
+  }
+
+  private enqueueEnvironmentSyncEvent(environmentId: number | string, operation: SyncQueueOperation, payload = this.environmentPayload(environmentId)): void {
+    if (!this.isCloudSyncReady()) return;
+    this.enqueueSyncEvent('environment', environmentId, operation, payload);
+  }
+
   setCloudSyncSessionActive(active: boolean): void {
     this.cloudSyncSessionActive = active;
   }
@@ -873,7 +1250,7 @@ export class BugPocketDatabase {
     return this.isCloudSyncActive();
   }
 
-  private pendingSyncStatusForBug(applicationId: number | null): SyncStatus {
+  private pendingSyncStatusForBug(applicationId: number | string | null): SyncStatus {
     return this.isCloudSyncReady() && this.shouldSyncApplication(applicationId) ? 'Sync Pending' : 'Local Only';
   }
 
@@ -884,7 +1261,7 @@ export class BugPocketDatabase {
   private shouldSyncBugPayload(payload: unknown): boolean {
     if (!this.isCloudSyncReady()) return false;
     const applicationId = typeof payload === 'object' && payload !== null ? (payload as { application_id?: unknown }).application_id : null;
-    return this.shouldSyncApplication(typeof applicationId === 'number' ? applicationId : null);
+    return this.shouldSyncApplication(this.sanitizeOptionalForeignKey(applicationId));
   }
 
   private shouldSyncAttachmentPayload(payload: unknown): boolean {
@@ -895,23 +1272,32 @@ export class BugPocketDatabase {
   }
 
   private shouldSyncBug(bugId: number): boolean {
-    const row = this.db.prepare('SELECT application_id FROM bugs WHERE id = ?').get(bugId) as { application_id: number | null } | undefined;
+    const row = this.workspaceDataDb().prepare('SELECT application_id FROM bugs WHERE id = ?').get(bugId) as { application_id: number | string | null } | undefined;
     if (!row) return false;
     return this.shouldSyncApplication(row.application_id);
   }
 
-  private shouldSyncApplication(applicationId: number | null): boolean {
+  private shouldSyncApplication(applicationId: number | string | null): boolean {
     if (applicationId == null) return true;
     const row = this.db.prepare('SELECT is_synced FROM applications WHERE id = ?').get(applicationId) as { is_synced: number } | undefined;
     return row ? row.is_synced !== 0 : false;
   }
 
+  private sanitizeOptionalForeignKey(value: unknown): number | string | null {
+    if (value === undefined || value === null) return null;
+    if (typeof value === 'string') {
+      const cleaned = value.trim();
+      return cleaned ? cleaned : null;
+    }
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
   private bugPayload(id: number): Record<string, unknown> | null {
     return (
-      (this.db
+      (this.workspaceDataDb()
         .prepare(
           `
-          SELECT bugs.*, applications.name AS application_name, modules.name AS module_name,
+          SELECT bugs.*, COALESCE(applications.name, 'General') AS application_name, COALESCE(modules.name, 'Uncategorized') AS module_name,
             environments.name AS environment, devices.name AS device, browsers.name AS browser, user_roles.name AS user_role
           FROM bugs
           LEFT JOIN applications ON applications.id = bugs.application_id
@@ -929,8 +1315,24 @@ export class BugPocketDatabase {
 
   private attachmentPayload(id: number): Record<string, unknown> | null {
     return (
-      (this.db
+      (this.workspaceDataDb()
         .prepare(`SELECT attachments.*, ${attachmentFileNameSql} FROM attachments WHERE id = ?`)
+        .get(id) as Record<string, unknown> | undefined) ?? null
+    );
+  }
+
+  private applicationPayload(id: number | string): Record<string, unknown> | null {
+    return (this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Record<string, unknown> | undefined) ?? null;
+  }
+
+  private modulePayload(id: number | string): Record<string, unknown> | null {
+    return (this.db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Record<string, unknown> | undefined) ?? null;
+  }
+
+  private environmentPayload(id: number | string): Record<string, unknown> | null {
+    return (
+      (this.db
+        .prepare('SELECT id, name, COALESCE(NULLIF(value, \'\'), name) AS value, sort_order, is_active, created_at, updated_at FROM environments WHERE id = ?')
         .get(id) as Record<string, unknown> | undefined) ?? null
     );
   }
@@ -1191,6 +1593,7 @@ Attachments:
       supabaseProjectUrl: this.getSupabaseProjectUrl(),
       supabaseAnonKey: this.getSupabaseAnonKey(),
       currentWorkspaceId: this.getCurrentWorkspaceId(),
+      currentWorkspaceRole: this.getWorkspaceRole(this.getCurrentWorkspaceId()),
       cloudSyncActive: this.isCloudSyncActive(),
       presets: this.getPresets()
     };
@@ -1201,7 +1604,7 @@ Attachments:
   }
 
   getTotalBugCount(): number {
-    const row = this.db.prepare("SELECT COUNT(*) AS count FROM bugs WHERE status != 'Discarded'").get() as { count: number };
+    const row = this.workspaceDataDb().prepare("SELECT COUNT(*) AS count FROM bugs WHERE status != 'Discarded'").get() as { count: number };
     return row.count;
   }
 
@@ -1319,6 +1722,300 @@ Attachments:
     this.setSetting('current_workspace_id', cleaned);
     return cleaned || null;
   }
+
+  getWorkspaceRole(workspaceId: string | null): WorkspaceRole {
+    const cleaned = (workspaceId ?? '').trim();
+    if (!cleaned) return 'admin';
+    const value = this.getSetting(this.workspaceRoleKey(cleaned)).trim();
+    return value === 'owner' || value === 'admin' || value === 'member' ? value : 'admin';
+  }
+
+  updateWorkspaceRole(workspaceId: string, role: string | null | undefined): WorkspaceRole {
+    const cleanedWorkspaceId = workspaceId.trim();
+    const normalizedRole: WorkspaceRole = role === 'owner' || role === 'admin' || role === 'member' ? role : 'member';
+    if (cleanedWorkspaceId) this.setSetting(this.workspaceRoleKey(cleanedWorkspaceId), normalizedRole);
+    return normalizedRole;
+  }
+
+  getRemoteSyncWatermark(workspaceId: string): string {
+    const key = this.remoteSyncWatermarkKey(workspaceId);
+    return this.getSetting(key).trim();
+  }
+
+  updateRemoteSyncWatermark(workspaceId: string, timestamp: string): string {
+    const cleaned = timestamp.trim();
+    this.setSetting(this.remoteSyncWatermarkKey(workspaceId), cleaned);
+    return cleaned;
+  }
+
+  markRemoteId(entityType: 'bug' | 'attachment', localId: number, remoteId: string): void {
+    const table = entityType === 'bug' ? 'bugs' : 'attachments';
+    this.requireWorkspaceDb().prepare(`UPDATE ${table} SET remote_id = ? WHERE id = ?`).run(remoteId, localId);
+  }
+
+  upsertRemoteBug(remoteBug: Record<string, unknown>): boolean {
+    const db = this.requireWorkspaceDb();
+    const remoteId = this.remoteString(remoteBug.id);
+    if (!remoteId) return false;
+
+    const remoteUpdatedAt = this.remoteString(remoteBug.updated_at) || now();
+    const existing = db.prepare('SELECT id, updated_at FROM bugs WHERE remote_id = ?').get(remoteId) as { id: number; updated_at: string } | undefined;
+
+    if (this.remoteString(remoteBug.deleted_at)) {
+      if (!existing) return false;
+      db.prepare('DELETE FROM attachments WHERE bug_id = ?').run(existing.id);
+      db.prepare('DELETE FROM bugs WHERE id = ?').run(existing.id);
+      return true;
+    }
+
+    if (existing && this.isLocalNewer(existing.updated_at, remoteUpdatedAt)) return false;
+
+    const values = {
+      remote_id: remoteId,
+      application_id: this.remoteString(remoteBug.application_id) || null,
+      module_id: this.remoteString(remoteBug.module_id) || null,
+      environment_id: this.remoteString(remoteBug.environment_id) || null,
+      device_id: null,
+      browser_id: null,
+      user_role_id: null,
+      entry_type: this.remoteString(remoteBug.entry_type) || 'Bug',
+      title: this.remoteString(remoteBug.title) || '',
+      note: this.remoteString(remoteBug.note) || '',
+      other_details: this.remoteString(remoteBug.other_details) || '',
+      steps_to_reproduce: this.remoteString(remoteBug.steps_to_reproduce) || '',
+      expected_result: this.remoteString(remoteBug.expected_result) || '',
+      actual_result: this.remoteString(remoteBug.actual_result) || '',
+      status: normalizeCaptureStatus(this.remoteString(remoteBug.status)),
+      severity: this.remoteString(remoteBug.severity) || 'Medium',
+      reported: this.remoteBoolean(remoteBug.reported) ? 1 : 0,
+      issue_platform: this.remoteString(remoteBug.issue_platform) || '',
+      issue_id: this.remoteString(remoteBug.issue_id) || '',
+      issue_url: this.remoteString(remoteBug.issue_url) || '',
+      tags: this.remoteString(remoteBug.tags) || '',
+      sync_status: 'Synced' as SyncStatus,
+      last_sync_at: now(),
+      created_at: this.remoteString(remoteBug.created_at) || remoteUpdatedAt,
+      updated_at: remoteUpdatedAt
+    };
+
+    if (existing) {
+      db.prepare(`
+        UPDATE bugs SET
+          application_id = @application_id,
+          module_id = @module_id,
+          environment_id = @environment_id,
+          device_id = @device_id,
+          browser_id = @browser_id,
+          user_role_id = @user_role_id,
+          entry_type = @entry_type,
+          title = @title,
+          note = @note,
+          other_details = @other_details,
+          steps_to_reproduce = @steps_to_reproduce,
+          expected_result = @expected_result,
+          actual_result = @actual_result,
+          status = @status,
+          severity = @severity,
+          reported = @reported,
+          issue_platform = @issue_platform,
+          issue_id = @issue_id,
+          issue_url = @issue_url,
+          tags = @tags,
+          sync_status = @sync_status,
+          last_sync_at = @last_sync_at,
+          updated_at = @updated_at
+        WHERE id = @id
+      `).run({ ...values, id: existing.id });
+      return true;
+    }
+
+    db.prepare(`
+      INSERT INTO bugs (
+        remote_id, application_id, module_id, environment_id, device_id, browser_id, user_role_id,
+        entry_type, title, note, other_details, steps_to_reproduce, expected_result, actual_result,
+        status, severity, reported, issue_platform, issue_id, issue_url, tags, sync_status, last_sync_at, created_at, updated_at
+      ) VALUES (
+        @remote_id, @application_id, @module_id, @environment_id, @device_id, @browser_id, @user_role_id,
+        @entry_type, @title, @note, @other_details, @steps_to_reproduce, @expected_result, @actual_result,
+        @status, @severity, @reported, @issue_platform, @issue_id, @issue_url, @tags, @sync_status, @last_sync_at, @created_at, @updated_at
+      )
+    `).run(values);
+    return true;
+  }
+
+  upsertRemoteApplication(remoteApplication: Record<string, unknown>): boolean {
+    const db = this.requireWorkspaceDb();
+    const id = this.remoteString(remoteApplication.id);
+    const name = this.remoteString(remoteApplication.name);
+    if (!id || !name) return false;
+
+    db.prepare(`
+      INSERT INTO applications (id, name, context_description, is_active, is_synced, created_at, updated_at)
+      VALUES (@id, @name, @context_description, @is_active, 1, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        context_description = excluded.context_description,
+        is_active = excluded.is_active,
+        is_synced = 1,
+        updated_at = excluded.updated_at
+    `).run({
+      id,
+      name,
+      context_description: this.remoteString(remoteApplication.context_description) || null,
+      is_active: remoteApplication.is_active === false ? 0 : 1,
+      created_at: this.remoteString(remoteApplication.created_at) || now(),
+      updated_at: this.remoteString(remoteApplication.updated_at) || now()
+    });
+    return true;
+  }
+
+  upsertRemoteModule(remoteModule: Record<string, unknown>): boolean {
+    const db = this.requireWorkspaceDb();
+    const id = this.remoteString(remoteModule.id);
+    const name = this.remoteString(remoteModule.name);
+    if (!id || !name) return false;
+
+    db.prepare(`
+      INSERT INTO modules (id, application_id, name, context_description, is_active, created_at, updated_at)
+      VALUES (@id, @application_id, @name, @context_description, @is_active, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        application_id = excluded.application_id,
+        name = excluded.name,
+        context_description = excluded.context_description,
+        is_active = excluded.is_active,
+        updated_at = excluded.updated_at
+    `).run({
+      id,
+      application_id: this.remoteString(remoteModule.application_id) || null,
+      name,
+      context_description: this.remoteString(remoteModule.context_description) || null,
+      is_active: remoteModule.is_active === false ? 0 : 1,
+      created_at: this.remoteString(remoteModule.created_at) || now(),
+      updated_at: this.remoteString(remoteModule.updated_at) || now()
+    });
+    return true;
+  }
+
+  upsertRemoteEnvironment(remoteEnvironment: Record<string, unknown>): boolean {
+    const db = this.requireWorkspaceDb();
+    const id = this.remoteString(remoteEnvironment.id);
+    const name = this.remoteString(remoteEnvironment.name);
+    if (!id || !name) return false;
+
+    db.prepare(`
+      INSERT INTO environments (id, name, value, sort_order, is_active, created_at, updated_at)
+      VALUES (@id, @name, @value, @sort_order, @is_active, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        value = excluded.value,
+        sort_order = excluded.sort_order,
+        is_active = excluded.is_active,
+        updated_at = excluded.updated_at
+    `).run({
+      id,
+      name,
+      value: this.remoteString(remoteEnvironment.value) || name,
+      sort_order: Number(remoteEnvironment.sort_order ?? 0),
+      is_active: remoteEnvironment.is_active === false ? 0 : 1,
+      created_at: this.remoteString(remoteEnvironment.created_at) || now(),
+      updated_at: this.remoteString(remoteEnvironment.updated_at) || now()
+    });
+    return true;
+  }
+
+  upsertRemoteAttachment(remoteAttachment: Record<string, unknown>): boolean {
+    const db = this.requireWorkspaceDb();
+    const remoteId = this.remoteString(remoteAttachment.id);
+    if (!remoteId) return false;
+
+    const remoteUpdatedAt = this.remoteString(remoteAttachment.updated_at) || this.remoteString(remoteAttachment.created_at) || now();
+    const existing = db.prepare('SELECT id, updated_at FROM attachments WHERE remote_id = ?').get(remoteId) as { id: number; updated_at: string } | undefined;
+
+    if (this.remoteString(remoteAttachment.deleted_at)) {
+      if (!existing) return false;
+      db.prepare('DELETE FROM attachments WHERE id = ?').run(existing.id);
+      return true;
+    }
+
+    if (existing && this.isLocalNewer(existing.updated_at, remoteUpdatedAt)) return false;
+
+    const remoteBugId = this.remoteString(remoteAttachment.bug_id);
+    const remoteParentId = this.remoteString(remoteAttachment.parent_id);
+    const bug = remoteBugId ? db.prepare('SELECT id FROM bugs WHERE remote_id = ?').get(remoteBugId) as { id: number } | undefined : undefined;
+    const parent = remoteParentId ? db.prepare('SELECT id FROM attachments WHERE remote_id = ?').get(remoteParentId) as { id: number } | undefined : undefined;
+    const values = {
+      remote_id: remoteId,
+      bug_id: bug?.id ?? null,
+      parent_id: parent?.id ?? null,
+      content_hash: this.remoteString(remoteAttachment.content_hash) || null,
+      file_extension: this.remoteString(remoteAttachment.file_extension) || '.png',
+      mime_type: this.remoteString(remoteAttachment.mime_type) || 'image/png',
+      source_type: this.remoteString(remoteAttachment.source_type) || 'other',
+      sync_status: 'Synced' as SyncStatus,
+      last_sync_at: now(),
+      created_at: this.remoteString(remoteAttachment.created_at) || remoteUpdatedAt,
+      updated_at: remoteUpdatedAt
+    };
+
+    if (existing) {
+      db.prepare(`
+        UPDATE attachments SET
+          bug_id = @bug_id,
+          parent_id = @parent_id,
+          content_hash = @content_hash,
+          file_extension = @file_extension,
+          mime_type = @mime_type,
+          source_type = @source_type,
+          sync_status = @sync_status,
+          last_sync_at = @last_sync_at,
+          updated_at = @updated_at
+        WHERE id = @id
+      `).run({ ...values, id: existing.id });
+      return true;
+    }
+
+    db.prepare(`
+      INSERT INTO attachments (
+        remote_id, bug_id, parent_id, content_hash, file_extension, mime_type, source_type,
+        sync_status, last_sync_at, created_at, updated_at
+      ) VALUES (
+        @remote_id, @bug_id, @parent_id, @content_hash, @file_extension, @mime_type, @source_type,
+        @sync_status, @last_sync_at, @created_at, @updated_at
+      )
+    `).run(values);
+    return true;
+  }
+
+  private remoteSyncWatermarkKey(workspaceId: string): string {
+    return `last_remote_sync_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+  }
+
+  private workspaceRoleKey(workspaceId: string): string {
+    return `workspace_role_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+  }
+
+  private requireWorkspaceDb(): Database.Database {
+    if (!this.workspaceDb) throw new Error('No active workspace database is connected.');
+    return this.workspaceDb;
+  }
+
+  private workspaceDataDb(): Database.Database {
+    return this.workspaceDb ?? this.localDb;
+  }
+
+  private remoteString(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  private remoteBoolean(value: unknown): boolean {
+    return value === true || value === 1 || value === '1' || value === 'true';
+  }
+
+  private isLocalNewer(localUpdatedAt: string, remoteUpdatedAt: string): boolean {
+    if (!localUpdatedAt) return false;
+    return new Date(localUpdatedAt).getTime() > new Date(remoteUpdatedAt).getTime();
+  }
+
   getByokAiProvider(): AiProvider {
     const value = this.getSetting('byok_ai_provider').trim();
     if (value === 'Grok' || value === 'OpenRouter' || value === 'Gemini' || value === 'Custom/Local') return value;
@@ -1380,37 +2077,104 @@ Attachments:
     this.setSetting('byok_ai_custom_system_prompt', customSystemPrompt);
   }
 
-  getPendingSyncQueue(limit = 25): SyncQueueEvent[] {
-    return this.db
-      .prepare('SELECT id, local_seq, op_id, entity_type, entity_id, operation, payload, created_at FROM sync_queue ORDER BY local_seq, id LIMIT ?')
-      .all(limit) as SyncQueueEvent[];
+  getPendingSyncQueue(limit = 25, maxRetries = 5): SyncQueueEvent[] {
+    const dataDb = this.workspaceDataDb();
+    return dataDb
+      .prepare(`
+        SELECT id, local_seq, op_id, entity_type, entity_id, operation, payload, created_at, retry_count, last_error
+        FROM sync_queue
+        WHERE retry_count < ?
+        ORDER BY
+          CASE entity_type
+            WHEN 'application' THEN 0
+            WHEN 'module' THEN 1
+            WHEN 'environment' THEN 2
+            WHEN 'reference' THEN 3
+            WHEN 'bug' THEN 4
+            WHEN 'attachment' THEN 5
+            ELSE 6
+          END,
+          local_seq,
+          id
+        LIMIT ?
+      `)
+      .all(maxRetries, limit) as SyncQueueEvent[];
   }
 
   markSyncEventSucceeded(event: Pick<SyncQueueEvent, 'id' | 'entity_type' | 'entity_id' | 'operation'>): void {
     const stamp = now();
-    const tx = this.db.transaction(() => {
+    const dataDb = this.workspaceDataDb();
+    const tx = dataDb.transaction(() => {
       if (event.operation !== 'DELETE') {
         if (event.entity_type === 'bug') {
-          this.db.prepare("UPDATE bugs SET sync_status = 'Synced', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
+          dataDb.prepare("UPDATE bugs SET sync_status = 'Synced', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
         } else if (event.entity_type === 'attachment') {
-          this.db.prepare("UPDATE attachments SET sync_status = 'Synced', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
+          dataDb.prepare("UPDATE attachments SET sync_status = 'Synced', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
         }
       }
-      this.db.prepare('DELETE FROM sync_queue WHERE id = ?').run(event.id);
+      dataDb.prepare('DELETE FROM sync_queue WHERE id = ?').run(event.id);
     });
     tx();
   }
 
   markSyncEventFailed(event: Pick<SyncQueueEvent, 'entity_type' | 'entity_id'>): void {
     const stamp = now();
-    const tx = this.db.transaction(() => {
+    const dataDb = this.workspaceDataDb();
+    const tx = dataDb.transaction(() => {
       if (event.entity_type === 'bug') {
-        this.db.prepare("UPDATE bugs SET sync_status = 'Sync Failed', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
+        dataDb.prepare("UPDATE bugs SET sync_status = 'Sync Failed', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
       } else if (event.entity_type === 'attachment') {
-        this.db.prepare("UPDATE attachments SET sync_status = 'Sync Failed', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
+        dataDb.prepare("UPDATE attachments SET sync_status = 'Sync Failed', last_sync_at = ? WHERE id = ?").run(stamp, event.entity_id);
       }
     });
     tx();
+  }
+
+  recordSyncEventFailure(event: Pick<SyncQueueEvent, 'id' | 'entity_type' | 'entity_id'>, errorMessage: string, maxRetries = 5): number {
+    const cleanedError = errorMessage.slice(0, 2000);
+    const dataDb = this.workspaceDataDb();
+    const tx = dataDb.transaction(() => {
+      dataDb
+        .prepare('UPDATE sync_queue SET retry_count = COALESCE(retry_count, 0) + 1, last_error = ? WHERE id = ?')
+        .run(cleanedError, event.id);
+      const row = dataDb.prepare('SELECT retry_count FROM sync_queue WHERE id = ?').get(event.id) as { retry_count: number } | undefined;
+      const retryCount = row?.retry_count ?? maxRetries;
+      if (retryCount >= maxRetries) {
+        this.markSyncEventFailed(event);
+      }
+      return retryCount;
+    });
+    return tx() as number;
+  }
+
+  resetSyncQueueRetries(): void {
+    this.workspaceDataDb().prepare('UPDATE sync_queue SET retry_count = 0, last_error = NULL').run();
+  }
+
+  getSyncDiagnostics(): SyncDiagnosticsRow[] {
+    return this.workspaceDataDb().prepare(`
+      SELECT
+        q.id,
+        q.local_seq,
+        q.op_id,
+        q.entity_type,
+        q.entity_id,
+        q.operation,
+        q.created_at,
+        q.retry_count,
+        q.last_error,
+        COALESCE(
+          NULLIF(b.title, ''),
+          CASE
+            WHEN q.entity_type = 'attachment' THEN COALESCE(NULLIF(a.content_hash || a.file_extension, ''), 'Attachment #' || q.entity_id)
+            ELSE q.entity_type || ' #' || q.entity_id
+          END
+        ) AS label
+      FROM sync_queue q
+      LEFT JOIN bugs b ON q.entity_type = 'bug' AND b.id = q.entity_id
+      LEFT JOIN attachments a ON q.entity_type = 'attachment' AND a.id = q.entity_id
+      ORDER BY q.local_seq, q.id
+    `).all() as SyncDiagnosticsRow[];
   }
 
   getPresets(): CapturePreset[] {
@@ -1509,16 +2273,21 @@ Attachments:
   }
 
   addEnvironment(name: string): ReferenceOption {
-    return this.addReferenceOption('environment', name);
+    const environment = this.addReferenceOption('environment', name);
+    this.enqueueEnvironmentSyncEvent(environment.id, 'INSERT', this.environmentPayload(environment.id));
+    return environment;
   }
 
   updateEnvironment(id: number, name: string): ReferenceOption {
-    return this.updateReferenceOption('environment', id, name);
+    const environment = this.updateReferenceOption('environment', id, name);
+    this.enqueueEnvironmentSyncEvent(environment.id, 'UPDATE', this.environmentPayload(environment.id));
+    return environment;
   }
 
   deleteEnvironment(id: number): void {
     this.assertNotUsedByPreset('environment_id', id);
     this.deleteReferenceOption('environment', id);
+    this.enqueueEnvironmentSyncEvent(id, 'DELETE', this.environmentPayload(id));
   }
 
   addDevice(name: string): ReferenceOption {
@@ -1583,11 +2352,22 @@ Attachments:
     if (!source) throw new Error('Duplicate reference item was not found.');
     if (!target) throw new Error('Canonical reference item was not found.');
 
-    const tx = this.db.transaction(() => {
-      const result = this.db.prepare(`UPDATE bugs SET ${foreignKey} = ?, sync_status = CASE WHEN ? = 1 AND (application_id IS NULL OR EXISTS (SELECT 1 FROM applications WHERE applications.id = bugs.application_id AND applications.is_synced != 0)) THEN 'Sync Pending' ELSE 'Local Only' END, updated_at = ? WHERE ${foreignKey} = ?`).run(targetId, this.isCloudSyncReady() ? 1 : 0, now(), sourceId);
-      const presetResult = this.db.prepare(`UPDATE presets SET ${foreignKey} = ?, updated_at = ? WHERE ${foreignKey} = ?`).run(targetId, now(), sourceId);
-      this.db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(sourceId);
-      if (this.isCloudSyncReady()) this.enqueueSyncEvent('reference', targetId, 'MERGE', {
+    const dataDb = this.workspaceDataDb();
+    const updateBugs = dataDb.transaction(() =>
+      dataDb.prepare(`UPDATE bugs SET ${foreignKey} = ?, sync_status = ?, updated_at = ? WHERE ${foreignKey} = ?`)
+        .run(targetId, this.isCloudSyncReady() ? 'Sync Pending' : 'Local Only', now(), sourceId)
+    );
+    const result = updateBugs();
+
+    const updateLocalReferences = this.localDb.transaction(() => {
+      const presetResult = this.localDb.prepare(`UPDATE presets SET ${foreignKey} = ?, updated_at = ? WHERE ${foreignKey} = ?`).run(targetId, now(), sourceId);
+      this.localDb.prepare(`DELETE FROM ${table} WHERE id = ?`).run(sourceId);
+      return presetResult;
+    });
+    const presetResult = updateLocalReferences();
+
+    if (this.isCloudSyncReady()) {
+      this.enqueueSyncEvent('reference', targetId, 'MERGE', {
         table_name: type,
         source_id: sourceId,
         target_id: targetId,
@@ -1597,8 +2377,7 @@ Attachments:
         affected_bugs: result.changes,
         affected_presets: presetResult.changes
       });
-    });
-    tx();
+    }
   }
 
   private normalizeReferenceTable(tableName: ReferenceTable | string): ReferenceTable {
@@ -1618,15 +2397,21 @@ Attachments:
     const existing = this.db.prepare('SELECT * FROM applications WHERE name = ?').get(cleaned) as Application | undefined;
     if (existing) {
       this.db.prepare('UPDATE applications SET context_description = COALESCE(?, context_description), is_active = 1, updated_at = ? WHERE id = ?').run(context, stamp, existing.id);
-      return this.db.prepare('SELECT * FROM applications WHERE id = ?').get(existing.id) as Application;
+      const application = this.db.prepare('SELECT * FROM applications WHERE id = ?').get(existing.id) as Application;
+      this.enqueueApplicationSyncEvent(application.id, 'UPDATE', this.applicationPayload(application.id));
+      return application;
     }
     const tx = this.db.transaction(() => {
       this.db.prepare('INSERT INTO applications (name, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, 1, 1, ?, ?)').run(cleaned, context, stamp, stamp);
       const application = this.db.prepare('SELECT * FROM applications WHERE id = last_insert_rowid()').get() as Application;
       this.db.prepare('INSERT INTO modules (application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)').run(application.id, 'General', null, stamp, stamp);
-      return application;
+      const module = this.db.prepare('SELECT * FROM modules WHERE id = last_insert_rowid()').get() as Module;
+      return { application, module };
     });
-    return tx();
+    const { application, module } = tx();
+    this.enqueueApplicationSyncEvent(application.id, 'INSERT', this.applicationPayload(application.id));
+    this.enqueueModuleSyncEvent(module.id, 'INSERT', this.modulePayload(module.id));
+    return application;
   }
 
   updateApplication(id: number, name: string, contextDescription = ''): Application {
@@ -1635,22 +2420,29 @@ Attachments:
     const duplicate = this.db.prepare('SELECT id FROM applications WHERE name = ? AND id != ?').get(cleaned, id) as { id: number } | undefined;
     if (duplicate) throw new Error('Application already exists.');
     this.db.prepare('UPDATE applications SET name = ?, context_description = ?, updated_at = ? WHERE id = ?').run(cleaned, contextDescription.trim() || null, now(), id);
-    return this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
+    const application = this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
+    this.enqueueApplicationSyncEvent(application.id, 'UPDATE', this.applicationPayload(application.id));
+    return application;
   }
 
   updateApplicationSync(id: number, isSynced: boolean): Application {
     this.db.prepare('UPDATE applications SET is_synced = ?, updated_at = ? WHERE id = ?').run(isSynced ? 1 : 0, now(), id);
-    return this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
+    const application = this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
+    this.enqueueApplicationSyncEvent(application.id, 'UPDATE', this.applicationPayload(application.id));
+    return application;
   }
 
   updateApplicationContext(id: number, contextDescription: string): Application {
     this.db.prepare('UPDATE applications SET context_description = ?, updated_at = ? WHERE id = ?').run(contextDescription.trim() || null, now(), id);
-    return this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
+    const application = this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
+    this.enqueueApplicationSyncEvent(application.id, 'UPDATE', this.applicationPayload(application.id));
+    return application;
   }
 
   deleteApplication(id: number): void {
     this.assertNotUsedByPreset('application_id', id);
     this.db.prepare('UPDATE applications SET is_active = 0, updated_at = ? WHERE id = ?').run(now(), id);
+    this.enqueueApplicationSyncEvent(id, 'DELETE', this.applicationPayload(id));
   }
 
   addModule(name: string, applicationId: number | null, contextDescription = ''): Module {
@@ -1663,10 +2455,14 @@ Attachments:
       .get(cleaned, applicationId, applicationId) as Module | undefined;
     if (existing) {
       this.db.prepare('UPDATE modules SET context_description = COALESCE(?, context_description), is_active = 1, updated_at = ? WHERE id = ?').run(context, stamp, existing.id);
-      return this.db.prepare('SELECT * FROM modules WHERE id = ?').get(existing.id) as Module;
+      const module = this.db.prepare('SELECT * FROM modules WHERE id = ?').get(existing.id) as Module;
+      this.enqueueModuleSyncEvent(module.id, 'UPDATE', this.modulePayload(module.id));
+      return module;
     }
     this.db.prepare('INSERT INTO modules (application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)').run(applicationId, cleaned, context, stamp, stamp);
-    return this.db.prepare('SELECT * FROM modules WHERE id = last_insert_rowid()').get() as Module;
+    const module = this.db.prepare('SELECT * FROM modules WHERE id = last_insert_rowid()').get() as Module;
+    this.enqueueModuleSyncEvent(module.id, 'INSERT', this.modulePayload(module.id));
+    return module;
   }
 
   updateModule(id: number, name: string, applicationId: number | null, contextDescription = ''): Module {
@@ -1677,17 +2473,22 @@ Attachments:
       .get(cleaned, applicationId, applicationId, id) as { id: number } | undefined;
     if (duplicate) throw new Error('Module already exists for this application.');
     this.db.prepare('UPDATE modules SET application_id = ?, name = ?, context_description = ?, updated_at = ? WHERE id = ?').run(applicationId, cleaned, contextDescription.trim() || null, now(), id);
-    return this.db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Module;
+    const module = this.db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Module;
+    this.enqueueModuleSyncEvent(module.id, 'UPDATE', this.modulePayload(module.id));
+    return module;
   }
 
   updateModuleContext(id: number, contextDescription: string): Module {
     this.db.prepare('UPDATE modules SET context_description = ?, updated_at = ? WHERE id = ?').run(contextDescription.trim() || null, now(), id);
-    return this.db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Module;
+    const module = this.db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Module;
+    this.enqueueModuleSyncEvent(module.id, 'UPDATE', this.modulePayload(module.id));
+    return module;
   }
 
   deleteModule(id: number): void {
     this.assertNotUsedByPreset('module_id', id);
     this.db.prepare('UPDATE modules SET is_active = 0, updated_at = ? WHERE id = ?').run(now(), id);
+    this.enqueueModuleSyncEvent(id, 'DELETE', this.modulePayload(id));
   }
 
   addConfigOption(type: string, value: string): ConfigOption {
@@ -1765,7 +2566,13 @@ Attachments:
       clauses.push('bugs.environment_id = ?');
       params.push(filters.environmentId);
     }
-    if (filters.status && filters.status !== 'all') {
+    if (filters.status === 'Discarded') {
+      clauses.push('bugs.status = ?');
+      params.push(filters.status);
+    } else {
+      clauses.push("bugs.status != 'Discarded'");
+    }
+    if (filters.status && filters.status !== 'all' && filters.status !== 'Discarded') {
       clauses.push('bugs.status = ?');
       params.push(filters.status);
     }
@@ -1781,10 +2588,11 @@ Attachments:
     if (filters.reported === 'unreported') clauses.push('bugs.reported = 0');
 
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    return this.db
+    const dataDb = this.workspaceDataDb();
+    return dataDb
       .prepare(
         `
-        SELECT bugs.*, applications.name AS application_name, modules.name AS module_name,
+        SELECT bugs.*, COALESCE(applications.name, 'General') AS application_name, COALESCE(modules.name, 'Uncategorized') AS module_name,
           environments.name AS environment, devices.name AS device, browsers.name AS browser, user_roles.name AS user_role,
           COUNT(
             CASE
@@ -1814,10 +2622,11 @@ Attachments:
   }
 
   getBug(id: number): BugDetails | null {
-    const bug = this.db
+    const dataDb = this.workspaceDataDb();
+    const bug = dataDb
       .prepare(
         `
-        SELECT bugs.*, applications.name AS application_name, modules.name AS module_name,
+        SELECT bugs.*, COALESCE(applications.name, 'General') AS application_name, COALESCE(modules.name, 'Uncategorized') AS module_name,
           environments.name AS environment, devices.name AS device, browsers.name AS browser, user_roles.name AS user_role
         FROM bugs
         LEFT JOIN applications ON applications.id = bugs.application_id
@@ -1831,7 +2640,7 @@ Attachments:
       )
       .get(id) as Bug | undefined;
     if (!bug) return null;
-    const attachments = this.db
+    const attachments = dataDb
       .prepare(
         `SELECT attachments.*, ${attachmentFileNameSql}
          FROM attachments
@@ -1849,7 +2658,7 @@ Attachments:
 
   getAttachment(id: number): Attachment | null {
     return (
-      (this.db.prepare(`SELECT attachments.*, ${attachmentFileNameSql} FROM attachments WHERE id = ?`).get(id) as Attachment | undefined) ??
+      (this.workspaceDataDb().prepare(`SELECT attachments.*, ${attachmentFileNameSql} FROM attachments WHERE id = ?`).get(id) as Attachment | undefined) ??
       null
     );
   }
@@ -1864,7 +2673,8 @@ Attachments:
       current = current.parent_id ? this.getAttachment(current.parent_id) : null;
     }
     if (!root) return [];
-    return this.db
+    const dataDb = this.workspaceDataDb();
+    return dataDb
       .prepare(
         `WITH RECURSIVE attachment_tree(id) AS (
            SELECT ?
@@ -1884,18 +2694,43 @@ Attachments:
   createQuickBug(input: QuickBugInput): Bug {
     const stamp = now();
     const title = this.makeTitle(input.note);
-    const tx = this.db.transaction(() => {
-      const result = this.db
+    const dataDb = this.workspaceDataDb();
+    const sanitized = {
+      applicationId: this.sanitizeOptionalForeignKey(input.application_id),
+      moduleId: this.sanitizeOptionalForeignKey(input.module_id),
+      environmentId: this.sanitizeOptionalForeignKey(input.environment_id),
+      deviceId: this.sanitizeOptionalForeignKey(input.device_id),
+      browserId: this.sanitizeOptionalForeignKey(input.browser_id),
+      userRoleId: this.sanitizeOptionalForeignKey(input.user_role_id),
+      workspaceId: this.sanitizeOptionalForeignKey(input.workspace_id),
+      createdBy: this.sanitizeOptionalForeignKey(input.created_by)
+    };
+    const tx = dataDb.transaction(() => {
+      const result = dataDb
         .prepare(
-          `INSERT INTO bugs (entry_type, application_id, module_id, environment_id, user_role_id, title, note, status, severity, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'Draft', 'Medium', ?, ?)`
+          `INSERT INTO bugs (entry_type, application_id, module_id, environment_id, device_id, browser_id, user_role_id, workspace_id, created_by, title, note, status, severity, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', 'Medium', ?, ?)`
         )
-        .run(input.entry_type || 'Bug', input.application_id, input.module_id, input.environment_id, input.user_role_id, title, input.note.trim(), stamp, stamp);
+        .run(
+          input.entry_type || 'Bug',
+          sanitized.applicationId,
+          sanitized.moduleId,
+          sanitized.environmentId,
+          sanitized.deviceId,
+          sanitized.browserId,
+          sanitized.userRoleId,
+          sanitized.workspaceId,
+          sanitized.createdBy,
+          title,
+          input.note.trim(),
+          stamp,
+          stamp
+        );
       const bugId = Number(result.lastInsertRowid);
-      const attach = this.db.prepare('UPDATE attachments SET bug_id = ? WHERE id = ? AND bug_id IS NULL');
+      const attach = dataDb.prepare('UPDATE attachments SET bug_id = ?, updated_at = ? WHERE id = ? AND bug_id IS NULL');
       this.enqueueBugSyncEvent(bugId, 'INSERT');
       input.attachment_ids.forEach((attachmentId) => {
-        attach.run(bugId, attachmentId);
+        attach.run(bugId, stamp, attachmentId);
         this.enqueueAttachmentSyncEvent(attachmentId, 'UPDATE');
       });
       return bugId;
@@ -1906,8 +2741,15 @@ Attachments:
   updateBug(id: number, input: BugUpdateInput): BugDetails {
     const stamp = now();
     const status = normalizeCaptureStatus(input.status);
-    const tx = this.db.transaction(() => {
-      this.db
+    const dataDb = this.workspaceDataDb();
+    const applicationId = this.sanitizeOptionalForeignKey(input.application_id);
+    const moduleId = this.sanitizeOptionalForeignKey(input.module_id);
+    const environmentId = this.sanitizeOptionalForeignKey(input.environment_id);
+    const deviceId = this.sanitizeOptionalForeignKey(input.device_id);
+    const browserId = this.sanitizeOptionalForeignKey(input.browser_id);
+    const userRoleId = this.sanitizeOptionalForeignKey(input.user_role_id);
+    const tx = dataDb.transaction(() => {
+      dataDb
         .prepare(
           `
           UPDATE bugs SET entry_type = ?, application_id = ?, module_id = ?, title = ?, note = ?, other_details = ?,
@@ -1919,18 +2761,18 @@ Attachments:
         )
         .run(
           input.entry_type,
-          input.application_id,
-          input.module_id,
+          applicationId,
+          moduleId,
           input.title.trim() || this.makeTitle(input.note),
           input.note,
           input.other_details,
           input.steps_to_reproduce,
           input.expected_result,
           input.actual_result,
-          input.environment_id,
-          input.device_id,
-          input.browser_id,
-          input.user_role_id,
+          environmentId,
+          deviceId,
+          browserId,
+          userRoleId,
           status,
           input.severity,
           status === 'Reported' ? 1 : 0,
@@ -1938,7 +2780,7 @@ Attachments:
           input.issue_id,
           input.issue_url,
           input.tags,
-          this.pendingSyncStatusForBug(input.application_id),
+          this.pendingSyncStatusForBug(applicationId),
           stamp,
           id
         );
@@ -1949,19 +2791,20 @@ Attachments:
   }
 
   deleteBug(id: number): void {
-    const attachments = this.db.prepare('SELECT content_hash, file_extension FROM attachments WHERE bug_id = ?').all(id) as Array<{
+    const dataDb = this.workspaceDataDb();
+    const attachments = dataDb.prepare('SELECT content_hash, file_extension FROM attachments WHERE bug_id = ?').all(id) as Array<{
       content_hash: string | null;
       file_extension: string;
     }>;
     const bugPayload = this.bugPayload(id);
-    const attachmentPayloads = this.db
+    const attachmentPayloads = dataDb
       .prepare(`SELECT attachments.*, ${attachmentFileNameSql} FROM attachments WHERE bug_id = ?`)
       .all(id) as Array<Record<string, unknown> & { id: number }>;
-    const tx = this.db.transaction(() => {
+    const tx = dataDb.transaction(() => {
       attachmentPayloads.forEach((attachment) => this.enqueueAttachmentSyncEvent(attachment.id, 'DELETE', attachment));
       this.enqueueBugSyncEvent(id, 'DELETE', bugPayload);
-      this.db.prepare('DELETE FROM attachments WHERE bug_id = ?').run(id);
-      this.db.prepare('DELETE FROM bugs WHERE id = ?').run(id);
+      dataDb.prepare('DELETE FROM attachments WHERE bug_id = ?').run(id);
+      dataDb.prepare('DELETE FROM bugs WHERE id = ?').run(id);
     });
     tx();
     attachments.forEach((attachment) => {
@@ -1970,8 +2813,9 @@ Attachments:
   }
 
   createAttachment(contentHash: string, fileExtension: string, mimeType = 'image/png', sourceType = 'snip'): number {
-    const tx = this.db.transaction(() => {
-      const result = this.db
+    const dataDb = this.workspaceDataDb();
+    const tx = dataDb.transaction(() => {
+      const result = dataDb
         .prepare('INSERT INTO attachments (bug_id, content_hash, file_extension, mime_type, source_type, sync_status, created_at) VALUES (NULL, ?, ?, ?, ?, ?, ?)')
         .run(contentHash, fileExtension, mimeType, sourceType, 'Local Only', now());
       return Number(result.lastInsertRowid);
@@ -1980,20 +2824,21 @@ Attachments:
   }
 
   createAnnotatedAttachment(parentId: number, contentHash: string, fileExtension: string, mimeType = 'image/png'): Attachment {
-    const parent = this.db.prepare('SELECT * FROM attachments WHERE id = ?').get(parentId) as { bug_id: number | null } | undefined;
+    const dataDb = this.workspaceDataDb();
+    const parent = dataDb.prepare('SELECT * FROM attachments WHERE id = ?').get(parentId) as { bug_id: number | null } | undefined;
     if (!parent) throw new Error('Original attachment not found.');
     if (!parent.bug_id) throw new Error('Annotated attachments must belong to a saved entry.');
     const bugId = parent.bug_id;
     const stamp = now();
-    const tx = this.db.transaction(() => {
-      const result = this.db
+    const tx = dataDb.transaction(() => {
+      const result = dataDb
         .prepare(
           `INSERT INTO attachments (bug_id, parent_id, content_hash, file_extension, mime_type, source_type, sync_status, created_at)
            VALUES (?, ?, ?, ?, ?, 'annotation', 'Local Only', ?)`
         )
         .run(bugId, parentId, contentHash, fileExtension, mimeType, stamp);
       const attachmentId = Number(result.lastInsertRowid);
-      this.db.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(bugId), stamp, bugId);
+      dataDb.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(bugId), stamp, bugId);
       this.enqueueAttachmentSyncEvent(attachmentId, 'INSERT');
       this.enqueueBugSyncEvent(bugId, 'UPDATE');
       return attachmentId;
@@ -2002,9 +2847,11 @@ Attachments:
   }
 
   attachScreenshotToBug(bugId: number, attachmentId: number): BugDetails {
-    const tx = this.db.transaction(() => {
-      this.db.prepare('UPDATE attachments SET bug_id = ? WHERE id = ?').run(bugId, attachmentId);
-      this.db.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(bugId), now(), bugId);
+    const dataDb = this.workspaceDataDb();
+    const stamp = now();
+    const tx = dataDb.transaction(() => {
+      dataDb.prepare('UPDATE attachments SET bug_id = ?, updated_at = ? WHERE id = ?').run(bugId, stamp, attachmentId);
+      dataDb.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(bugId), stamp, bugId);
       this.enqueueAttachmentSyncEvent(attachmentId, 'UPDATE');
       this.enqueueBugSyncEvent(bugId, 'UPDATE');
     });
@@ -2013,16 +2860,17 @@ Attachments:
   }
 
   deleteAttachment(attachmentId: number): void {
-    const attachment = this.db.prepare('SELECT * FROM attachments WHERE id = ?').get(attachmentId) as
+    const dataDb = this.workspaceDataDb();
+    const attachment = dataDb.prepare('SELECT * FROM attachments WHERE id = ?').get(attachmentId) as
       | { bug_id: number | null; content_hash: string | null; file_extension: string }
       | undefined;
     if (!attachment) return;
     const deletedPayload = this.attachmentPayload(attachmentId);
-    const tx = this.db.transaction(() => {
+    const tx = dataDb.transaction(() => {
       this.enqueueAttachmentSyncEvent(attachmentId, 'DELETE', deletedPayload);
-      this.db.prepare('DELETE FROM attachments WHERE id = ?').run(attachmentId);
+      dataDb.prepare('DELETE FROM attachments WHERE id = ?').run(attachmentId);
       if (attachment.bug_id) {
-        this.db.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(attachment.bug_id), now(), attachment.bug_id);
+        dataDb.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(attachment.bug_id), now(), attachment.bug_id);
         this.enqueueBugSyncEvent(attachment.bug_id, 'UPDATE');
       }
     });
@@ -2031,8 +2879,9 @@ Attachments:
   }
 
   pruneStaleAttachments(): number {
+    const dataDb = this.workspaceDataDb();
     const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-    const staleAttachments = this.db
+    const staleAttachments = dataDb
       .prepare(
         `SELECT attachments.id, attachments.content_hash, attachments.file_extension
          FROM attachments
@@ -2057,7 +2906,7 @@ Attachments:
     const idsToPrune: number[] = [];
     groups.forEach((group) => {
       const placeholders = group.ids.map(() => '?').join(', ');
-      const remaining = this.db
+      const remaining = dataDb
         .prepare(`SELECT COUNT(*) AS count FROM attachments WHERE content_hash = ? AND id NOT IN (${placeholders})`)
         .get(group.contentHash, ...group.ids) as { count: number };
 
@@ -2073,9 +2922,13 @@ Attachments:
     });
 
     if (!idsToPrune.length) return 0;
-    const tx = this.db.transaction((attachmentIds: number[]) => {
-      const update = this.db.prepare('UPDATE attachments SET content_hash = NULL WHERE id = ?');
-      attachmentIds.forEach((attachmentId) => update.run(attachmentId));
+    const stamp = now();
+    const tx = dataDb.transaction((attachmentIds: number[]) => {
+      const update = dataDb.prepare('UPDATE attachments SET content_hash = NULL, updated_at = ? WHERE id = ?');
+      attachmentIds.forEach((attachmentId) => {
+        update.run(stamp, attachmentId);
+        this.enqueueAttachmentSyncEvent(attachmentId, 'UPDATE');
+      });
     });
     tx(idsToPrune);
     return idsToPrune.length;

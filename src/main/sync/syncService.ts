@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createClient, type SupabaseClient, type WebSocketLikeConstructor } from '@supabase/supabase-js';
 import WebSocket from 'ws';
-import type { BugDetails, FeedbackPayload, SyncAuthResult, SyncConnectionResult, SyncQueueEvent, SyncSessionStatus } from '../../shared/types';
+import type { BugDetails, FeedbackPayload, SyncAuthResult, SyncConnectionResult, SyncQueueEvent, SyncSessionStatus, SyncWorkspaceOption, WorkspaceRole } from '../../shared/types';
 import type { BugPocketDatabase } from '../database';
 
 export interface SyncStatus {
@@ -14,12 +15,23 @@ export interface SyncStatus {
 
 type WorkspaceMembershipRow = {
   workspace_id: string;
+  role?: WorkspaceRole | string | null;
+};
+
+type WorkspaceRow = {
+  id: string;
+  name: string | null;
 };
 
 type SyncPayload = Record<string, unknown>;
+type RemoteSyncRow = Record<string, unknown> & {
+  id: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+};
 
 const syncIntervalMs = 30_000;
-const maxSyncAttempts = 3;
+const maxSyncAttempts = 5;
 const syncBatchSize = 20;
 const uuidNamespace = 'bug-pocket-local-sync-v1';
 
@@ -31,10 +43,14 @@ export class SyncEngine {
   private initializedAnonKey = '';
   private syncTimer: NodeJS.Timeout | null = null;
   private syncInProgress = false;
+  private syncSuspended = false;
   private retryCounts = new Map<string, number>();
   private retryDelayUntil = 0;
 
-  constructor(private readonly database: BugPocketDatabase) {}
+  constructor(
+    private readonly database: BugPocketDatabase,
+    private readonly emitBugsChanged: () => void = () => {}
+  ) {}
 
   initialize(): SyncStatus {
     this.projectUrl = this.database.getSupabaseProjectUrl() ?? '';
@@ -137,8 +153,8 @@ export class SyncEngine {
     if (error) return this.authFailure(error.message);
 
     try {
-      const workspaceId = await this.captureCurrentWorkspaceId(client);
-      if (!workspaceId) {
+      const membership = await this.captureCurrentWorkspaceMembership(client);
+      if (!membership.workspaceId) {
         this.database.setCloudSyncSessionActive(false);
         this.stopBackgroundSync();
         return {
@@ -155,7 +171,8 @@ export class SyncEngine {
         success: true,
         authenticated: true,
         email: data.user?.email ?? email.trim(),
-        workspaceId,
+        workspaceId: membership.workspaceId,
+        workspaceRole: membership.role,
         message: 'Signed in and workspace captured locally.'
       };
     } catch (caught) {
@@ -189,16 +206,17 @@ export class SyncEngine {
     }
 
     try {
-      const workspaceId = await this.captureCurrentWorkspaceId(client);
-      this.database.setCloudSyncSessionActive(Boolean(workspaceId));
-      if (workspaceId) this.startBackgroundSync();
+      const membership = await this.captureCurrentWorkspaceMembership(client);
+      this.database.setCloudSyncSessionActive(Boolean(membership.workspaceId));
+      if (membership.workspaceId) this.startBackgroundSync();
       else this.stopBackgroundSync();
       return {
-        success: Boolean(workspaceId),
+        success: Boolean(membership.workspaceId),
         authenticated: true,
         email: data.user?.email ?? email.trim(),
-        workspaceId: workspaceId ?? undefined,
-        message: workspaceId
+        workspaceId: membership.workspaceId ?? undefined,
+        workspaceRole: membership.role,
+        message: membership.workspaceId
           ? 'Account created and workspace captured locally.'
           : 'Account created, but no workspace membership was found yet.'
       };
@@ -229,6 +247,176 @@ export class SyncEngine {
     };
   }
 
+  async switchWorkspace(newWorkspaceId: string): Promise<SyncAuthResult> {
+    const workspaceId = newWorkspaceId.trim();
+    if (!workspaceId) {
+      return {
+        success: false,
+        authenticated: false,
+        message: 'Choose a workspace before switching.',
+        error: 'Workspace ID is required.'
+      };
+    }
+
+    const client = this.requireClient();
+    const { data, error } = await client.auth.getUser();
+    if (error || !data.user) {
+      this.database.setCloudSyncSessionActive(false);
+      this.stopBackgroundSync();
+      return {
+        success: false,
+        authenticated: false,
+        message: 'Log in before switching workspaces.',
+        error: error?.message
+      };
+    }
+
+    const { data: membership, error: membershipError } = await client
+      .from('workspace_members')
+      .select('workspace_id, role')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', data.user.id)
+      .maybeSingle<WorkspaceMembershipRow>();
+
+    if (membershipError) {
+      return {
+        success: false,
+        authenticated: true,
+        email: data.user.email ?? undefined,
+        workspaceId: this.database.getCurrentWorkspaceId() ?? undefined,
+        message: 'Could not verify workspace membership.',
+        error: membershipError.message
+      };
+    }
+
+    if (!membership?.workspace_id) {
+      return {
+        success: false,
+        authenticated: true,
+        email: data.user.email ?? undefined,
+        workspaceId: this.database.getCurrentWorkspaceId() ?? undefined,
+        message: 'This account is not a member of that workspace.',
+        error: 'Workspace membership was not found.'
+      };
+    }
+
+    const role = this.database.updateWorkspaceRole(workspaceId, membership.role);
+    this.syncSuspended = true;
+    this.stopBackgroundSync(false);
+    try {
+      await this.waitForQueueIdle();
+      this.retryCounts.clear();
+      this.retryDelayUntil = 0;
+      this.database.connectToWorkspace(workspaceId);
+      this.database.setCloudSyncSessionActive(true);
+    } catch (caught) {
+      this.syncSuspended = false;
+      if (this.database.getCurrentWorkspaceId()) this.startBackgroundSync();
+      return {
+        success: false,
+        authenticated: true,
+        email: data.user.email ?? undefined,
+        workspaceId: this.database.getCurrentWorkspaceId() ?? undefined,
+        message: 'Could not switch workspaces safely.',
+        error: caught instanceof Error ? caught.message : String(caught)
+      };
+    }
+    this.syncSuspended = false;
+    this.startBackgroundSync();
+
+    return {
+      success: true,
+      authenticated: true,
+      email: data.user.email ?? undefined,
+      workspaceId,
+      workspaceRole: role,
+      message: 'Workspace switched. Bug Pocket is now using the selected workspace database.'
+    };
+  }
+
+  async listWorkspaceMemberships(): Promise<SyncWorkspaceOption[]> {
+    const client = this.requireClient();
+    const { data: userData, error: userError } = await client.auth.getUser();
+    if (userError || !userData.user) return [];
+
+    const { data: memberships, error: membershipError } = await client
+      .from('workspace_members')
+      .select('workspace_id, role')
+      .eq('user_id', userData.user.id);
+
+    if (membershipError) throw membershipError;
+
+    const workspaceIds = Array.from(new Set((memberships ?? []).map((row) => String(row.workspace_id)).filter(Boolean)));
+    if (!workspaceIds.length) return [];
+
+    const { data: workspaces, error: workspacesError } = await client
+      .from('workspaces')
+      .select('id, name')
+      .in('id', workspaceIds);
+
+    if (workspacesError) throw workspacesError;
+
+    const nameById = new Map((workspaces as WorkspaceRow[] | null ?? []).map((workspace) => [workspace.id, workspace.name ?? undefined]));
+    return workspaceIds.map((workspaceId) => ({
+      workspaceId,
+      name: nameById.get(workspaceId)
+    }));
+  }
+
+  async updateWorkspaceName(workspaceId: string, name: string): Promise<SyncAuthResult> {
+    const cleanedWorkspaceId = workspaceId.trim();
+    const cleanedName = name.trim();
+    if (!cleanedWorkspaceId || !cleanedName) {
+      return {
+        success: false,
+        authenticated: false,
+        workspaceId: this.database.getCurrentWorkspaceId() ?? undefined,
+        message: 'Workspace name and workspace ID are required.',
+        error: 'Missing workspace name or workspace ID.'
+      };
+    }
+
+    const client = this.requireClient();
+    const { data: userData, error: userError } = await client.auth.getUser();
+    if (userError || !userData.user) {
+      this.database.setCloudSyncSessionActive(false);
+      this.stopBackgroundSync();
+      return {
+        success: false,
+        authenticated: false,
+        workspaceId: this.database.getCurrentWorkspaceId() ?? undefined,
+        message: 'Log in before editing a workspace name.',
+        error: userError?.message
+      };
+    }
+
+    const { error } = await client
+      .from('workspaces')
+      .update({ name: cleanedName })
+      .eq('id', cleanedWorkspaceId);
+
+    if (error) {
+      return {
+        success: false,
+        authenticated: true,
+        email: userData.user.email ?? undefined,
+        workspaceId: this.database.getCurrentWorkspaceId() ?? undefined,
+        workspaceRole: this.database.getWorkspaceRole(cleanedWorkspaceId),
+        message: 'Could not update workspace name.',
+        error: error.message
+      };
+    }
+
+    return {
+      success: true,
+      authenticated: true,
+      email: userData.user.email ?? undefined,
+      workspaceId: cleanedWorkspaceId,
+      workspaceRole: this.database.getWorkspaceRole(cleanedWorkspaceId),
+      message: 'Workspace name updated.'
+    };
+  }
+
   async getSyncSessionStatus(): Promise<SyncSessionStatus> {
     const status = this.initialize();
     if (!status.configured || !this.client) {
@@ -242,50 +430,44 @@ export class SyncEngine {
       return { authenticated: false, workspaceId: this.database.getCurrentWorkspaceId() ?? undefined };
     }
 
-    this.database.setCloudSyncSessionActive(Boolean(this.database.getCurrentWorkspaceId()));
-    if (this.database.getCurrentWorkspaceId()) this.startBackgroundSync();
+    const workspaceId = this.database.getCurrentWorkspaceId();
+    this.database.setCloudSyncSessionActive(Boolean(workspaceId));
+    if (workspaceId) this.startBackgroundSync();
 
     return {
       authenticated: true,
       email: data.user.email ?? undefined,
-      workspaceId: this.database.getCurrentWorkspaceId() ?? undefined
+      workspaceId: workspaceId ?? undefined,
+      workspaceRole: this.database.getWorkspaceRole(workspaceId)
     };
   }
-
 
   async sendFeedback(payload: FeedbackPayload): Promise<{ success: boolean; error?: string }> {
-  try {
-    const client = this.requireClient();
-    const message = payload.message.trim();
-    if (!message) return { success: false, error: 'Please enter a message before sending.' };
+    try {
+      const client = this.requireClient();
+      const message = payload.message.trim();
+      if (!message) return { success: false, error: 'Please enter a message before sending.' };
 
-    const publicImageUrl = payload.image_base64 ? await this.uploadTelemetryImage(client, payload.image_base64) : undefined;
+      const publicImageUrl = payload.image_base64 ? await this.uploadTelemetryImage(client, payload.image_base64) : undefined;
 
-    const feedbackBody = {
-      type: payload.type === 'Feature' ? 'Feature' : 'Bug',
-      message,
-      user_email: payload.user_email?.trim() || undefined,
-      image_url: publicImageUrl
-    };
+      const feedbackBody = {
+        type: payload.type === 'Feature' ? 'Feature' : 'Bug',
+        message,
+        user_email: payload.user_email?.trim() || undefined,
+        image_url: publicImageUrl
+      };
 
-    // --- INJECT THIS EXACT BLOCK ---
-    console.log("=== TELEMETRY DEBUG ===");
-    console.log("1. Base64 provided by UI:", !!payload.image_base64);
-    console.log("2. URL returned from Storage:", publicImageUrl);
-    console.log("=======================");
-    // -------------------------------
+      const { error } = await client.functions.invoke('submit-feedback', { body: feedbackBody });
 
-    const { error } = await client.functions.invoke('submit-feedback', { body: feedbackBody });
-
-    if (error) return { success: false, error: error.message };
-    return { success: true };
-  } catch (caught) {
-    return {
-      success: false,
-      error: caught instanceof Error ? caught.message : 'Unable to send feedback.'
-    };
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+    } catch (caught) {
+      return {
+        success: false,
+        error: caught instanceof Error ? caught.message : 'Unable to send feedback.'
+      };
+    }
   }
-}
 
   private async uploadTelemetryImage(client: SupabaseClient, dataUrlOrBase64: string): Promise<string> {
     const base64 = dataUrlOrBase64.replace(/^data:image\/(png|jpe?g);base64,/i, '').replace(/\s/g, '');
@@ -308,72 +490,206 @@ export class SyncEngine {
   }
   startBackgroundSync(): void {
     if (this.syncTimer) return;
+    this.syncSuspended = false;
     this.syncTimer = setInterval(() => {
       void this.processQueue();
     }, syncIntervalMs);
     void this.processQueue();
   }
 
-  stopBackgroundSync(): void {
+  stopBackgroundSync(resetInFlight = true): void {
     if (this.syncTimer) clearInterval(this.syncTimer);
     this.syncTimer = null;
-    this.syncInProgress = false;
+    if (resetInFlight) this.syncInProgress = false;
+  }
+
+  stop(): void {
+    this.syncSuspended = true;
+    this.stopBackgroundSync();
   }
 
   async processQueue(): Promise<void> {
-    if (this.syncInProgress) return;
-    if (Date.now() < this.retryDelayUntil) return;
-
-    const client = this.client;
-    const workspaceId = this.database.getCurrentWorkspaceId();
-    if (!client || !workspaceId) return;
-
-    const { data: userData, error: userError } = await client.auth.getUser();
-    if (userError || !userData.user) return;
-
-    this.syncInProgress = true;
+    let syncStarted = false;
     try {
-      const events = this.database.getPendingSyncQueue(syncBatchSize);
-      for (const event of events) {
-        try {
-          await this.processEvent(client, workspaceId, event);
-          this.retryCounts.delete(this.retryKey(event));
-          this.database.markSyncEventSucceeded(event);
-        } catch (caught) {
-          const attempts = (this.retryCounts.get(this.retryKey(event)) ?? 0) + 1;
-          this.retryCounts.set(this.retryKey(event), attempts);
-          if (attempts >= maxSyncAttempts) {
-            this.database.markSyncEventFailed(event);
-          } else {
-            this.retryDelayUntil = Date.now() + Math.min(60_000, 1000 * 2 ** attempts);
-          }
-          console.warn('[Bug Pocket Sync] Sync event failed', {
-            eventId: event.id,
-            localSeq: event.local_seq,
-            entityType: event.entity_type,
-            operation: event.operation,
-            attempts,
-            error: caught instanceof Error ? caught.message : String(caught)
-          });
-          break;
-        }
+      if (!this.database.isOpen()) return;
+      const workspaceId = this.database.getCurrentWorkspaceId();
+      if (!workspaceId) return;
+      if (this.syncSuspended) return;
+      if (this.syncInProgress) return;
+      if (Date.now() < this.retryDelayUntil) return;
+
+      const client = this.client;
+      if (!client) return;
+
+      this.syncInProgress = true;
+      syncStarted = true;
+
+      const { data: userData, error: userError } = await client.auth.getUser();
+      if (userError || !userData.user) return;
+
+      await this.pullRemoteTaxonomyFor(client, workspaceId);
+      await this.pullRemoteChangesFor(client, workspaceId);
+      await this.drainSyncQueue(client, workspaceId);
+    } catch (caught) {
+      const errorMessage = this.formatSyncError(caught);
+      if (this.isMissingWorkspaceDatabaseError(caught)) {
+        console.error('[Bug Pocket Sync] Workspace database is not ready. Sync cycle skipped.', errorMessage);
+      } else {
+        console.error('[Bug Pocket Sync] Background sync cycle failed. The worker will retry on the next interval.', errorMessage);
       }
     } finally {
-      this.syncInProgress = false;
+      if (syncStarted) this.syncInProgress = false;
     }
   }
 
+  async pullRemoteChanges(): Promise<boolean> {
+    const client = this.client;
+    const workspaceId = this.database.getCurrentWorkspaceId();
+    if (!client || !workspaceId) return false;
+    await this.pullRemoteTaxonomyFor(client, workspaceId);
+    return this.pullRemoteChangesFor(client, workspaceId);
+  }
+
+  async pullRemoteTaxonomy(): Promise<boolean> {
+    const client = this.client;
+    const workspaceId = this.database.getCurrentWorkspaceId();
+    if (!client || !workspaceId) return false;
+    return this.pullRemoteTaxonomyFor(client, workspaceId);
+  }
+
+  async retrySyncQueueNow(): Promise<void> {
+    this.retryDelayUntil = 0;
+    await this.processQueue();
+  }
+
+  private async drainSyncQueue(client: SupabaseClient, workspaceId: string): Promise<void> {
+    const events = this.database.getPendingSyncQueue(syncBatchSize, maxSyncAttempts);
+    for (const event of events) {
+      try {
+        await this.processEvent(client, workspaceId, event);
+        this.retryCounts.delete(this.retryKey(event));
+        this.database.markSyncEventSucceeded(event);
+      } catch (caught) {
+        const errorMessage = this.formatSyncError(caught);
+        const attempts = this.database.recordSyncEventFailure(event, errorMessage, maxSyncAttempts);
+        this.retryCounts.set(this.retryKey(event), attempts);
+        if (attempts >= maxSyncAttempts) {
+          this.retryCounts.delete(this.retryKey(event));
+        } else {
+          this.retryDelayUntil = Date.now() + Math.min(60_000, 1000 * 2 ** attempts);
+        }
+        break;
+      }
+    }
+  }
+
+  private async pullRemoteChangesFor(client: SupabaseClient, workspaceId: string): Promise<boolean> {
+    const watermark = this.database.getRemoteSyncWatermark(workspaceId) || '1970-01-01T00:00:00.000Z';
+    let highestWatermark = watermark;
+    let changed = false;
+
+    const { data: bugs, error: bugsError } = await client
+      .from('bugs')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .gt('updated_at', watermark)
+      .order('updated_at', { ascending: true })
+      .limit(syncBatchSize);
+
+    if (bugsError) throw bugsError;
+
+    for (const row of (bugs ?? []) as RemoteSyncRow[]) {
+      if (this.database.upsertRemoteBug(row)) changed = true;
+      highestWatermark = this.maxTimestamp(highestWatermark, row.updated_at);
+    }
+
+    const { data: attachments, error: attachmentsError } = await client
+      .from('attachments')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .gt('updated_at', watermark)
+      .order('updated_at', { ascending: true })
+      .limit(syncBatchSize);
+
+    if (attachmentsError) throw attachmentsError;
+
+    for (const row of (attachments ?? []) as RemoteSyncRow[]) {
+      if (this.database.upsertRemoteAttachment(row)) {
+        changed = true;
+        await this.downloadAttachmentBinary(
+          client,
+          workspaceId,
+          this.stringOrNull(row.content_hash),
+          this.normalizeExtension(this.stringOrNull(row.file_extension) ?? '.png')
+        );
+      }
+      highestWatermark = this.maxTimestamp(highestWatermark, row.updated_at);
+    }
+
+    if (highestWatermark !== watermark) this.database.updateRemoteSyncWatermark(workspaceId, highestWatermark);
+    if (changed) this.emitBugsChanged();
+    return changed;
+  }
+
+  private async pullRemoteTaxonomyFor(client: SupabaseClient, workspaceId: string): Promise<boolean> {
+    let changed = false;
+
+    const { data: applications, error: applicationsError } = await client
+      .from('applications')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('name', { ascending: true });
+    if (applicationsError) throw applicationsError;
+    for (const row of (applications ?? []) as RemoteSyncRow[]) {
+      if (this.database.upsertRemoteApplication(row)) changed = true;
+    }
+
+    const { data: modules, error: modulesError } = await client
+      .from('modules')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('name', { ascending: true });
+    if (modulesError) throw modulesError;
+    for (const row of (modules ?? []) as RemoteSyncRow[]) {
+      if (this.database.upsertRemoteModule(row)) changed = true;
+    }
+
+    const { data: environments, error: environmentsError } = await client
+      .from('environments')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('name', { ascending: true });
+    if (environmentsError) throw environmentsError;
+    for (const row of (environments ?? []) as RemoteSyncRow[]) {
+      if (this.database.upsertRemoteEnvironment(row)) changed = true;
+    }
+
+    return changed;
+  }
+
   async pushBug(_bug: BugDetails): Promise<void> {
-    // TODO: Push direct bug writes through sync_queue instead of ad hoc calls.
+    // DEFERRED (v1.1): Ad-hoc synchronous push. Current architecture relies exclusively on background queue processing.
     await this.processQueue();
   }
 
   async pullChanges(): Promise<void> {
-    // TODO: Pull workspace changes into the local SQLite cache after login.
+    // DEFERRED (v1.1): Manual pull trigger. Current architecture pulls through the background sync worker.
   }
 
   private async processEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent): Promise<void> {
     const payload = this.parsePayload(event.payload);
+    if (event.entity_type === 'application') {
+      await this.syncApplicationEvent(client, workspaceId, event, payload);
+      return;
+    }
+    if (event.entity_type === 'module') {
+      await this.syncModuleEvent(client, workspaceId, event, payload);
+      return;
+    }
+    if (event.entity_type === 'environment') {
+      await this.syncEnvironmentEvent(client, workspaceId, event, payload);
+      return;
+    }
     if (event.entity_type === 'bug') {
       await this.syncBugEvent(client, workspaceId, event, payload);
       return;
@@ -390,13 +706,104 @@ export class SyncEngine {
   private async syncBugEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
     const id = this.localUuid(workspaceId, 'bug', event.entity_id);
     if (event.operation === 'DELETE') {
-      const { error } = await client.from('bugs').delete().eq('id', id).eq('workspace_id', workspaceId);
+      const stamp = new Date().toISOString();
+      const { error } = await client
+        .from('bugs')
+        .update({
+          deleted_at: stamp,
+          updated_at: stamp,
+          sync_status: 'Synced'
+        })
+        .eq('id', id)
+        .eq('workspace_id', workspaceId);
       if (error) throw error;
       return;
     }
 
     const record = this.serializeBugPayload(workspaceId, id, payload);
     const { error } = await client.from('bugs').upsert(record, { onConflict: 'id' });
+    if (error) throw error;
+    this.database.markRemoteId('bug', this.numericLocalId(event.entity_id), id);
+  }
+
+  private formatSyncError(caught: unknown): string {
+    if (caught instanceof Error) {
+      const details = this.extractObjectDetails(caught);
+      return details ? `${caught.message} ${details}` : caught.message;
+    }
+
+    if (typeof caught === 'string') return caught;
+    if (!caught || typeof caught !== 'object') return String(caught);
+
+    return this.extractObjectDetails(caught) || JSON.stringify(caught);
+  }
+
+  private extractObjectDetails(value: object): string {
+    const record = value as Record<string, unknown>;
+    const parts = ['message', 'details', 'hint', 'code', 'status', 'statusCode']
+      .map((key) => [key, record[key]] as const)
+      .filter(([, item]) => item !== undefined && item !== null && String(item).trim().length > 0)
+      .map(([key, item]) => `${key}: ${String(item)}`);
+
+    if (parts.length) return parts.join(' | ');
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  private async syncApplicationEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
+    const id = this.remoteEntityId(workspaceId, 'application', event.entity_id);
+    const stamp = new Date().toISOString();
+    const record = {
+      id,
+      workspace_id: workspaceId,
+      name: String(payload.name ?? 'Application'),
+      context_description: this.stringOrNull(payload.context_description),
+      is_active: event.operation === 'DELETE' ? false : Number(payload.is_active ?? 1) !== 0,
+      is_synced: Number(payload.is_synced ?? 1) !== 0,
+      created_at: String(payload.created_at ?? stamp),
+      updated_at: event.operation === 'DELETE' ? stamp : String(payload.updated_at ?? stamp)
+    };
+
+    const { error } = await client.from('applications').upsert(record, { onConflict: 'id' });
+    if (error) throw error;
+  }
+
+  private async syncModuleEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
+    const id = this.remoteEntityId(workspaceId, 'module', event.entity_id);
+    const stamp = new Date().toISOString();
+    const record = {
+      id,
+      workspace_id: workspaceId,
+      application_id: this.remoteTaxonomyId(workspaceId, 'application', payload.application_id),
+      name: String(payload.name ?? 'Module'),
+      context_description: this.stringOrNull(payload.context_description),
+      is_active: event.operation === 'DELETE' ? false : Number(payload.is_active ?? 1) !== 0,
+      created_at: String(payload.created_at ?? stamp),
+      updated_at: event.operation === 'DELETE' ? stamp : String(payload.updated_at ?? stamp)
+    };
+
+    const { error } = await client.from('modules').upsert(record, { onConflict: 'id' });
+    if (error) throw error;
+  }
+
+  private async syncEnvironmentEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
+    const id = this.remoteEntityId(workspaceId, 'environment', event.entity_id);
+    const stamp = new Date().toISOString();
+    const record = {
+      id,
+      workspace_id: workspaceId,
+      name: String(payload.name ?? payload.value ?? 'Environment'),
+      context_description: this.stringOrNull(payload.context_description),
+      is_active: event.operation === 'DELETE' ? false : Number(payload.is_active ?? 1) !== 0,
+      created_at: String(payload.created_at ?? stamp),
+      updated_at: event.operation === 'DELETE' ? stamp : String(payload.updated_at ?? stamp)
+    };
+
+    const { error } = await client.from('environments').upsert(record, { onConflict: 'id' });
     if (error) throw error;
   }
 
@@ -407,27 +814,40 @@ export class SyncEngine {
     const storageKey = contentHash ? `${workspaceId}/${contentHash}${fileExtension}` : null;
 
     if (event.operation === 'DELETE') {
-      if (storageKey) await client.storage.from('attachments').remove([storageKey]);
-      const { error } = await client.from('attachments').delete().eq('id', id).eq('workspace_id', workspaceId);
+      const stamp = new Date().toISOString();
+      const { error } = await client
+        .from('attachments')
+        .update({
+          deleted_at: stamp,
+          updated_at: stamp,
+          sync_status: 'Synced'
+        })
+        .eq('id', id)
+        .eq('workspace_id', workspaceId);
       if (error) throw error;
       return;
     }
 
     if (contentHash && storageKey) {
       const filePath = this.database.resolveAttachmentPath(contentHash, fileExtension);
-      const fileBytes = await readFile(filePath);
-      const { error: uploadError } = await client.storage
-        .from('attachments')
-        .upload(storageKey, fileBytes, {
-          contentType: String(payload.mime_type || 'image/png'),
-          upsert: true
-        });
-      if (uploadError) throw uploadError;
+      if (!existsSync(filePath)) {
+        // The metadata row can still sync; a future pull may recover the binary from cloud storage.
+      } else {
+        const fileBytes = await readFile(filePath);
+        const { error: uploadError } = await client.storage
+          .from('attachments')
+          .upload(storageKey, fileBytes, {
+            contentType: String(payload.mime_type || 'image/png'),
+            upsert: true
+          });
+        if (uploadError) throw uploadError;
+      }
     }
 
     const record = this.serializeAttachmentPayload(workspaceId, id, storageKey, payload);
     const { error } = await client.from('attachments').upsert(record, { onConflict: 'id' });
     if (error) throw error;
+    this.database.markRemoteId('attachment', this.numericLocalId(event.entity_id), id);
   }
 
   private async syncReferenceEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
@@ -444,13 +864,32 @@ export class SyncEngine {
     if (error) throw error;
   }
 
+  private async downloadAttachmentBinary(
+    client: SupabaseClient,
+    workspaceId: string,
+    contentHash: string | null,
+    fileExtension: string
+  ): Promise<void> {
+    if (!contentHash) return;
+    const extension = this.normalizeExtension(fileExtension || '.png');
+    if (this.database.attachmentFileExists(contentHash, extension)) return;
+
+    const storageKey = `${workspaceId}/${contentHash}${extension}`;
+    const { data, error } = await client.storage.from('attachments').download(storageKey);
+    if (error) throw new Error(`Attachment download failed for ${storageKey}: ${error.message}`);
+    if (!data) throw new Error(`Attachment download returned no data for ${storageKey}.`);
+
+    const bytes = Buffer.from(await data.arrayBuffer());
+    await writeFile(this.database.resolveAttachmentPath(contentHash, extension), bytes);
+  }
+
   private serializeBugPayload(workspaceId: string, id: string, payload: SyncPayload): SyncPayload {
     return {
       id,
       workspace_id: workspaceId,
-      application_id: null,
-      module_id: null,
-      environment_id: null,
+      application_id: this.remoteTaxonomyId(workspaceId, 'application', payload.application_id),
+      module_id: this.remoteTaxonomyId(workspaceId, 'module', payload.module_id),
+      environment_id: this.remoteTaxonomyId(workspaceId, 'environment', payload.environment_id),
       device_id: null,
       browser_id: null,
       user_role_id: null,
@@ -469,6 +908,7 @@ export class SyncEngine {
       issue_url: String(payload.issue_url ?? ''),
       tags: String(payload.tags ?? ''),
       sync_status: 'Synced',
+      deleted_at: null,
       created_at: String(payload.created_at ?? new Date().toISOString()),
       updated_at: String(payload.updated_at ?? new Date().toISOString())
     };
@@ -489,8 +929,21 @@ export class SyncEngine {
       sync_status: 'Synced',
       storage_bucket: storageKey ? 'attachments' : null,
       storage_key: storageKey,
-      created_at: String(payload.created_at ?? new Date().toISOString())
+      deleted_at: null,
+      created_at: String(payload.created_at ?? new Date().toISOString()),
+      updated_at: String(payload.updated_at ?? new Date().toISOString())
     };
+  }
+
+  private async waitForQueueIdle(): Promise<void> {
+    const startedAt = Date.now();
+    while (this.syncInProgress && Date.now() - startedAt < 5000) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    if (this.syncInProgress) {
+      throw new Error('Cloud sync is still processing. Try switching workspaces again in a moment.');
+    }
   }
 
   private requireClient(): SupabaseClient {
@@ -499,17 +952,18 @@ export class SyncEngine {
     return this.client;
   }
 
-  private async captureCurrentWorkspaceId(client: SupabaseClient): Promise<string | null> {
+  private async captureCurrentWorkspaceMembership(client: SupabaseClient): Promise<{ workspaceId: string | null; role: WorkspaceRole }> {
     const { data, error } = await client
       .from('workspace_members')
-      .select('workspace_id')
+      .select('workspace_id, role')
       .limit(1)
       .maybeSingle<WorkspaceMembershipRow>();
 
     if (error) throw error;
     const workspaceId = data?.workspace_id ?? null;
     this.database.updateCurrentWorkspaceId(workspaceId);
-    return workspaceId;
+    const role = workspaceId ? this.database.updateWorkspaceRole(workspaceId, data?.role) : 'admin';
+    return { workspaceId, role };
   }
 
   private authFailure(message: string): SyncAuthResult {
@@ -520,6 +974,11 @@ export class SyncEngine {
       message,
       error: message
     };
+  }
+
+  private isMissingWorkspaceDatabaseError(caught: unknown): boolean {
+    const message = caught instanceof Error ? caught.message : String(caught);
+    return /workspace database|workspaceDb|workspace db|no workspace|database is not ready|not connected/i.test(message);
   }
 
   private parsePayload(payload: string): SyncPayload {
@@ -535,9 +994,37 @@ export class SyncEngine {
     return event.op_id || String(event.id);
   }
 
-  private localUuid(workspaceId: string, entityType: string, localId: number): string {
+  private maxTimestamp(current: string, candidate: string | undefined): string {
+    if (!candidate) return current;
+    return new Date(candidate).getTime() > new Date(current).getTime() ? candidate : current;
+  }
+
+  private remoteTaxonomyId(workspaceId: string, entityType: 'application' | 'module' | 'environment', value: unknown): string | null {
+    if (value === undefined || value === null) return null;
+    const stringValue = String(value).trim();
+    if (!stringValue) return null;
+    return this.remoteEntityId(workspaceId, entityType, stringValue);
+  }
+
+  private numericLocalId(value: number | string): number {
+    const numeric = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(numeric)) throw new Error(`Expected numeric local sync id, received ${value}.`);
+    return numeric;
+  }
+
+  private remoteEntityId(workspaceId: string, entityType: string, localId: number | string): string {
+    const stringValue = String(localId).trim();
+    if (this.isUuid(stringValue)) return stringValue;
+    return this.localUuid(workspaceId, entityType, stringValue);
+  }
+
+  private localUuid(workspaceId: string, entityType: string, localId: number | string): string {
     const hash = createHash('sha256').update(`${uuidNamespace}:${workspaceId}:${entityType}:${localId}`).digest('hex');
     return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${this.variantNibble(hash[16])}${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+  }
+
+  private isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
   }
 
   private variantNibble(value: string | undefined): string {

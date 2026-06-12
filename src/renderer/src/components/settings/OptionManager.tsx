@@ -23,7 +23,9 @@ export function OptionManager({
   onMerge,
   onToggleSync,
   addContextLabel,
-  addContextRequired = false
+  addContextRequired = false,
+  readOnly = false,
+  readOnlyMessage = 'Taxonomy is managed by workspace admins.'
 }: {
   title: string;
   open: boolean;
@@ -38,6 +40,8 @@ export function OptionManager({
   onToggleSync?: (id: number, isSynced: boolean, item: SettingsOptionItem) => Promise<void>;
   addContextLabel?: string;
   addContextRequired?: boolean;
+  readOnly?: boolean;
+  readOnlyMessage?: string;
 }) {
   const [value, setValue] = useState('');
   const [addContext, setAddContext] = useState('');
@@ -62,6 +66,7 @@ export function OptionManager({
   };
 
   const startEdit = (item: SettingsOptionItem): void => {
+    if (readOnly) { setError(readOnlyMessage); return; }
     if (!mutationReady) { setError('Restart Bug Pocket to enable editing and removing settings.'); return; }
     setEditingId(item.id);
     setMergingId(null);
@@ -91,6 +96,7 @@ export function OptionManager({
   };
 
   const startMerge = (item: SettingsOptionItem): void => {
+    if (readOnly) { setError(readOnlyMessage); return; }
     if (!mutationReady || !onMerge) { setError('Restart Bug Pocket to enable merging settings.'); return; }
     const firstTarget = items.find((option) => option.id !== item.id);
     if (!firstTarget) { setError('Add another option before merging.'); return; }
@@ -118,27 +124,30 @@ export function OptionManager({
       )}
       {open && (
         <div className="settings-option-body">
-          <div className={addContextLabel ? 'add-row add-row-with-context' : 'add-row'}>
-            <input value={value} onChange={(event) => setValue(event.target.value)} placeholder={`Add ${title.toLowerCase()}`} />
-            <button
-              title={`Add ${title}`}
-              disabled={addDisabled}
-              onClick={() => run(async () => {
-                if (addDisabled) return;
-                await onAdd(value, addContext);
-                setValue('');
-                setAddContext('');
-              })}
-            >
-              <Plus size={16} />
-            </button>
-            {addContextLabel && (
-              <label className="context-description-field add-context-field">
-                <span>{addContextLabel}{addContextRequired ? ' *' : ''}</span>
-                <textarea value={addContext} onChange={(event) => setAddContext(event.target.value)} />
-              </label>
-            )}
-          </div>
+          {readOnly && <p className="settings-helper">{readOnlyMessage}</p>}
+          {!readOnly && (
+            <div className={addContextLabel ? 'add-row add-row-with-context' : 'add-row'}>
+              <input value={value} onChange={(event) => setValue(event.target.value)} placeholder={`Add ${title.toLowerCase()}`} />
+              <button
+                title={`Add ${title}`}
+                disabled={addDisabled}
+                onClick={() => run(async () => {
+                  if (addDisabled) return;
+                  await onAdd(value, addContext);
+                  setValue('');
+                  setAddContext('');
+                })}
+              >
+                <Plus size={16} />
+              </button>
+              {addContextLabel && (
+                <label className="context-description-field add-context-field">
+                  <span>{addContextLabel}{addContextRequired ? ' *' : ''}</span>
+                  <textarea value={addContext} onChange={(event) => setAddContext(event.target.value)} />
+                </label>
+              )}
+            </div>
+          )}
           <div className="option-list">
             {items.map((item) => (
               <div className={[onMerge ? 'has-merge' : '', onToggleSync ? 'has-sync-toggle' : '', 'option-row'].filter(Boolean).join(' ')} key={item.id}>
@@ -194,7 +203,7 @@ export function OptionManager({
                 ) : (
                   <>
                     <span className="option-name">{item.label}</span>
-                    {onToggleSync && (
+                    {onToggleSync && !readOnly && (
                       <label className="option-sync-toggle" title="Allow this application's records to enter the future sync queue">
                         <input
                           type="checkbox"
@@ -205,9 +214,9 @@ export function OptionManager({
                         Sync
                       </label>
                     )}
-                    <button className="icon-button" disabled={!mutationReady} title="Edit option" onClick={() => startEdit(item)}><Pencil size={15} /></button>
-                    {onMerge && <button className="icon-button" disabled={!mutationReady || items.length < 2} title="Merge option" onClick={() => startMerge(item)}><RefreshCw size={15} /></button>}
-                    <button className="icon-button danger" disabled={!mutationReady} title="Remove option" onClick={() => run(async () => onDelete(item.id, item))}><Trash2 size={15} /></button>
+                    {!readOnly && <button className="icon-button" disabled={!mutationReady} title="Edit option" onClick={() => startEdit(item)}><Pencil size={15} /></button>}
+                    {onMerge && !readOnly && <button className="icon-button" disabled={!mutationReady || items.length < 2} title="Merge option" onClick={() => startMerge(item)}><RefreshCw size={15} /></button>}
+                    {!readOnly && <button className="icon-button danger" disabled={!mutationReady} title="Remove option" onClick={() => run(async () => onDelete(item.id, item))}><Trash2 size={15} /></button>}
                   </>
                 )}
               </div>

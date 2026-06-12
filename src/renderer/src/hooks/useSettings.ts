@@ -24,6 +24,7 @@ const emptySettings: SettingsData = {
   supabaseProjectUrl: null,
   supabaseAnonKey: null,
   currentWorkspaceId: null,
+  currentWorkspaceRole: 'member',
   cloudSyncActive: false,
   presets: []
 };

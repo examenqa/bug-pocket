@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import type { Attachment } from '../../../shared/types';
-import { Camera, ChevronLeft, ChevronRight, Filter, Gauge, Plus, RefreshCw, Search, Trophy, X } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Filter, Gauge, Plus, RefreshCw, Search, X } from 'lucide-react';
 import type { Bug, BugFilters, SettingsData } from '../../../shared/types';
 import { Badge } from '../components/shared/Badge';
 import { Select } from '../components/shared/Select';
 import { ScreenshotAnnotator } from '../components/ScreenshotAnnotator';
 import { formatDate } from '../services/reports';
-import { getEntryDisplay, formatTableDate, severityClass, statusPillClass, syncClass, syncStatuses, captureStatusOptions, shortcutDisplay, isCloudSyncActive, effectiveSyncStatus } from '../utils/display';
+import { getEntryDisplay, formatTableDate, severityClass, statusPillClass, syncClass, shortcutDisplay, isCloudSyncActive, effectiveSyncStatus } from '../utils/display';
 import { getActiveFilterChips, getModulesForApplication } from '../utils/filters';
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
 
@@ -15,22 +15,16 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
   const [filters, setFilters] = useState<BugFilters>({ reported: 'all' });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [spotlight, setSpotlight] = useState<SpotlightState | null>(null);
-  const [totalBugCount, setTotalBugCount] = useState(0);
 
   useEffect(() => {
     const refresh = async (): Promise<void> => {
-      const [nextBugs, nextTotal] = await Promise.all([
-        window.bugPocket.listBugs(filters) as Promise<Bug[]>,
-        window.bugPocket.getTotalBugCount() as Promise<number>
-      ]);
+      const nextBugs = await window.bugPocket.listBugs(filters) as Bug[];
       setBugs(nextBugs);
-      setTotalBugCount(nextTotal);
     };
     void refresh();
     return window.bugPocket.onBugsChanged(() => { void refresh(); });
   }, [filters]);
 
-  const statusFilterOptions = captureStatusOptions;
   const moduleFilterOptions = getModulesForApplication(settings, filters.applicationId === 'all' ? null : filters.applicationId ?? null);
   const activeFilterChips = getActiveFilterChips(filters, settings);
   const quickPanelShortcut = shortcutDisplay(settings.shortcuts.find((shortcut) => shortcut.action === 'quick_capture'), 'Ctrl+Alt+P');
@@ -132,11 +126,6 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
         <div>
           <h1>Captured Entries</h1>
           <p>Capture bugs without breaking your flow.</p>
-          <div className="dashboard-counter-badge" aria-label={`${totalBugCount} active captured entries`}>
-            <Trophy size={15} />
-            <strong>{totalBugCount}</strong>
-            <span>{totalBugCount === 1 ? 'active capture' : 'active captures'}</span>
-          </div>
         </div>
         <div className="dashboard-screenshot-actions">
           <div className="dashboard-action">
@@ -154,6 +143,23 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
         </div>
       </header>
       <div className="dashboard-controls">
+        <nav className="capture-state-filters" aria-label="Capture state filters">
+          {[
+            { label: 'Total Captures', value: 'all' },
+            { label: 'Drafts', value: 'Draft' },
+            { label: 'Reported', value: 'Reported' },
+            { label: 'Discarded', value: 'Discarded' }
+          ].map((tab) => (
+            <button
+              className={(filters.status ?? 'all') === tab.value ? 'state-tab active' : 'state-tab'}
+              key={tab.value}
+              type="button"
+              onClick={() => setFilters({ ...filters, status: tab.value })}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
         <div className="filter-commandbar">
           <label className="search-field">
             <Search size={16} />
@@ -198,22 +204,9 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
                 <option value="all">All envs</option>
                 {settings.environments.map((environment) => <option key={environment.id} value={environment.id}>{environment.value}</option>)}
               </Select>
-              <Select disabled={!filtersOpen} label="Status" value={filters.status ?? 'all'} onChange={(value) => setFilters({ ...filters, status: value })}>
-                <option value="all">All statuses</option>
-                {statusFilterOptions.map((status) => <option key={`${status.type}-${status.value}`} value={status.value}>{status.value}</option>)}
-              </Select>
               <Select disabled={!filtersOpen} label="Severity" value={filters.severity ?? 'all'} onChange={(value) => setFilters({ ...filters, severity: value })}>
                 <option value="all">All severities</option>
                 {settings.severities.map((severity) => <option key={severity.id} value={severity.value}>{severity.value}</option>)}
-              </Select>
-              <Select disabled={!filtersOpen} label="Sync" value={filters.syncStatus ?? 'all'} onChange={(value) => setFilters({ ...filters, syncStatus: value as BugFilters['syncStatus'] })}>
-                <option value="all">All sync</option>
-                {syncStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
-              </Select>
-              <Select disabled={!filtersOpen} label="Reported" value={filters.reported ?? 'all'} onChange={(value) => setFilters({ ...filters, reported: value as BugFilters['reported'] })}>
-                <option value="all">All</option>
-                <option value="reported">Reported</option>
-                <option value="unreported">Not reported</option>
               </Select>
             </div>
           </div>

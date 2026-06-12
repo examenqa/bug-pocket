@@ -10,7 +10,9 @@ export function ModuleManager({
   modules,
   mutationReady,
   refresh,
-  showToast
+  showToast,
+  readOnly = false,
+  readOnlyMessage = 'Taxonomy is managed by workspace admins.'
 }: {
   open: boolean;
   onToggle: () => void;
@@ -19,6 +21,8 @@ export function ModuleManager({
   mutationReady: boolean;
   refresh: () => Promise<void>;
   showToast: (message: string, variant?: 'success' | 'info' | 'error') => void;
+  readOnly?: boolean;
+  readOnlyMessage?: string;
 }) {
   const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(applications[0]?.id ?? null);
   const [value, setValue] = useState('');
@@ -57,6 +61,7 @@ export function ModuleManager({
   };
 
   const addModule = async (): Promise<void> => {
+    if (readOnly) { setError(readOnlyMessage); return; }
     if (!mutationReady) { setError('Restart Bug Pocket to enable editing and removing settings.'); return; }
     if (!selectedApplicationId) { setError('Choose an application before adding a module.'); return; }
     if (!value.trim()) return;
@@ -73,6 +78,7 @@ export function ModuleManager({
   };
 
   const startEdit = (module: Module): void => {
+    if (readOnly) { setError(readOnlyMessage); return; }
     if (!mutationReady) { setError('Restart Bug Pocket to enable editing and removing settings.'); return; }
     setEditingId(module.id);
     setEditValue(module.name);
@@ -116,8 +122,8 @@ export function ModuleManager({
       ) : (
         <>
           <span className="option-name">{module.name}</span>
-          <button className="icon-button" disabled={!mutationReady} title="Edit module" onClick={() => startEdit(module)}><Pencil size={15} /></button>
-          <button className="icon-button danger" disabled={!mutationReady} title="Remove module" onClick={() => run(async () => { await window.bugPocket.deleteModule(module.id); await refresh(); })}><Trash2 size={15} /></button>
+          {!readOnly && <button className="icon-button" disabled={!mutationReady} title="Edit module" onClick={() => startEdit(module)}><Pencil size={15} /></button>}
+          {!readOnly && <button className="icon-button danger" disabled={!mutationReady} title="Remove module" onClick={() => run(async () => { await window.bugPocket.deleteModule(module.id); await refresh(); })}><Trash2 size={15} /></button>}
         </>
       )}
     </div>
@@ -141,17 +147,20 @@ export function ModuleManager({
       )}
       {open && (
         <div className="settings-option-body">
-          <div className="module-add-row module-add-row-with-context">
-            <select value={selectedApplicationId ?? ''} onChange={(event) => setSelectedApplicationId(Number(event.target.value) || null)}>
-              {applications.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
-            </select>
-            <input value={value} onChange={(event) => setValue(event.target.value)} placeholder={selectedApplication ? `Add module for ${selectedApplication.name}` : 'Choose an application'} />
-            <button title="Add module" onClick={() => run(addModule)}><Plus size={16} /></button>
-            <label className="context-description-field add-context-field module-add-context-field">
-              <span>Module Description</span>
-              <textarea value={addContext} onChange={(event) => setAddContext(event.target.value)} />
-            </label>
-          </div>
+          {readOnly && <p className="settings-helper">{readOnlyMessage}</p>}
+          {!readOnly && (
+            <div className="module-add-row module-add-row-with-context">
+              <select value={selectedApplicationId ?? ''} onChange={(event) => setSelectedApplicationId(Number(event.target.value) || null)}>
+                {applications.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
+              </select>
+              <input value={value} onChange={(event) => setValue(event.target.value)} placeholder={selectedApplication ? `Add module for ${selectedApplication.name}` : 'Choose an application'} />
+              <button title="Add module" onClick={() => run(addModule)}><Plus size={16} /></button>
+              <label className="context-description-field add-context-field module-add-context-field">
+                <span>Module Description</span>
+                <textarea value={addContext} onChange={(event) => setAddContext(event.target.value)} />
+              </label>
+            </div>
+          )}
           <div className="module-group-list">
             {groupedModules.map(({ application, modules: applicationModules }) => (
               <section className="module-group" key={application.id}>

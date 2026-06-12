@@ -48,16 +48,6 @@ export async function triageBugWithOllama(payload: AiTriageBugPayload, configure
       },
       stream: false
     };
-    const sanitizedRequestBody = {
-      ...requestBody,
-      messages: requestBody.messages.map((message) => ({
-        ...message,
-        images: message.images ? [`[base64 omitted: ${message.images[0]?.length ?? 0} chars]`] : undefined
-      }))
-    };
-    console.log('[OLLAMA REQUEST BODY]', JSON.stringify(sanitizedRequestBody, null, 2));
-    if (imageBase64) console.log('[OLLAMA IMAGE BASE64 FIRST 50]', imageBase64.substring(0, 50));
-
     const response = await fetch(ollamaChatUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -65,7 +55,6 @@ export async function triageBugWithOllama(payload: AiTriageBugPayload, configure
     });
 
     const body = (await response.json().catch(() => ({}))) as OllamaChatResponse;
-    console.log('[OLLAMA RAW RESPONSE]', body.message?.content ?? '');
     if (!response.ok) throw new Error(classifyOllamaHttpError(response.status, body.error));
     if (body.error) throw new Error(classifyOllamaMessage(body.error));
 
@@ -114,7 +103,6 @@ async function readOptimizedImageAsBase64(filePath: string): Promise<string> {
 
     return optimizedImage.toJPEG(visionJpegQuality).toString('base64');
   } catch (caught) {
-    console.warn('[OLLAMA IMAGE OPTIMIZATION WARNING]', caught instanceof Error ? caught.message : caught);
     return '';
   }
 }

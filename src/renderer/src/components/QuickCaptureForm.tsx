@@ -5,8 +5,7 @@ import type { CSSProperties, KeyboardEvent } from 'react';
 import type { CapturePreset, ScreenshotResult, SettingsData } from '../../../shared/types';
 import { ScreenshotAnnotator } from './ScreenshotAnnotator';
 import type { ScreenshotAnnotatorHandle } from './ScreenshotAnnotator';
-import iconUrl from '../assets/bug-pocket-icon.png';
-import titleUrl from '../assets/bug-pocket-title.png';
+import { BrandMark } from './shared/BrandMark';
 
 const quickPanelShortcuts = {
   presets: ['Alt+1', 'Alt+2', 'Alt+3'],
@@ -19,6 +18,12 @@ const quickPanelShortcuts = {
   save: 'Ctrl+Enter',
   cancel: 'Esc'
 } as const;
+
+function quickPanelErrorMessage(caught: unknown): string {
+  if (caught instanceof Error && caught.message) return caught.message;
+  if (typeof caught === 'string' && caught.trim()) return caught;
+  return 'Could not create this item.';
+}
 
 export interface QuickCaptureDraft {
   applicationId: number | null;
@@ -95,6 +100,7 @@ export function QuickCaptureForm({
     [settings.userRoles]
   );
   const presetOptions = useMemo(() => settings.presets.slice(0, 3), [settings.presets]);
+  const taxonomyReadOnly = settings.currentWorkspaceRole === 'member';
 
   useEffect(() => {
     if (applicationId == null && settings.applications[0]) setApplicationId(settings.applications[0].id);
@@ -277,9 +283,9 @@ export function QuickCaptureForm({
     <div ref={quickWindowRef} tabIndex={-1} className={reviewScreenshot ? 'quick-window review-mode' : 'quick-window'} onKeyDown={handlePanelKeyDown}>
       <header className="quick-header">
         <div className="quick-brand-patch">
-          <img className="quick-logo" src={iconUrl} alt="" />
+          <BrandMark className="quick-logo" />
           <div className="quick-brand-text">
-            <img className="quick-title-logo" src={titleUrl} alt="Bug Pocket" />
+            <span className="quick-title-logo" aria-hidden="true">Bug Pocket</span>
             <p>Quick Capture</p>
           </div>
         </div>
@@ -348,7 +354,7 @@ export function QuickCaptureForm({
           value={applicationId}
           options={applicationOptions}
           onChange={(value) => { setSelectedPresetId(null); setApplicationId(typeof value === 'number' ? value : null); }}
-          onCreate={onCreateApplication}
+          onCreate={taxonomyReadOnly ? undefined : onCreateApplication}
         />
         <QuickSearchSelect
           ref={moduleRef}
@@ -357,7 +363,7 @@ export function QuickCaptureForm({
           value={moduleId}
           options={moduleOptions}
           onChange={(value) => { setSelectedPresetId(null); setModuleId(typeof value === 'number' ? value : null); }}
-          onCreate={(name) => onCreateModule(name, applicationId)}
+          onCreate={taxonomyReadOnly ? undefined : (name) => onCreateModule(name, applicationId)}
         />
         <QuickSearchSelect
           ref={environmentRef}
@@ -366,7 +372,7 @@ export function QuickCaptureForm({
           value={environmentId}
           options={environmentOptions}
           onChange={(value) => { setSelectedPresetId(null); setEnvironmentId(typeof value === 'number' ? value : null); }}
-          onCreate={onCreateEnvironment}
+          onCreate={taxonomyReadOnly ? undefined : onCreateEnvironment}
         />
         <QuickSearchSelect
           ref={userRoleRef}
@@ -425,6 +431,7 @@ const QuickSearchSelect = forwardRef<HTMLInputElement, QuickSearchSelectProps>(
     const [query, setQuery] = useState('');
     const [highlightedIndex, setHighlightedIndex] = useState(0);
     const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState('');
 
     useImperativeHandle(forwardedRef, () => inputRef.current as HTMLInputElement);
 
@@ -476,6 +483,7 @@ const QuickSearchSelect = forwardRef<HTMLInputElement, QuickSearchSelectProps>(
 
     const choose = (option: QuickSelectOption): void => {
       onChange(option.value);
+      setCreateError('');
       setQuery('');
       setSearching(false);
       setOpen(false);
@@ -485,12 +493,17 @@ const QuickSearchSelect = forwardRef<HTMLInputElement, QuickSearchSelectProps>(
     const create = async (): Promise<void> => {
       if (!onCreate || !cleanedQuery || creating) return;
       setCreating(true);
+      setCreateError('');
       try {
         const createdValue = await onCreate(cleanedQuery);
         onChange(createdValue);
         setQuery('');
         setSearching(false);
         setOpen(false);
+        inputRef.current?.focus();
+      } catch (caught) {
+        setCreateError(quickPanelErrorMessage(caught));
+        setOpen(true);
         inputRef.current?.focus();
       } finally {
         setCreating(false);
@@ -542,11 +555,13 @@ const QuickSearchSelect = forwardRef<HTMLInputElement, QuickSearchSelectProps>(
               setOpen(true);
               setSearching(false);
               setQuery('');
+              setCreateError('');
               window.setTimeout(() => inputRef.current?.select(), 0);
             }}
             onChange={(event) => {
               setSearching(true);
               setQuery(event.target.value);
+              setCreateError('');
               setOpen(true);
             }}
             onKeyDown={handleKeyDown}
@@ -587,6 +602,7 @@ const QuickSearchSelect = forwardRef<HTMLInputElement, QuickSearchSelectProps>(
             document.body
           )}
         </div>
+        {createError && <small className="quick-select-error" role="alert">{createError}</small>}
       </label>
     );
   }

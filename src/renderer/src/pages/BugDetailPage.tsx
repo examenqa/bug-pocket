@@ -361,16 +361,17 @@ export function BugDetailsView({
         };
       } catch (error) {
         console.error('AI returned malformed JSON', error);
-        aiAppliedBug = { ...currentBug, note: cleanJsonString };
+        const fallbackNote = [currentBug.note.trim(), cleanJsonString].filter(Boolean).join('\n\n');
+        aiAppliedBug = { ...currentBug, note: fallbackNote };
       }
 
       setBug(aiAppliedBug);
       bugRef.current = aiAppliedBug;
-      await triggerSave({ bugOverride: aiAppliedBug });
+      markDirty();
       setAiStatus('completed');
       setShowAiRefinement(false);
       setAiRefinementNote('');
-      showDetailsToast('AI Triage applied and saved.');
+      showDetailsToast('AI Triage applied. Review the generated fields before saving.');
     } catch (caught) {
       setAiStatus('idle');
       showDetailsToast(parseErrorForUI(caught), 'error');

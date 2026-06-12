@@ -151,7 +151,6 @@ function extractJsonObjectString(value: string): string {
 function readBugImageDataUrl(bugData: unknown): string | undefined {
   const payload = bugData as { image_file_path?: unknown } | null;
   const imageFilePath = typeof payload?.image_file_path === 'string' ? payload.image_file_path : '';
-  console.log('Attached image path:', imageFilePath || '[none]');
   if (!imageFilePath) return undefined;
 
   const image = nativeImage.createFromPath(imageFilePath);

@@ -4,17 +4,18 @@
   "description": "Windows-first quick bug capture desktop app for QA testers.",
   "main": "out/main/index.js",
   "scripts": {
-    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "electron-builder install-app-deps",
     "dev": "electron-vite dev",
     "build": "tsc --noEmit && electron-vite build && node scripts/fix-preload.js",
     "start": "electron-vite build && node scripts/fix-preload.js && electron .",
-    "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder"
+    "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder --win nsis"
   },
   "build": {
     "appId": "com.bugpocket.app",
     "productName": "Bug Pocket",
     "asar": true,
     "asarUnpack": [
+      "**/*.node",
       "**/node_modules/better-sqlite3/**/*"
     ],
     "npmRebuild": true,
@@ -27,14 +28,6 @@
       "package.json"
     ],
     "extraResources": [
-      {
-        "from": "resources/bug-pocket-icon.png",
-        "to": "bug-pocket-icon.png"
-      },
-      {
-        "from": "resources/bug-pocket-title.png",
-        "to": "bug-pocket-title.png"
-      },
       {
         "from": "build/icon.ico",
         "to": "icon.ico"
