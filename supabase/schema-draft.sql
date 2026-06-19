@@ -21,20 +21,15 @@ create table if not exists workspace_members (
   role text not null default 'member',
   created_at timestamptz not null default now(),
   unique (workspace_id, user_id),
-  constraint workspace_members_role_check check (role in ('member', 'admin', 'owner'))
+  constraint workspace_members_role_check check (role in ('member', 'developer', 'admin', 'owner'))
 );
 
 do $$
 begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conname = 'workspace_members_role_check'
-      and conrelid = 'public.workspace_members'::regclass
-  ) then
-    alter table public.workspace_members
-      add constraint workspace_members_role_check check (role in ('member', 'admin', 'owner'));
-  end if;
+  alter table public.workspace_members
+    drop constraint if exists workspace_members_role_check;
+  alter table public.workspace_members
+    add constraint workspace_members_role_check check (role in ('member', 'developer', 'admin', 'owner'));
 end $$;
 
 -- 2. Core Data Layer (SQLite mirrors, injected with workspace_id)
@@ -216,6 +211,28 @@ returns boolean as $$
   );
 $$ language sql security definer set search_path = public;
 
+create or replace function public.is_workspace_writer(ws_id uuid)
+returns boolean as $$
+  select exists (
+    select 1
+    from public.workspace_members
+    where workspace_id = ws_id
+      and user_id = auth.uid()
+      and role in ('member', 'admin', 'owner')
+  );
+$$ language sql security definer set search_path = public;
+
+create or replace function public.is_workspace_developer(ws_id uuid)
+returns boolean as $$
+  select exists (
+    select 1
+    from public.workspace_members
+    where workspace_id = ws_id
+      and user_id = auth.uid()
+      and role = 'developer'
+  );
+$$ language sql security definer set search_path = public;
+
 -- 5. RLS Policies
 -- Re-create policies so the draft can be re-applied during early schema iteration.
 drop policy if exists "workspace members can select their workspaces" on workspaces;
@@ -240,9 +257,15 @@ drop policy if exists "workspace admins can delete reference options" on referen
 drop policy if exists "workspace members can select bugs" on bugs;
 drop policy if exists "workspace members can insert bugs" on bugs;
 drop policy if exists "workspace members can fully manage bugs in their workspace" on bugs;
+drop policy if exists "workspace writers can insert bugs" on bugs;
+drop policy if exists "workspace writers can update bugs" on bugs;
+drop policy if exists "workspace writers can delete bugs" on bugs;
 drop policy if exists "workspace members can select attachments" on attachments;
 drop policy if exists "workspace members can insert attachments" on attachments;
 drop policy if exists "workspace members can manage attachments" on attachments;
+drop policy if exists "workspace writers can insert attachments" on attachments;
+drop policy if exists "workspace writers can update attachments" on attachments;
+drop policy if exists "workspace writers can delete attachments" on attachments;
 drop policy if exists "workspace members can select config options" on config_options;
 drop policy if exists "workspace members can insert config options" on config_options;
 drop policy if exists "workspace members can manage config options" on config_options;
@@ -339,15 +362,39 @@ create policy "workspace admins can delete reference options"
   on reference_options for delete
   using (public.is_workspace_admin(workspace_id));
 
-create policy "workspace members can fully manage bugs in their workspace"
-  on bugs for all
-  using (public.is_workspace_member(workspace_id))
-  with check (public.is_workspace_member(workspace_id));
+create policy "workspace members can select bugs"
+  on bugs for select
+  using (public.is_workspace_member(workspace_id));
 
-create policy "workspace members can manage attachments"
-  on attachments for all
-  using (public.is_workspace_member(workspace_id))
-  with check (public.is_workspace_member(workspace_id));
+create policy "workspace writers can insert bugs"
+  on bugs for insert
+  with check (public.is_workspace_writer(workspace_id));
+
+create policy "workspace writers can update bugs"
+  on bugs for update
+  using (public.is_workspace_writer(workspace_id))
+  with check (public.is_workspace_writer(workspace_id));
+
+create policy "workspace writers can delete bugs"
+  on bugs for delete
+  using (public.is_workspace_writer(workspace_id));
+
+create policy "workspace members can select attachments"
+  on attachments for select
+  using (public.is_workspace_member(workspace_id));
+
+create policy "workspace writers can insert attachments"
+  on attachments for insert
+  with check (public.is_workspace_writer(workspace_id));
+
+create policy "workspace writers can update attachments"
+  on attachments for update
+  using (public.is_workspace_writer(workspace_id))
+  with check (public.is_workspace_writer(workspace_id));
+
+create policy "workspace writers can delete attachments"
+  on attachments for delete
+  using (public.is_workspace_writer(workspace_id));
 
 create policy "workspace members can manage config options"
   on config_options for all

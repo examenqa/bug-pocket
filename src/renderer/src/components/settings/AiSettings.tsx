@@ -200,20 +200,28 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
           </label>
         </div>
 
-        <label className="ai-prompt-field">
-          <span>API key {hasApiKey && <em>saved for {provider}</em>}</span>
+        <div className="ai-prompt-field">
+          <div className="ai-api-key-label-row">
+            <label htmlFor="ai-api-key-input">API key {hasApiKey && <em>saved for {provider}</em>}</label>
+            {provider === 'Gemini' && (
+              <span className="settings-helper ai-api-key-helper">
+                Get a free API key from{' '}
+                <button type="button" onClick={() => void window.bugPocket.openExternalUrl('https://aistudio.google.com/app/apikey')}>
+                  Google AI Studio
+                </button>
+                .
+              </span>
+            )}
+          </div>
           <input
+            id="ai-api-key-input"
             type="password"
             value={apiKey}
             onChange={(event) => setApiKey(event.target.value)}
             placeholder={hasApiKey ? `Stored for ${provider}. Edit to replace it.` : 'Paste your API key'}
             disabled={saving || !mutationReady}
           />
-        </label>
-
-        {provider === 'Gemini' && (
-          <p className="settings-helper ai-api-key-helper">Get a free API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>.</p>
-        )}
+        </div>
 
         <div className="settings-warning ai-privacy-warning">⚠️ Privacy Notice: If you are using a Free Tier Gemini key, Google's Terms of Service allow them to log and review your inputs (including screenshots and bug text) for model training. Do not use a Free Tier key for confidential, proprietary, or unreleased company data.</div>
 

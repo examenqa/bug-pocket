@@ -30,8 +30,11 @@ export function GeneralSettings({
       if (message.includes('active preset')) showToast('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.', 'error');
     }
   };
-  const taxonomyReadOnly = settings.currentWorkspaceRole === 'member';
-  const taxonomyReadOnlyMessage = 'Taxonomy is managed by workspace admins.';
+  const developerReadOnly = settings.currentWorkspaceRole === 'developer';
+  const taxonomyReadOnly = settings.currentWorkspaceRole === 'member' || developerReadOnly;
+  const taxonomyReadOnlyMessage = settings.currentWorkspaceRole === 'developer'
+    ? 'Developer accounts can view synced taxonomy but cannot edit it.'
+    : 'Taxonomy is managed by workspace admins.';
 
   return (
     <div className="settings-tab-stack">
@@ -88,6 +91,8 @@ export function GeneralSettings({
             onToggle={() => toggleSettingsCard('devices')}
             mutationReady={mutationReady}
             items={settings.devices.map((item) => ({ id: item.id, label: item.value }))}
+            readOnly={developerReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             onAdd={async (value) => { await window.bugPocket.addDevice(value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateDevice(id, value); await refresh(); }}
             onDelete={async (id) => { await window.bugPocket.deleteDevice(id); await refresh(); }}
@@ -99,6 +104,8 @@ export function GeneralSettings({
             onToggle={() => toggleSettingsCard('browsers')}
             mutationReady={mutationReady}
             items={settings.browsers.map((item) => ({ id: item.id, label: item.value }))}
+            readOnly={developerReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             onAdd={async (value) => { await window.bugPocket.addBrowser(value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateBrowser(id, value); await refresh(); }}
             onDelete={async (id) => { await window.bugPocket.deleteBrowser(id); await refresh(); }}
@@ -110,6 +117,8 @@ export function GeneralSettings({
             onToggle={() => toggleSettingsCard('user-roles')}
             mutationReady={mutationReady}
             items={settings.userRoles.map((item) => ({ id: item.id, label: item.value }))}
+            readOnly={developerReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             onAdd={async (value) => { await window.bugPocket.addUserRole(value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateUserRole(id, value); await refresh(); }}
             onDelete={async (id) => { await window.bugPocket.deleteUserRole(id); await refresh(); }}
@@ -121,6 +130,8 @@ export function GeneralSettings({
             onToggle={() => toggleSettingsCard('entry-types')}
             mutationReady={mutationReady}
             items={settings.entryTypes.map((item) => ({ id: item.id, label: item.value }))}
+            readOnly={developerReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             onAdd={async (value) => { await window.bugPocket.addConfigOption('entry_type', value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateConfigOption(id, value); await refresh(); }}
             onDelete={async (id) => runPresetLockedDelete(async () => { await window.bugPocket.deleteConfigOption(id); await refresh(); })}
@@ -131,6 +142,8 @@ export function GeneralSettings({
             onToggle={() => toggleSettingsCard('severity-values')}
             mutationReady={mutationReady}
             items={settings.severities.map((item) => ({ id: item.id, label: item.value }))}
+            readOnly={developerReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             onAdd={async (value) => { await window.bugPocket.addConfigOption('severity', value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateConfigOption(id, value); await refresh(); }}
             onDelete={async (id) => { await window.bugPocket.deleteConfigOption(id); await refresh(); }}

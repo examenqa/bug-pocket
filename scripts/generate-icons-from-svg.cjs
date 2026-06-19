@@ -66,8 +66,12 @@ function htmlForSvg(svg) {
 </html>`;
 }
 
+function stripBakedBackground(svg) {
+  return svg.replace(/<path\s+fill=["']#FEFEFE["'][\s\S]*?z["']\s*\/>\s*/i, '');
+}
+
 function addIconContrastPlate(svg) {
-  const contrastPlate = '<rect width="100%" height="100%" rx="20%" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2%" />';
+  const contrastPlate = '<rect x="4%" y="4%" width="92%" height="92%" rx="22%" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2%" />';
   return svg.replace(/(<svg\b[^>]*>)/i, `$1\n${contrastPlate}`);
 }
 
@@ -105,7 +109,7 @@ async function renderPng(svg, size) {
 
 app.whenReady().then(async () => {
   const sourcePath = resolve(sourceArg);
-  const svg = addIconContrastPlate(readFileSync(sourcePath, 'utf8'));
+  const svg = addIconContrastPlate(stripBakedBackground(readFileSync(sourcePath, 'utf8')));
 
   const sourcePng = await renderPng(svg, 1024);
   const sourceImage = nativeImage.createFromBuffer(sourcePng);
@@ -121,7 +125,9 @@ app.whenReady().then(async () => {
   targetArgs.forEach((targetArg) => {
     const targetPath = resolve(targetArg);
     mkdirSync(dirname(targetPath), { recursive: true });
-    if (extname(targetPath).toLowerCase() === '.png') {
+    if (extname(targetPath).toLowerCase() === '.svg') {
+      writeFileSync(targetPath, svg);
+    } else if (extname(targetPath).toLowerCase() === '.png') {
       writeFileSync(targetPath, sourceImage.resize({ width: 256, height: 256 }).toPNG());
     } else {
       writeFileSync(targetPath, ico);

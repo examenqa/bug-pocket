@@ -6,18 +6,20 @@ export function OptionSelect({
   label,
   value,
   options,
-  onChange
+  onChange,
+  disabled = false
 }: {
   label: string;
   value: string;
   options: ConfigOption[];
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const visibleOptions = options.length ? options : [fallbackOption(value || 'Bug')];
   return (
     <label>
       {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <select value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         {visibleOptions.map((option) => (
           <option key={`${option.type}-${option.id}-${option.value}`} value={option.value}>
             {option.value}
@@ -32,17 +34,19 @@ export function ReferenceSelect({
   label,
   value,
   options,
-  onChange
+  onChange,
+  disabled = false
 }: {
   label: string;
   value: number | null;
   options: ReferenceOption[];
   onChange: (value: number | null) => void;
+  disabled?: boolean;
 }) {
   return (
     <label>
       {label}
-      <select value={value ?? ''} onChange={(event) => onChange(Number(event.target.value) || null)}>
+      <select value={value ?? ''} disabled={disabled} onChange={(event) => onChange(Number(event.target.value) || null)}>
         <option value="">No {label.toLowerCase()}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>

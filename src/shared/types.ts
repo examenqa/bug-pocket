@@ -288,7 +288,7 @@ export interface SyncSessionStatus {
   workspaceRole?: WorkspaceRole;
 }
 
-export type WorkspaceRole = 'owner' | 'admin' | 'member';
+export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'developer';
 
 export interface SyncWorkspaceOption {
   workspaceId: string;
@@ -305,6 +305,12 @@ export interface SyncAuthResult extends SyncSessionStatus {
 
 export type AiProvider = 'OpenAI' | 'Grok' | 'OpenRouter' | 'Gemini' | 'Custom/Local';
 
+export interface AiProviderTarget {
+  provider: AiProvider;
+  baseUrl?: string;
+  modelId: string;
+}
+
 export interface AiConfigSaveInput {
   provider: AiProvider;
   baseUrl: string;
@@ -312,6 +318,7 @@ export interface AiConfigSaveInput {
   apiKey?: string;
   clearApiKey?: boolean;
   customSystemPrompt: string;
+  providerQueue?: AiProviderTarget[];
 }
 
 export interface AiByokConfig {
@@ -323,6 +330,7 @@ export interface AiByokConfig {
   apiKey?: string;
   apiKeys?: Partial<Record<AiProvider, string>>;
   customSystemPrompt: string;
+  providerQueue?: AiProviderTarget[];
 }
 
 export interface AiIssueProcessPayload {

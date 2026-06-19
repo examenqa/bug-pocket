@@ -40,6 +40,7 @@ interface QuickCaptureFormProps {
   focusToken: number;
   onTakeScreenshot: () => Promise<void>;
   onConfigurePresets: () => Promise<void>;
+  onClearAttachments: () => void;
   onSave: (draft: QuickCaptureDraft) => Promise<void>;
   onCancel: () => Promise<void>;
   onCreateApplication: (name: string) => Promise<number>;
@@ -55,6 +56,7 @@ export function QuickCaptureForm({
   focusToken,
   onTakeScreenshot,
   onConfigurePresets,
+  onClearAttachments,
   onSave,
   onCancel,
   onCreateApplication,
@@ -100,7 +102,7 @@ export function QuickCaptureForm({
     [settings.userRoles]
   );
   const presetOptions = useMemo(() => settings.presets.slice(0, 3), [settings.presets]);
-  const taxonomyReadOnly = settings.currentWorkspaceRole === 'member';
+  const taxonomyReadOnly = settings.currentWorkspaceRole === 'member' || settings.currentWorkspaceRole === 'developer';
 
   useEffect(() => {
     if (applicationId == null && settings.applications[0]) setApplicationId(settings.applications[0].id);
@@ -388,7 +390,14 @@ export function QuickCaptureForm({
             <span className="quick-label-row">Bug Note <kbd>{quickPanelShortcuts.note}</kbd></span>
             <textarea ref={noteRef} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Short note. Clean it up later." />
           </label>
-          {attachments.length > 0 && <div className="attachment-strip">{attachments.length} screenshot attached</div>}
+          {attachments.length > 0 && (
+            <div className="attachment-strip quick-attachment-status">
+              <span>{attachments.length} screenshot{attachments.length === 1 ? '' : 's'} attached</span>
+              <button type="button" className="remove-attachment-btn" title="Remove screenshot" aria-label="Remove attached screenshots" onClick={onClearAttachments}>
+                &times;
+              </button>
+            </div>
+          )}
           <div className="quick-actions">
             <div className="quick-action-item">
               <button className="screenshot-button" ref={screenshotButtonRef} title="Take screenshot (Alt+S)" onClick={takeScreenshot}><Camera size={16} /> Screenshot</button>

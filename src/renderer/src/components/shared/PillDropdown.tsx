@@ -12,13 +12,15 @@ export function PillDropdown({
   value,
   options,
   colorClass,
-  onChange
+  onChange,
+  disabled = false
 }: {
   label: string;
   value: string;
   options: PillDropdownOption[];
   colorClass: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -59,6 +61,7 @@ export function PillDropdown({
   }, [open]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>): void => {
+    if (disabled) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       setOpen(false);
@@ -78,9 +81,12 @@ export function PillDropdown({
         className={`state-pill ${colorClass}`}
         style={{ width: pillWidth }}
         type="button"
+        disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (!disabled) setOpen((current) => !current);
+        }}
         onKeyDown={handleKeyDown}
       >
         {selectedLabel}

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog } from 'electron';
 import log from 'electron-log/main';
+import { autoUpdater } from 'electron-updater';
 import { copyFileSync, createReadStream, createWriteStream, existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,7 +10,7 @@ import { BugPocketDatabase } from './database';
 import { triageBugWithOllama } from './ai/ollamaTriage';
 import { getByokAiConfig, processIssueWithByokAi, saveByokAiConfig, triageBugWithByokAi } from './ai/byokIssueProcessor';
 import { SyncEngine } from './sync/syncService';
-import type { AiIssueProcessPayload, AiProvider, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting } from '../shared/types';
+import type { AiConfigSaveInput, AiIssueProcessPayload, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting } from '../shared/types';
 
 if (!app.isPackaged) {
   app.setPath('userData', `${app.getPath('userData')}-dev`);
@@ -63,6 +64,22 @@ function enforceStartupPreference(enabled: boolean): void {
     openAtLogin: enabled,
     openAsHidden: true,
     args: enabled ? [backgroundStartArg] : []
+  });
+}
+
+function initializeAutoUpdater(): void {
+  autoUpdater.logger = log;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('error', (error) => {
+    log.error('[auto-updater] Update check failed:', error);
+  });
+  autoUpdater.on('update-available', (info) => {
+    log.info('[auto-updater] Update available:', info.version);
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    log.info('[auto-updater] Update downloaded and ready on app quit:', info.version);
+    mainWindow?.webContents.send('update-ready');
   });
 }
 
@@ -878,7 +895,7 @@ function registerIpc(): void {
   ipcMain.handle('settings:updateQuickCaptureAnnotationReview', (_event, enabled: boolean) => mutateSettings(() => db.updateQuickCaptureAnnotationReview(enabled)));
   ipcMain.handle('settings:updateAiTriageOptions', (_event, enabled: boolean, modelName: string) => mutateSettings(() => db.updateAiTriageOptions(enabled, modelName)));
   ipcMain.handle('get-ai-config', () => getByokAiConfig(db));
-  ipcMain.handle('save-ai-config', (_event, input: { provider: AiProvider; baseUrl: string; modelId: string; apiKey?: string; clearApiKey?: boolean; customSystemPrompt: string }) =>
+  ipcMain.handle('save-ai-config', (_event, input: AiConfigSaveInput) =>
     mutateSettings(() => saveByokAiConfig(db, input))
   );
   ipcMain.handle('settings:updateSupabaseSettings', (_event, projectUrl: string, anonKey: string) =>
@@ -1022,7 +1039,14 @@ if (!gotTheLock) {
     syncEngine.initialize();
     enforceStartupPreference(db.getRunOnSystemStartup());
     registerIpc();
+    initializeAutoUpdater();
     createMainWindow('/dashboard', !process.argv.includes(backgroundStartArg));
+    if (app.isPackaged) {
+      // Execute silent background update check against the private S3 feed.
+      autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+        log.error('[auto-updater] Silent update check failed:', error);
+      });
+    }
     createQuickWindow();
     createTray();
     registerAppShortcuts();

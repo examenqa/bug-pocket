@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
+import { Cloud, Lock } from 'lucide-react';
 import type { SettingsData } from '../../../shared/types';
 import { hasSettingsMutationBridge } from '../components/settings/settingsUtils';
 import { useToast } from '../components/shared/ToastContext';
@@ -10,7 +11,6 @@ const AiSettings = lazy(() => import('../components/settings/AiSettings').then((
 const TemplateSettings = lazy(() => import('../components/settings/TemplateSettings').then((module) => ({ default: module.TemplateSettings })));
 const StorageSettings = lazy(() => import('../components/settings/StorageSettings').then((module) => ({ default: module.StorageSettings })));
 const SyncSettings = lazy(() => import('../components/settings/SyncSettings').then((module) => ({ default: module.SyncSettings })));
-const cloudSyncSettingsEnabled = import.meta.env.DEV;
 
 type SettingsTab = 'workspace' | 'presets' | 'ai' | 'output' | 'storage' | 'sync';
 
@@ -28,7 +28,7 @@ function tabForRequestedCard(card: string | null): { tab: SettingsTab; card: str
   if (card === 'ai-options') return { tab: 'ai', card };
   if (card === 'templates') return { tab: 'output', card };
   if (['backup', 'data-management', 'storage'].includes(card)) return { tab: 'storage', card };
-  if (['cloud-sync', 'sync'].includes(card)) return cloudSyncSettingsEnabled ? { tab: 'sync', card } : { tab: 'workspace', card: null };
+  if (['cloud-sync', 'sync'].includes(card)) return { tab: 'sync', card };
   if (['issue-platforms', 'jira-workspace'].includes(card)) {
     return { tab: 'output', card };
   }
@@ -41,9 +41,27 @@ function tabForRequestedCard(card: string | null): { tab: SettingsTab; card: str
 function tabFromRoute(route: string): SettingsTab {
   const path = route.split('?')[0];
   const segment = path.split('/')[2] ?? 'workspace';
-  if (segment === 'sync') return cloudSyncSettingsEnabled ? 'sync' : 'workspace';
+  if (segment === 'sync') return 'sync';
   if (segment === 'presets' || segment === 'ai' || segment === 'output' || segment === 'storage' || segment === 'workspace') return segment;
   return oldSegmentToTab[segment] ?? 'workspace';
+}
+
+function CloudSyncComingSoon() {
+  return (
+    <div className="panel sync-placeholder-panel cloud-sync-locked-panel">
+      <div className="cloud-sync-locked-icon" aria-hidden="true">
+        <Cloud size={28} />
+        <Lock size={15} />
+      </div>
+      <div>
+        <h2>Cloud Sync</h2>
+        <p className="settings-helper">Coming soon. Bug Pocket remains fully local-first while workspace sync is being prepared for a stable release.</p>
+      </div>
+      <div className="cloud-sync-locked-note">
+        Captures, screenshots, templates, shortcuts, and backups continue to work locally. Cloud workspace login and background sync controls are intentionally locked in this build.
+      </div>
+    </div>
+  );
 }
 
 export function SettingsPage({
@@ -63,15 +81,9 @@ export function SettingsPage({
   const activeTab = tabForRequestedCard(requestedCard)?.tab ?? tabFromRoute(route);
 
   useEffect(() => {
-    if (!cloudSyncSettingsEnabled && route.split('?')[0] === '/settings/sync') {
-      window.location.hash = '/settings/workspace';
-    }
-  }, [route]);
-
-  useEffect(() => {
     const savedSegment = window.sessionStorage.getItem(restoreSettingsSegmentKey);
     if (savedSegment && !route.startsWith('/settings/')) {
-      const nextTab = oldSegmentToTab[savedSegment] ?? ((['workspace', 'presets', 'ai', 'output', 'storage'].includes(savedSegment) || (cloudSyncSettingsEnabled && savedSegment === 'sync')) ? savedSegment : 'workspace');
+      const nextTab = oldSegmentToTab[savedSegment] ?? (['workspace', 'presets', 'ai', 'output', 'storage', 'sync'].includes(savedSegment) ? savedSegment : 'workspace');
       window.location.hash = `/settings/${nextTab}`;
     }
     if (window.sessionStorage.getItem(restoreSuccessKey) === '1') {
@@ -142,7 +154,11 @@ export function SettingsPage({
         {activeTab === 'storage' && (
           <StorageSettings settings={settings} refresh={refresh} showToast={showSettingsToast} />
         )}
-        {cloudSyncSettingsEnabled && activeTab === 'sync' && <SyncSettings settings={settings} mutationReady={settingsMutationBridgeReady} refresh={refresh} showToast={showSettingsToast} />}
+        {activeTab === 'sync' && (
+          import.meta.env.DEV
+            ? <SyncSettings settings={settings} mutationReady={settingsMutationBridgeReady} refresh={refresh} showToast={showSettingsToast} />
+            : <CloudSyncComingSoon />
+        )}
         </Suspense>
       </div>
     </section>

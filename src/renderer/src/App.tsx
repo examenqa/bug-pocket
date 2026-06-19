@@ -47,6 +47,7 @@ function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: 
       focusToken={focusToken}
       onConfigurePresets={() => window.bugPocket.openSettings('presets')}
       onTakeScreenshot={() => window.bugPocket.startScreenshotCapture()}
+      onClearAttachments={() => setAttachments([])}
       onSave={saveDraft}
       onCancel={() => window.bugPocket.hideQuickCapture()}
       onCreateApplication={async (name) => {
@@ -79,7 +80,7 @@ const settingsNavItems = [
   { route: '/settings/ai', label: 'AI Processing', icon: Bot },
   { route: '/settings/output', label: 'Output & Templates', icon: FileText },
   { route: '/settings/storage', label: 'Storage & Backups', icon: Database },
-  ...(import.meta.env.DEV ? [{ route: '/settings/sync', label: 'Cloud Sync', icon: Cloud }] : [])
+  { route: '/settings/sync', label: 'Cloud Sync', icon: Cloud }
 ];
 
 const howToGuideUrl = 'https://bugpocket.app/help';

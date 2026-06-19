@@ -929,6 +929,7 @@ export class BugPocketDatabase {
       'byok_ai_model_id',
       'byok_ai_api_key_encrypted',
       'byok_ai_api_keys_encrypted',
+      'byok_ai_provider_queue',
       'byok_ai_custom_system_prompt'
     ];
 
@@ -947,6 +948,7 @@ export class BugPocketDatabase {
       byok_ai_model_id: 'google/gemma-4-31b-it:free',
       byok_ai_api_key_encrypted: '',
       byok_ai_api_keys_encrypted: '{}',
+      byok_ai_provider_queue: '',
       byok_ai_custom_system_prompt: ''
     };
 
@@ -1727,12 +1729,12 @@ Attachments:
     const cleaned = (workspaceId ?? '').trim();
     if (!cleaned) return 'admin';
     const value = this.getSetting(this.workspaceRoleKey(cleaned)).trim();
-    return value === 'owner' || value === 'admin' || value === 'member' ? value : 'admin';
+    return value === 'owner' || value === 'admin' || value === 'member' || value === 'developer' ? value : 'admin';
   }
 
   updateWorkspaceRole(workspaceId: string, role: string | null | undefined): WorkspaceRole {
     const cleanedWorkspaceId = workspaceId.trim();
-    const normalizedRole: WorkspaceRole = role === 'owner' || role === 'admin' || role === 'member' ? role : 'member';
+    const normalizedRole: WorkspaceRole = role === 'owner' || role === 'admin' || role === 'member' || role === 'developer' ? role : 'member';
     if (cleanedWorkspaceId) this.setSetting(this.workspaceRoleKey(cleanedWorkspaceId), normalizedRole);
     return normalizedRole;
   }
@@ -2058,12 +2060,32 @@ Attachments:
     return this.getSetting('byok_ai_custom_system_prompt');
   }
 
+  getByokAiProviderQueue(): Array<{ provider: AiProvider; baseUrl?: string; modelId: string }> {
+    const value = this.getSetting('byok_ai_provider_queue').trim();
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value) as Array<{ provider?: unknown; baseUrl?: unknown; modelId?: unknown; model?: unknown }>;
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((target) => {
+          const provider = typeof target.provider === 'string' ? this.normalizeAiProvider(target.provider) : null;
+          const modelId = typeof target.modelId === 'string' ? target.modelId.trim() : typeof target.model === 'string' ? target.model.trim() : '';
+          const baseUrl = typeof target.baseUrl === 'string' ? target.baseUrl.trim() : '';
+          return provider && modelId ? { provider, modelId, ...(baseUrl ? { baseUrl } : {}) } : null;
+        })
+        .filter((target): target is { provider: AiProvider; baseUrl?: string; modelId: string } => Boolean(target));
+    } catch {
+      return [];
+    }
+  }
+
   updateByokAiConfig(
     provider: AiProvider,
     baseUrl: string,
     modelId: string,
     encryptedApiKey: string | null | undefined,
-    customSystemPrompt: string
+    customSystemPrompt: string,
+    providerQueue?: Array<{ provider: AiProvider; baseUrl?: string; modelId: string }>
   ): void {
     this.setSetting('byok_ai_provider', provider);
     this.setSetting('byok_ai_base_url', baseUrl.trim());
@@ -2074,7 +2096,18 @@ Attachments:
       else delete keyMap[provider];
       this.setSetting('byok_ai_api_keys_encrypted', JSON.stringify(keyMap));
     }
+    if (providerQueue) this.setSetting('byok_ai_provider_queue', JSON.stringify(providerQueue));
     this.setSetting('byok_ai_custom_system_prompt', customSystemPrompt);
+  }
+
+  private normalizeAiProvider(value: string): AiProvider | null {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'openai') return 'OpenAI';
+    if (normalized === 'grok') return 'Grok';
+    if (normalized === 'openrouter') return 'OpenRouter';
+    if (normalized === 'gemini' || normalized === 'google') return 'Gemini';
+    if (normalized === 'custom/local' || normalized === 'custom' || normalized === 'local') return 'Custom/Local';
+    return null;
   }
 
   getPendingSyncQueue(limit = 25, maxRetries = 5): SyncQueueEvent[] {
@@ -2883,7 +2916,7 @@ Attachments:
     const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
     const staleAttachments = dataDb
       .prepare(
-        `SELECT attachments.id, attachments.content_hash, attachments.file_extension
+        `SELECT attachments.id, attachments.bug_id, attachments.content_hash, attachments.file_extension
          FROM attachments
          INNER JOIN bugs ON bugs.id = attachments.bug_id
          WHERE bugs.status = 'Discarded'
@@ -2891,7 +2924,7 @@ Attachments:
            AND attachments.content_hash IS NOT NULL
            AND attachments.content_hash != ''`
       )
-      .all(cutoff) as Array<{ id: number; content_hash: string; file_extension: string }>;
+      .all(cutoff) as Array<{ id: number; bug_id: number; content_hash: string; file_extension: string }>;
 
     if (!staleAttachments.length) return 0;
 
@@ -2924,9 +2957,12 @@ Attachments:
     if (!idsToPrune.length) return 0;
     const stamp = now();
     const tx = dataDb.transaction((attachmentIds: number[]) => {
-      const update = dataDb.prepare('UPDATE attachments SET content_hash = NULL, updated_at = ? WHERE id = ?');
+      const update = dataDb.prepare('UPDATE attachments SET content_hash = NULL, sync_status = ?, updated_at = ? WHERE id = ?');
+      const bugLookup = dataDb.prepare('SELECT bug_id FROM attachments WHERE id = ?');
       attachmentIds.forEach((attachmentId) => {
-        update.run(stamp, attachmentId);
+        const row = bugLookup.get(attachmentId) as { bug_id: number | null } | undefined;
+        const syncStatus = row?.bug_id ? this.pendingSyncStatusForBugId(row.bug_id) : 'Local Only';
+        update.run(syncStatus, stamp, attachmentId);
         this.enqueueAttachmentSyncEvent(attachmentId, 'UPDATE');
       });
     });

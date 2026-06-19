@@ -6,7 +6,7 @@ This document describes the current Bug Pocket build so another engineer, agent,
 
 Bug Pocket is a Windows-first Electron desktop app for fast QA capture. The core problem is that testers often notice unrelated bugs, scenarios, observations, or questions while testing but do not want to break their current flow to write a full bug report. Bug Pocket lets them capture a short note and screenshot quickly, then return later to clean up details and generate structured reports.
 
-The app is intentionally local-first. Captures and attachments save immediately to SQLite and the local filesystem. Cloud sync is now in an early push-only implementation phase: credentials, auth/session capture, workspace routing, and a background `sync_queue` worker exist, but remote pull/conflict resolution is still future work. Support telemetry is routed through a Supabase Edge Function. BYOK AI Processing is now implemented through a universal OpenAI-compatible REST engine with encrypted local API-key storage; ads and web/mobile versions remain future work.
+The app is intentionally local-first. Captures and attachments save immediately to SQLite and the local filesystem. Local storage now uses a dual-database architecture: `local.sqlite` keeps device-local settings/taxonomy and `ws_<workspace_id>.sqlite` keeps workspace-scoped bugs, attachments, and sync queue data. Cloud sync is still gated for public production builds, but the codebase contains Supabase BYOC credentials/auth, workspace routing, background push/pull worker scaffolding, RLS schema draft, and diagnostics. Support telemetry is routed through a Supabase Edge Function. BYOK AI Processing is implemented through a universal OpenAI-compatible REST engine with encrypted local API-key storage; ads and web/mobile versions remain future work.
 
 ## Current Tech Stack
 
@@ -16,7 +16,7 @@ The app is intentionally local-first. Captures and attachments save immediately 
 - `electron-vite`
 - SQLite via `better-sqlite3`
 - Local filesystem attachment storage using content-addressed files
-- Supabase Phase 3 push-sync scaffold: credentials, auth/session capture, workspace routing, RLS schema draft, background `sync_queue` drain, and Supabase Storage attachment upload
+- Supabase BYOC sync scaffold: credentials, auth/session capture, workspace routing, RLS schema draft, background `sync_queue` drain/pull scaffolding, diagnostics, and Supabase Storage attachment upload/download support
 - Windows-first behavior with system tray and global shortcuts
 
 Core commands:
@@ -47,8 +47,8 @@ Important files:
 - `src/main/index.ts`: Electron windows, tray, global shortcuts, screenshot IPC, attachment download IPC, backup IPC, clipboard IPC, external URL launch IPC.
 - `src/main/ai/byokIssueProcessor.ts`: active BYOK AI Processing and triage engine using native `fetch` against OpenAI-compatible `/chat/completions` endpoints. It stores API keys through Electron `safeStorage`, supports multimodal screenshot payloads, and surfaces upstream provider errors.
 - `src/main/ai/ollamaTriage.ts`: legacy/local Ollama triage implementation kept in the tree for reference; it is not the primary AI path.
-- `src/main/database.ts`: SQLite schema, migrations, defaults, CRUD, content-addressed attachments, sync queue, report templates. Also owns the `app_settings` key-value table.
-- `src/main/sync/syncService.ts`: Supabase `SyncEngine`. It reads local credentials, initializes the client with Node WebSocket support, handles sign in/sign up/sign out, captures `current_workspace_id`, runs a push-only background worker that drains `sync_queue` sequentially, and sends support feedback through the Supabase Edge Function proxy.
+- `src/main/database.ts`: dual SQLite schema/migrations/defaults/CRUD. `local.sqlite` owns settings, shortcuts, presets, and local taxonomy; `ws_<workspace_id>.sqlite` owns bugs, attachments, and `sync_queue`. Also owns content-addressed attachments, report templates, backup metadata, and the `app_settings` key-value table.
+- `src/main/sync/syncService.ts`: Supabase `SyncEngine`. It reads local credentials, initializes the client with Node WebSocket support, handles sign in/sign up/sign out, captures `current_workspace_id` and workspace role, swaps workspace database connections, runs the background sync worker, and sends support feedback through the Supabase Edge Function proxy.
 
 **Preload & shared**
 - `src/preload/index.ts`: safe `window.bugPocket` bridge, including `startScreenshotCapture()`, BYOK AI config/triage methods, support feedback, toast variants, sync auth, backup/restore, and settings IPC.
@@ -60,8 +60,8 @@ Important files:
 
 **Renderer — pages**
 - `src/renderer/src/pages/DashboardPage.tsx`: bug table, filters, attachment spotlight.
-- `src/renderer/src/pages/BugDetailPage.tsx`: `BugDetailsHost` + `BugDetailsView`, details autosave, AI triage mapping, attachment/version spotlight, and report actions.
-- `src/renderer/src/pages/SettingsPage.tsx`: settings shell with a left sidebar tab layout.
+- `src/renderer/src/pages/BugDetailPage.tsx`: `BugDetailsView`, details autosave, AI triage mapping, attachment/version spotlight, developer read-only mode, report actions, and rendered Markdown report preview.
+- `src/renderer/src/pages/SettingsPage.tsx`: settings content shell. The global sidebar in `App.tsx` owns settings navigation; settings tabs lazy-load their content.
 - `src/renderer/src/pages/SnipOverlay.tsx`: full-screen screenshot snip UI.
 
 **Renderer — shared components**
@@ -76,15 +76,15 @@ Important files:
 
 **Renderer — settings components**
 - `src/renderer/src/components/settings/settingsUtils.ts`: `hasSettingsMutationBridge`, `getSettingsPreviewItems`.
-- `src/renderer/src/components/settings/GeneralSettings.tsx`: General & Hotkeys tab content, including shortcuts, capture preferences, workspace field lists, report destinations, Jira, and templates.
+- `src/renderer/src/components/settings/GeneralSettings.tsx`: Workspace & Hotkeys tab content, including shortcuts, capture preferences, and workspace field lists.
 - `src/renderer/src/components/settings/PresetSettings.tsx`: Capture Presets tab wrapper around preset CRUD.
 - `src/renderer/src/components/settings/AiSettings.tsx`: AI Processing tab with BYOK provider presets, Base URL, Model ID, encrypted API key save/clear, and custom system prompt.
 - `src/renderer/src/components/settings/StorageSettings.tsx`: Storage & Backups tab wrapper.
-- `src/renderer/src/components/settings/SyncSettings.tsx`: Cloud Sync credentials, connection test, login/create-account UI, connected profile state, workspace ID display, and logout action.
+- `src/renderer/src/components/settings/TemplateSettings.tsx`: Output & Templates tab content, including report destinations, Jira workspace URL, and token-based template editing.
+- `src/renderer/src/components/settings/SyncSettings.tsx`: Cloud Sync credentials, connection test, login/create-account UI, connected profile state, workspace switch/edit UI, diagnostics, and logout action. This component is mounted in development; production currently shows a locked “Coming soon” panel.
 - `src/renderer/src/components/settings/ShortcutSettingsPanel.tsx`: shortcut recording UI.
 - `src/renderer/src/components/settings/CapturePreferencesPanel.tsx`: screenshot review and startup toggles.
 - `src/renderer/src/components/settings/JiraWorkspacePanel.tsx`: Jira workspace URL field.
-- `src/renderer/src/components/settings/AiOptionsPanel.tsx`: legacy Ollama/guided vision-model config component retained in code but not the active AI settings surface.
 - `src/renderer/src/components/settings/DataManagementPanel.tsx`: backup export/import/auto-backup UI.
 - `src/renderer/src/components/settings/PresetManager.tsx`: Quick Capture preset CRUD (max 3).
 - `src/renderer/src/components/settings/ModuleManager.tsx`: module management grouped by application.
@@ -183,7 +183,7 @@ It includes:
 - Screenshot spotlight preview from the table attachment icon
 - Full details view
 - Settings/configuration
-- Template report preview and copy actions
+- Template report preview, rendered View Report modal, and copy actions
 - Linear/Jira launch actions for pre-filled issue creation URLs
 
 The Main Panel is not fully denim like the Quick Capture panel. It uses subtle Bug Pocket palette hints: light blue surfaces, denim-blue action buttons, green hover accents, stitched inner lines on important action buttons, and a cleaner work-focused layout.
@@ -239,6 +239,7 @@ The full details page supports:
 - Status-driven workflow strip with pill-style Status and Severity dropdowns
 - Screenshot attachments
 - Generated report preview
+- View Report rendered Markdown preview
 - Copy Quick Report
 - Copy Full Bug Report
 - Copy Linear Format
@@ -246,7 +247,7 @@ The full details page supports:
 - Open Linear
 - Open Jira
 - Open Ticket, shown in the header as a secondary Issue pill/button and opened through the external URL IPC when `issue_url` exists
-- AI Triage implementation code is present but locked in this build; Bug Details does not mount the triage/refine controls until the feature gate is re-enabled.
+- AI Triage through the universal BYOK engine when an API key is configured; developer read-only accounts cannot run AI triage.
 - Delete Report
 - Save Details
 
@@ -280,6 +281,17 @@ Legacy project-management statuses such as Needs Review, Duplicate, Ignored, Fix
 
 Bug Details renders as a sibling view next to the preserved Dashboard state. When details opens, the Dashboard container is hidden rather than unmounted so filters and scroll position survive returning to the list. Screenshot thumbnails in Bug Details are clickable and open the same spotlight annotation editor used by the dashboard attachment column. Each Bug Details attachment also has a download button that opens a Windows Save As dialog and copies the content-addressed PNG out of app storage.
 
+The report sidebar has two preview modes:
+
+- The textarea preview shows the raw `Full Bug Report` template output.
+- `View Report` opens a read-only rendered Markdown modal powered by `react-markdown`. It must use the same `generateReport()` output as copy/export so previewed and exported payloads never diverge.
+
+Developer read-only workspace role behavior:
+
+- `settings.currentWorkspaceRole === 'developer'` disables editing in Bug Details.
+- Save Details, Delete Report, attachment removal, Add Screenshot, annotation save, field edits, status/severity transitions, and AI triage are hidden or disabled.
+- Copy/report preview/open external issue actions may remain available because they do not mutate workspace data.
+
 ### Settings Page
 
 Settings currently manages:
@@ -293,7 +305,7 @@ Settings currently manages:
 - User Roles
 - Severity Values
 - Report Destinations / Issue Platforms
-- Report Templates
+- Output & Templates
 - Global Shortcuts
 - Capture Preferences
 - Quick Capture Presets
@@ -301,13 +313,14 @@ Settings currently manages:
 - Jira Workspace URL
 - AI Processing / BYOK triage configuration
 
-Settings uses a two-column layout with a persistent left sidebar and a right content panel. Current sidebar tabs are:
+Settings navigation lives in the global left sidebar as an expandable Settings section. `SettingsPage.tsx` renders the active tab content at full width and lazy-loads each tab component.
 
-- General & Hotkeys: Global Shortcuts, Capture Preferences, workspace field lists, report destinations, Jira Workspace, and Report Templates.
+- Workspace & Hotkeys: Global Shortcuts, Capture Preferences, and workspace field lists.
 - Capture Presets: Quick Capture presets, capped at 3.
 - AI Processing: BYOK provider preset, Base URL, Model ID, encrypted API key, and custom system prompt.
+- Output & Templates: report destinations, Jira Workspace URL, and report templates.
 - Storage & Backups: manual backup, restore, automated backup directory.
-- Cloud Sync: Supabase Project URL / anon key credential UI, Test Connection action, Log In / Create Account flow, connected profile state, active Workspace ID display, and Log Out. Background push sync starts after an authenticated session and workspace membership are captured.
+- Cloud Sync: visible in the sidebar. In development it renders `SyncSettings`; in production it renders a locked “Coming soon” panel instead of auth/workspace controls.
 
 Settings groups are shown as bordered sections with compact collapsible cards where appropriate. Closed cards show a count and preview chips. Open cards show add/edit/delete controls. Only one Settings card should be open at a time inside the active Settings tab. Opening a new Settings card collapses the previous one.
 
@@ -378,6 +391,15 @@ SQLite tables include:
 - `presets`
 - `sync_queue`
 
+Database file routing:
+
+- `local.sqlite` is always opened from `path.join(app.getPath("userData"), "local.sqlite")`.
+- `ws_<workspace_id>.sqlite` is opened from `path.join(app.getPath("userData"), "ws_<safe_workspace_id>.sqlite")` when `current_workspace_id` is set.
+- Legacy `bug-pocket.sqlite` is treated as an import/restore/migration source only, not the active primary database name.
+- Settings, shortcuts, presets, `app_settings`, `config_options`, report templates, and local taxonomy route to `local.sqlite`.
+- Bugs, attachments, and `sync_queue` route to the active workspace database.
+- Workspace database foreign-key enforcement is intentionally disabled. Local taxonomy/config tables are exposed to workspace DBs through attached temp views and SQLite cannot enforce `REFERENCES` across separate database files. Supabase RLS/constraints remain the authoritative relational integrity layer for synced cloud data.
+
 ### app_settings table
 
 `app_settings` is a key-value table used exclusively for singleton scalar preferences that do not belong in a taxonomy list. Schema:
@@ -412,6 +434,8 @@ Current keys:
 Do NOT store scalar preferences in `config_options`. The `config_options` table is only for multi-row taxonomy lists (entry types, fixed capture statuses, severities, issue platforms, etc.).
 
 The `database.ts` class exposes typed private helpers `getSetting(key)` and `setSetting(key, value)` that wrap all access to `app_settings`. Add new scalar preferences through those helpers only.
+
+Workspace roles are stored as dynamic keys named `workspace_role_<workspaceId>` and can be `owner`, `admin`, `member`, or `developer`. Purely local/non-synced workspaces default to admin-like behavior.
 
 On first startup, `migrateToAppSettings()` runs inside a transaction: it reads any legacy `config_options` rows with matching keys, writes them into `app_settings`, and deletes those rows. This migration is idempotent.
 
@@ -463,7 +487,7 @@ The `modules` table includes:
 - `created_at`
 - `updated_at`
 
-Application and Module `context_description` fields are optional AI context fields. Settings > General & Hotkeys > Workspace Field Lists exposes them as `Context / Business Logic` textareas. Use the dedicated context IPC methods for explicit context saves:
+Application and Module `context_description` fields are optional AI context fields. Settings > Workspace & Hotkeys > Workspace Field Lists exposes them as `Context / Business Logic` textareas. Use the dedicated context IPC methods for explicit context saves:
 
 - `window.bugPocket.updateApplicationContext(id, contextDescription)`
 - `window.bugPocket.updateModuleContext(id, contextDescription)`
@@ -494,7 +518,8 @@ The `attachments` table supports generic attachment sources:
 
 Attachments are content-addressed. Attachment files are stored under Electron `app.getPath("userData")`:
 
-- `bug-pocket.sqlite`
+- `local.sqlite`
+- `ws_<workspace_id>.sqlite`
 - `attachments/<sha256>.png`
 
 The `attachments` table stores:
@@ -529,8 +554,10 @@ The `sync_queue` table is append-only sync preparation. It includes:
 - `operation` — `INSERT`, `UPDATE`, `DELETE`, or `MERGE`
 - `payload`
 - `created_at`
+- `retry_count`
+- `last_error`
 
-Bug and attachment mutations should write to `sync_queue` in the same SQLite transaction as the primary table change. Reference table merge operations enqueue a `reference` / `MERGE` event.
+Bug, attachment, and synced taxonomy mutations should write to `sync_queue` in the same SQLite transaction as the primary table change. Taxonomy events should be processed before bug events so cloud foreign keys exist before reports are pushed. Reference table merge operations enqueue a `reference` / `MERGE` event.
 
 ## Entry Types And Statuses
 
@@ -711,7 +738,7 @@ Tray and shortcuts:
 - `Ctrl+Alt+M`: opens Main App Dashboard by default.
 - Global shortcuts are configurable from Settings using recorder controls.
 - If Electron cannot register a shortcut because another app/system owns it, Settings shows a warning.
-- Settings > General & Hotkeys includes `Run on System Startup`. This is stored in `app_settings` as `run_on_system_startup` and enforced on app boot through `app.setLoginItemSettings({ openAtLogin, openAsHidden: true, args: ["--background-start"] })` when enabled.
+- Settings > Workspace & Hotkeys includes `Run on System Startup`. This is stored in `app_settings` as `run_on_system_startup` and enforced on app boot through `app.setLoginItemSettings({ openAtLogin, openAsHidden: true, args: ["--background-start"] })` when enabled.
 - When launched by Windows startup, Bug Pocket passes `--background-start` and starts hidden in the tray/background instead of opening the Main Panel.
 - Bug Pocket uses `app.requestSingleInstanceLock()`. If a second instance is launched, it should not open another SQLite/IPC process; it should bring the existing Main App dashboard to the foreground.
 
@@ -734,37 +761,44 @@ Current sync statuses:
 - Synced
 - Sync Failed
 
-Cloud sync is in an early Phase 3 push-only implementation:
+Cloud sync is a BYOC Supabase feature under active development and is locked behind a production UI gate:
 
 - Settings > Cloud Sync stores `supabase_project_url`, `supabase_anon_key`, and the captured `current_workspace_id` in `app_settings`.
-- Settings > Cloud Sync supports Test Connection, Log In, Create Account, connected profile display, active Workspace ID display, and Log Out.
+- The user-facing credential label is “Publishable API Key”; keep the internal key name `supabase_anon_key` to avoid unnecessary SQLite migration churn.
+- In development, Settings > Cloud Sync supports Test Connection, Log In, Create Account, connected profile display, workspace switch/edit UI, sync diagnostics, and Log Out.
+- In production, the route renders a locked “Coming soon” panel. Do not expose full Cloud Sync controls in public builds until the feature gate is intentionally lifted.
 - `src/main/sync/syncService.ts` initializes `@supabase/supabase-js` with `ws` as the Node realtime transport. Keep `ws` externalized in `electron.vite.config.ts` so optional native helpers like `bufferutil` do not crash the Electron main bundle.
-- After sign in/sign up, `SyncEngine` queries remote `workspace_members`, captures the first `workspace_id`, and stores it locally as `current_workspace_id`.
+- After sign in/sign up, `SyncEngine` queries remote `workspace_members`, captures the first `workspace_id` and role, stores the workspace locally as `current_workspace_id`, and stores the role as `workspace_role_<workspaceId>`.
+- `switchWorkspace(workspaceId)` stops the worker, swaps the active `ws_<workspace_id>.sqlite` connection, updates `current_workspace_id`, captures role data when possible, and restarts the worker. It must not purge local workspace data.
 - When an authenticated session and workspace ID exist, `SyncEngine` starts a safe interval-based background worker.
+- The worker checks that the database is open and a workspace is active before doing work. The interval has a teardown path and the top-level worker function catches errors so HMR/logout/window shutdown do not cause unhandled rejections.
 - The worker reads `sync_queue` rows ordered by `local_seq`, preserving local mutation order.
 - Bug events are upserted/deleted against the cloud `bugs` table with `workspace_id` injected.
 - Attachment events upload content-addressed files to Supabase Storage bucket `attachments` using `<workspace_id>/<content_hash>.<extension>`, then upsert/delete rows in the cloud `attachments` table.
+- Missing local attachment files are handled as skipped/failed sync events instead of crashing the worker with `ENOENT`.
+- Remote attachment binary download support exists for missing content-addressed files.
 - Reference merge events are written to cloud `sync_events` for future server-side reconciliation.
 - Successful events update local `bugs` / `attachments` to `Synced`, stamp `last_sync_at`, and remove the processed queue row.
-- Failed events use basic exponential backoff and mark the local primary record `Sync Failed` after repeated failures.
-- `supabase/schema-draft.sql` contains the current workspace-scoped PostgreSQL schema draft plus RLS helper/policies.
+- Failed events increment `retry_count`, store `last_error`, use basic exponential backoff, and mark the local primary record `Sync Failed` after repeated failures.
+- `getSyncDiagnostics()` exposes pending/failed queue rows with human-readable bug titles or attachment names. `resetSyncQueueRetries()` clears retry counters for manual retry.
+- `supabase/schema-draft.sql` contains the current workspace-scoped PostgreSQL schema draft plus RLS helper/policies. Developers get SELECT-only access to synced workspace reports and taxonomy; writes are reserved for normal workspace writers/admins/owners depending on the table.
 
 Current sync limitations:
 
-- Remote pull into SQLite is not implemented yet.
-- Conflict handling is not implemented yet beyond preserving deterministic `local_seq` / `op_id` ordering locally.
-- Cloud taxonomy/reference-table mapping is minimal. Bug payloads currently preserve local labels/fields and set cloud taxonomy foreign keys to null until a fuller cloud taxonomy sync exists.
+- Cloud Sync is still not considered production-ready and remains hidden behind the “Coming soon” production UI.
+- Remote pull/conflict handling is scaffolded but should be treated as under test until a full BYOC beta pass validates it against real Supabase projects.
+- Cloud taxonomy/reference synchronization is partially scaffolded; keep taxonomy sync events ahead of bug events to avoid remote foreign-key failures.
 - The Supabase Storage bucket `attachments` and RLS policies must exist in the target project before attachment sync can succeed.
 - Local data remains the source of truth for capture; cloud sync must remain best-effort and non-blocking.
 
 Future sync should add:
 
-- Remote pull into the local SQLite cache
+- Hardening and QA coverage for remote pull into the local SQLite cache
 - Conflict handling with `updated_at`, `client_id`, `local_seq`, and `op_id`
 - Workspace/team management UI
-- Role-aware RLS beyond basic workspace membership
-- Cloud taxonomy/reference synchronization
-- Better sync diagnostics and manual retry controls
+- More complete role-aware workspace management UX
+- Full cloud taxonomy/reference synchronization
+- Better sync diagnostics and manual retry controls after the production gate is lifted
 ## Future Web And Mobile Direction
 
 The route structure intentionally maps to future web routes:
@@ -825,7 +859,7 @@ Vision payload rules:
 
 Legacy Ollama notes:
 
-- `src/main/ai/ollamaTriage.ts`, `AiOptionsPanel.tsx`, `ai_triage_enabled`, and `ollama_model_name` still exist from the earlier local-Ollama path.
+- `src/main/ai/ollamaTriage.ts`, `ai_triage_enabled`, and `ollama_model_name` still exist from the earlier local-Ollama path.
 - Do not treat the Ollama-specific `/api/chat` path as the current primary AI architecture.
 - If reusing Ollama directly in the future, keep it opt-in and do not send screenshots without an explicit user action.
 
@@ -934,8 +968,8 @@ Potential technical work:
 ### 3. Failsafe Backup Protocol
 
 * **Mechanism:** Backups must use asynchronous Node.js streams (via `archiver`) to prevent the Electron main process from freezing. Never buffer the entire database or image folder into RAM.
-* **Safe Locking:** Always `fs.copyFileSync` the active SQLite database to a temporary file before zipping to avoid `EBUSY` OS lock crashes.
-* **Restore:** Before replacing local data, validate that the `.bugpocket` archive has the expected structure (`bug-pocket.sqlite` plus optional `attachments/`). When importing, the active `db.close()` must be called before extraction to release file locks. The `BrowserWindow` must execute `reload()` immediately after extraction.
+* **Safe Locking:** Always `fs.copyFileSync` active SQLite databases to temporary files before zipping to avoid `EBUSY` OS lock crashes. Current backups must include `local.sqlite` and the active `ws_<workspace_id>.sqlite` when a workspace is connected.
+* **Restore:** Before replacing local data, validate that the `.bugpocket` archive has the expected structure (`backup-manifest.json`, `local.sqlite`, optional `ws_<workspace_id>.sqlite`, plus optional `attachments/`). When importing, the active `db.close()` must be called before extraction to release file locks. Cleanup must dynamically remove all `.sqlite-wal` and `.sqlite-shm` sidecars before/after restore. The `BrowserWindow` must execute `reload()` immediately after extraction.
 * **Auto-Backups:** Automated backups write to a user-defined directory stored in `app_settings` under `auto_backup_directory_path`. Enforce a strict rolling limit (delete oldest after 3 backups).
 
 ### 4. Packaging Constraints
