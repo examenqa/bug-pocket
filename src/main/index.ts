@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog } from 'electron';
 import log from 'electron-log/main';
+import { autoUpdater } from 'electron-updater';
 import { copyFileSync, createReadStream, createWriteStream, existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -63,6 +64,30 @@ function enforceStartupPreference(enabled: boolean): void {
     openAtLogin: enabled,
     openAsHidden: true,
     args: enabled ? [backgroundStartArg] : []
+  });
+}
+
+function initializeAutoUpdater(): void {
+  autoUpdater.logger = log;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[auto-updater] Checking for update...');
+    log.info('[auto-updater] Checking for update...');
+  });
+  autoUpdater.on('update-available', (info) => {
+    console.log('[auto-updater] Update available:', info.version);
+    log.info('[auto-updater] Update available:', info.version);
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[auto-updater] Update downloaded and staged for install on quit:', info.version);
+    log.info('[auto-updater] Update downloaded and staged for install on quit:', info.version);
+    mainWindow?.webContents.send('update-ready');
+  });
+  autoUpdater.on('error', (error) => {
+    console.log('[auto-updater] Update error:', error);
+    log.error('[auto-updater] Update error:', error);
   });
 }
 
@@ -1022,7 +1047,14 @@ if (!gotTheLock) {
     syncEngine.initialize();
     enforceStartupPreference(db.getRunOnSystemStartup());
     registerIpc();
+    initializeAutoUpdater();
     createMainWindow('/dashboard', !process.argv.includes(backgroundStartArg));
+    if (app.isPackaged) {
+      autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+        console.log('[auto-updater] Update check failed:', error);
+        log.error('[auto-updater] Update check failed:', error);
+      });
+    }
     createQuickWindow();
     createTray();
     registerAppShortcuts();
