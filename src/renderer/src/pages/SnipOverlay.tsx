@@ -9,6 +9,17 @@ function normalizeRect(startX: number, startY: number, endX: number, endY: numbe
   };
 }
 
+function pngBytesToDataUrl(pngBytes: Uint8Array): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const rendererBytes = new Uint8Array(pngBytes.byteLength);
+    rendererBytes.set(pngBytes);
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error('Screenshot bytes could not be decoded.'));
+    reader.readAsDataURL(new Blob([rendererBytes.buffer], { type: 'image/png' }));
+  });
+}
+
 export function SnipOverlay() {
   const [source, setSource] = useState('');
   const [drag, setDrag] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
@@ -17,8 +28,19 @@ export function SnipOverlay() {
   const pointerDownRef = useRef(false);
 
   useEffect(() => {
-    window.bugPocket.getScreenshotSource().then((value) => value && setSource(value));
-    return window.bugPocket.onScreenshotSource(setSource);
+    let active = true;
+    const applyScreenshotBytes = (pngBytes: Uint8Array | null): void => {
+      if (!pngBytes?.byteLength) return;
+      void pngBytesToDataUrl(pngBytes).then((dataUrl) => {
+        if (active) setSource(dataUrl);
+      });
+    };
+    void window.bugPocket.getScreenshotSource().then(applyScreenshotBytes);
+    const unsubscribe = window.bugPocket.onScreenshotSource(applyScreenshotBytes);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

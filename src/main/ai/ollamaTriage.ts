@@ -17,8 +17,12 @@ interface OllamaChatResponse {
   error?: string;
 }
 
-export async function triageBugWithOllama(payload: AiTriageBugPayload, configuredModelName: string): Promise<AiTriageResponse> {
-  const imageBase64 = payload.image_file_path ? await readImageAsBase64(payload.image_file_path) : '';
+export async function triageBugWithOllama(
+  payload: AiTriageBugPayload,
+  configuredModelName: string,
+  verifiedImagePath?: string
+): Promise<AiTriageResponse> {
+  const imageBase64 = verifiedImagePath ? await readImageAsBase64(verifiedImagePath) : '';
 
   try {
     const model = configuredModelName.trim() || 'qwen3-vl:8b';

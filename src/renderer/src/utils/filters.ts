@@ -1,8 +1,8 @@
-import type { BugFilters, Module, SettingsData } from '../../../shared/types';
+import type { BugFilters, Module, SettingsData, TaxonomyId } from '../../../shared/types';
 
-export function getModulesForApplication(settings: SettingsData, applicationId: number | null, currentModuleId?: number | null): Module[] {
-  const modules = settings.modules.filter((module) => (applicationId ? module.application_id === applicationId : true));
-  if (currentModuleId && !modules.some((module) => module.id === currentModuleId)) {
+export function getModulesForApplication(settings: SettingsData, applicationId: TaxonomyId | null, currentModuleId?: TaxonomyId | null): Module[] {
+  const modules = settings.modules.filter((module) => (applicationId != null ? module.application_id === applicationId : true));
+  if (currentModuleId != null && !modules.some((module) => module.id === currentModuleId)) {
     const currentModule = settings.modules.find((module) => module.id === currentModuleId);
     if (currentModule) return [...modules, currentModule];
   }

@@ -9,6 +9,7 @@ import { formatDate } from '../services/reports';
 import { getEntryDisplay, formatTableDate, severityClass, statusPillClass, syncClass, shortcutDisplay, isCloudSyncActive, effectiveSyncStatus } from '../utils/display';
 import { getActiveFilterChips, getModulesForApplication } from '../utils/filters';
 import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
+import { resolveTaxonomyId } from '../utils/taxonomyIds';
 
 export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSelect: (id: number) => void }) {
   const [bugs, setBugs] = useState<Bug[]>([]);
@@ -33,6 +34,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
   const cloudSyncActive = isCloudSyncActive(settings);
+  const developerReadOnly = settings.currentWorkspaceRole === 'developer';
 
   const loadSpotlightPreview = async (attachment: Attachment): Promise<void> => {
     setSpotlight((current) => (current ? { ...current, loading: true, error: '' } : current));
@@ -75,7 +77,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
   };
 
   const saveSpotlightAnnotation = async (dataUrl: string): Promise<void> => {
-    if (!spotlight || !currentSpotlightAttachment) return;
+    if (developerReadOnly || !spotlight || !currentSpotlightAttachment) return;
     const created = (await window.bugPocket.saveAnnotatedAttachment(currentSpotlightAttachment.id, dataUrl)) as Attachment;
     const attachments = [created, ...spotlight.attachments.filter((attachment) => attachment.id !== currentSpotlightAttachment.id)];
     const lineageData = await loadAttachmentLineage(created.id);
@@ -129,13 +131,13 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
         </div>
         <div className="dashboard-screenshot-actions">
           <div className="dashboard-action">
-            <button className="primary dashboard-screenshot-button" title="Start global screenshot snip" aria-label="Start global screenshot snip" onClick={() => void window.bugPocket.startScreenshotCapture()}>
+            <button className="primary dashboard-screenshot-button" disabled={developerReadOnly} title={developerReadOnly ? 'Developer access is read-only' : 'Start global screenshot snip'} aria-label="Start global screenshot snip" onClick={() => void window.bugPocket.startScreenshotCapture()}>
               <Camera size={17} strokeWidth={2.6} /> Global Screenshot
             </button>
             <span className="dashboard-action-shortcut">{globalScreenshotShortcut}</span>
           </div>
           <div className="dashboard-action">
-            <button className="primary dashboard-screenshot-button" title="Open Quick Capture panel" aria-label="Open Quick Capture panel" onClick={() => void window.bugPocket.openQuickCapture()}>
+            <button className="primary dashboard-screenshot-button" disabled={developerReadOnly} title={developerReadOnly ? 'Developer access is read-only' : 'Open Quick Capture panel'} aria-label="Open Quick Capture panel" onClick={() => void window.bugPocket.openQuickCapture()}>
               <Plus size={17} strokeWidth={3} /> Quick Panel
             </button>
             <span className="dashboard-action-shortcut">{quickPanelShortcut}</span>
@@ -187,7 +189,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
                 label="Application"
                 value={filters.applicationId ?? 'all'}
                 onChange={(value) => {
-                  const applicationId = value === 'all' ? 'all' : Number(value);
+                  const applicationId = value === 'all' ? 'all' : resolveTaxonomyId(value, settings.applications) ?? 'all';
                   const nextModules = getModulesForApplication(settings, applicationId === 'all' ? null : applicationId);
                   const currentModuleStillVisible = nextModules.some((module) => module.id === filters.moduleId);
                   setFilters({ ...filters, applicationId, moduleId: currentModuleStillVisible ? filters.moduleId : 'all' });
@@ -196,11 +198,11 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
                 <option value="all">All apps</option>
                 {settings.applications.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
               </Select>
-              <Select disabled={!filtersOpen} label="Module" value={filters.moduleId ?? 'all'} onChange={(value) => setFilters({ ...filters, moduleId: value === 'all' ? 'all' : Number(value) })}>
+              <Select disabled={!filtersOpen} label="Module" value={filters.moduleId ?? 'all'} onChange={(value) => setFilters({ ...filters, moduleId: value === 'all' ? 'all' : resolveTaxonomyId(value, moduleFilterOptions) ?? 'all' })}>
                 <option value="all">All modules</option>
                 {moduleFilterOptions.map((module) => <option key={module.id} value={module.id}>{module.name}</option>)}
               </Select>
-              <Select disabled={!filtersOpen} label="Environment" value={filters.environmentId ?? 'all'} onChange={(value) => setFilters({ ...filters, environmentId: value === 'all' ? 'all' : Number(value) })}>
+              <Select disabled={!filtersOpen} label="Environment" value={filters.environmentId ?? 'all'} onChange={(value) => setFilters({ ...filters, environmentId: value === 'all' ? 'all' : resolveTaxonomyId(value, settings.environments) ?? 'all' })}>
                 <option value="all">All envs</option>
                 {settings.environments.map((environment) => <option key={environment.id} value={environment.id}>{environment.value}</option>)}
               </Select>
@@ -288,7 +290,9 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
             <div className="spotlight-stage">
               {spotlight.loading && <div className="spotlight-message">Loading preview...</div>}
               {!spotlight.loading && spotlight.error && <div className="spotlight-message">{spotlight.error}</div>}
-              {!spotlight.loading && currentSpotlightPreview && currentSpotlightAttachment && (
+              {!spotlight.loading && currentSpotlightPreview && currentSpotlightAttachment && (developerReadOnly ? (
+                <img className="spotlight-readonly-image" src={currentSpotlightPreview} alt={currentSpotlightAttachment.file_name} />
+              ) : (
                 <ScreenshotAnnotator
                   activeAttachmentId={currentSpotlightAttachment.id}
                   imageDataUrl={currentSpotlightPreview}
@@ -298,7 +302,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
                   onSelectVersion={(attachment) => void selectSpotlightVersion(attachment)}
                   onSave={saveSpotlightAnnotation}
                 />
-              )}
+              ))}
             </div>
             {spotlight.attachments.length > 1 && (
               <div className="spotlight-controls">

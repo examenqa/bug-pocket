@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import type { CapturePreset, CapturePresetInput, SettingsData } from '../../../../shared/types';
 import { getModulesForApplication } from '../../utils/filters';
+import { resolveTaxonomyId } from '../../utils/taxonomyIds';
 import { getSettingsPreviewItems } from './settingsUtils';
 
 const emptyPresetDraft: CapturePresetInput = {
@@ -52,7 +53,7 @@ export function PresetManager({
   const updateDraft = <K extends keyof CapturePresetInput>(key: K, value: CapturePresetInput[K]): void => {
     setDraft((current) => {
       const next = { ...current, [key]: value };
-      if (key === 'application_id' && !getModulesForApplication(settings, value as number | null, next.module_id).some((module) => module.id === next.module_id)) {
+      if (key === 'application_id' && !getModulesForApplication(settings, value as CapturePresetInput['application_id'], next.module_id).some((module) => module.id === next.module_id)) {
         next.module_id = null;
       }
       return next;
@@ -149,19 +150,19 @@ export function PresetManager({
                 </div>
               </div>
               <div className="preset-form-grid">
-                <select value={draft.application_id ?? ''} onChange={(event) => updateDraft('application_id', Number(event.target.value) || null)} disabled={formDisabled}>
+                <select value={draft.application_id ?? ''} onChange={(event) => updateDraft('application_id', resolveTaxonomyId(event.target.value, settings.applications))} disabled={formDisabled}>
                   <option value="">Application</option>
                   {settings.applications.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
                 </select>
-                <select value={draft.module_id ?? ''} onChange={(event) => updateDraft('module_id', Number(event.target.value) || null)} disabled={formDisabled}>
+                <select value={draft.module_id ?? ''} onChange={(event) => updateDraft('module_id', resolveTaxonomyId(event.target.value, moduleChoices))} disabled={formDisabled}>
                   <option value="">Module</option>
                   {moduleChoices.map((module) => <option key={module.id} value={module.id}>{module.name}</option>)}
                 </select>
-                <select value={draft.environment_id ?? ''} onChange={(event) => updateDraft('environment_id', Number(event.target.value) || null)} disabled={formDisabled}>
+                <select value={draft.environment_id ?? ''} onChange={(event) => updateDraft('environment_id', resolveTaxonomyId(event.target.value, settings.environments))} disabled={formDisabled}>
                   <option value="">Environment</option>
                   {settings.environments.map((environment) => <option key={environment.id} value={environment.id}>{environment.value}</option>)}
                 </select>
-                <select value={draft.user_role_id ?? ''} onChange={(event) => updateDraft('user_role_id', Number(event.target.value) || null)} disabled={formDisabled}>
+                <select value={draft.user_role_id ?? ''} onChange={(event) => updateDraft('user_role_id', resolveTaxonomyId(event.target.value, settings.userRoles))} disabled={formDisabled}>
                   <option value="">User Role</option>
                   {settings.userRoles.map((role) => <option key={role.id} value={role.id}>{role.value}</option>)}
                 </select>

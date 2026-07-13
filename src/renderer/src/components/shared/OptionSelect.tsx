@@ -1,6 +1,7 @@
 import React from 'react';
-import type { ConfigOption, ReferenceOption } from '../../../../shared/types';
+import type { ConfigOption, ReferenceOption, TaxonomyId } from '../../../../shared/types';
 import { fallbackOption } from '../../utils/display';
+import { resolveTaxonomyId } from '../../utils/taxonomyIds';
 
 export function OptionSelect({
   label,
@@ -38,15 +39,15 @@ export function ReferenceSelect({
   disabled = false
 }: {
   label: string;
-  value: number | null;
+  value: TaxonomyId | null;
   options: ReferenceOption[];
-  onChange: (value: number | null) => void;
+  onChange: (value: TaxonomyId | null) => void;
   disabled?: boolean;
 }) {
   return (
     <label>
       {label}
-      <select value={value ?? ''} disabled={disabled} onChange={(event) => onChange(Number(event.target.value) || null)}>
+      <select value={value ?? ''} disabled={disabled} onChange={(event) => onChange(resolveTaxonomyId(event.target.value, options))}>
         <option value="">No {label.toLowerCase()}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>

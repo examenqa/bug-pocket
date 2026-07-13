@@ -16,7 +16,7 @@ export function DataManagementPanel({
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [destructiveAction, setDestructiveAction] = useState<'workspace' | 'factory' | null>(null);
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [resetting, setResetting] = useState(false);
 
@@ -107,8 +107,24 @@ export function DataManagementPanel({
       const message = caught instanceof Error ? caught.message : 'Could not clear local data.';
       showToast(message, 'error');
       setResetting(false);
-      setResetConfirmOpen(false);
+      setDestructiveAction(null);
       setResetConfirmText('');
+    }
+  };
+
+  const clearCurrentWorkspace = async (): Promise<void> => {
+    setResetting(true);
+    try {
+      await window.bugPocket.clearCurrentWorkspace();
+      await refresh();
+      showToast('Current workspace data cleared. Other workspaces were not changed.');
+      setDestructiveAction(null);
+      setResetConfirmText('');
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Could not clear the current workspace.';
+      showToast(message, 'error');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -162,31 +178,53 @@ export function DataManagementPanel({
         </div>
         <div className="data-management-row factory-reset-row">
           <div className="data-management-copy">
-            <strong>Factory Reset</strong>
-            <p className="settings-helper">Clear all local captures, screenshots, and pending sync events while keeping settings, shortcuts, AI keys, and workspace lists.</p>
+            <strong>Clear Current Workspace</strong>
+            <p className="settings-helper">Delete only the connected workspace database. Shared screenshots used by another workspace or local mode are preserved.</p>
           </div>
-          <button className="danger factory-reset-button" disabled={exporting || importing || resetting} onClick={() => { setResetConfirmText(''); setResetConfirmOpen(true); }}>
+          <button
+            className="danger factory-reset-button"
+            disabled={exporting || importing || resetting || !settings.currentWorkspaceId}
+            onClick={() => { setResetConfirmText(''); setDestructiveAction('workspace'); }}
+          >
+            <Trash2 size={16} />
+            {settings.currentWorkspaceId ? 'Clear Current Workspace' : 'No Workspace Connected'}
+          </button>
+        </div>
+        <div className="data-management-row factory-reset-row">
+          <div className="data-management-copy">
+            <strong>Factory Reset</strong>
+            <p className="settings-helper">Delete every workspace database, local capture, screenshot, and taxonomy value while keeping settings, shortcuts, AI keys, templates, and preset slots.</p>
+          </div>
+          <button className="danger factory-reset-button" disabled={exporting || importing || resetting} onClick={() => { setResetConfirmText(''); setDestructiveAction('factory'); }}>
             <Trash2 size={16} />
             Clear All Local Data
           </button>
         </div>
       </div>
     </div>
-    {resetConfirmOpen && createPortal(
-      <div className="backup-restore-backdrop factory-reset-backdrop" role="alertdialog" aria-modal="true" aria-label="Confirm factory reset">
+    {destructiveAction && createPortal(
+      <div className="backup-restore-backdrop factory-reset-backdrop" role="alertdialog" aria-modal="true" aria-label={destructiveAction === 'factory' ? 'Confirm factory reset' : 'Confirm workspace deletion'}>
         <div className="backup-restore-dialog factory-reset-dialog">
           <Trash2 className="factory-reset-icon" size={28} />
           <div>
-            <h2>Clear all local data?</h2>
-            <p>This permanently deletes every local capture, screenshot, and pending sync event. It bypasses the trash and cannot be undone. Your settings, hotkeys, AI keys, and taxonomy lists will remain.</p>
+            <h2>{destructiveAction === 'factory' ? 'Clear all local data?' : 'Clear the current workspace?'}</h2>
+            <p>
+              {destructiveAction === 'factory'
+                ? 'This permanently deletes every workspace database, local capture, screenshot, and taxonomy value. It bypasses the trash and cannot be undone. Settings, hotkeys, AI keys, templates, and preset slots remain.'
+                : 'This permanently deletes only the currently connected workspace database. Screenshots still referenced by another workspace or local mode remain intact.'}
+            </p>
             <label className="factory-reset-phrase">
               <span>Type CLEAR to confirm</span>
               <input value={resetConfirmText} onChange={(event) => setResetConfirmText(event.target.value)} disabled={resetting} autoFocus />
             </label>
             <div className="factory-reset-actions">
-              <button disabled={resetting} onClick={() => { setResetConfirmOpen(false); setResetConfirmText(''); }}>Cancel</button>
-              <button className="danger factory-reset-confirm" disabled={resetting || resetConfirmText.trim() !== 'CLEAR'} onClick={() => void factoryResetLocalData()}>
-                {resetting ? 'Clearing...' : 'Clear All Local Data'}
+              <button disabled={resetting} onClick={() => { setDestructiveAction(null); setResetConfirmText(''); }}>Cancel</button>
+              <button
+                className="danger factory-reset-confirm"
+                disabled={resetting || resetConfirmText.trim() !== 'CLEAR'}
+                onClick={() => void (destructiveAction === 'factory' ? factoryResetLocalData() : clearCurrentWorkspace())}
+              >
+                {resetting ? 'Clearing...' : destructiveAction === 'factory' ? 'Clear All Local Data' : 'Clear Current Workspace'}
               </button>
             </div>
           </div>

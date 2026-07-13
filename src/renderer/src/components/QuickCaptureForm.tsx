@@ -2,7 +2,7 @@ import { Camera, Plus, Save } from 'lucide-react';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties, KeyboardEvent } from 'react';
-import type { CapturePreset, ScreenshotResult, SettingsData } from '../../../shared/types';
+import type { CapturePreset, ScreenshotResult, SettingsData, TaxonomyId } from '../../../shared/types';
 import { ScreenshotAnnotator } from './ScreenshotAnnotator';
 import type { ScreenshotAnnotatorHandle } from './ScreenshotAnnotator';
 import { BrandMark } from './shared/BrandMark';
@@ -26,10 +26,10 @@ function quickPanelErrorMessage(caught: unknown): string {
 }
 
 export interface QuickCaptureDraft {
-  applicationId: number | null;
-  moduleId: number | null;
-  environmentId: number | null;
-  userRoleId: number | null;
+  applicationId: TaxonomyId | null;
+  moduleId: TaxonomyId | null;
+  environmentId: TaxonomyId | null;
+  userRoleId: TaxonomyId | null;
   note: string;
 }
 
@@ -43,10 +43,10 @@ interface QuickCaptureFormProps {
   onClearAttachments: () => void;
   onSave: (draft: QuickCaptureDraft) => Promise<void>;
   onCancel: () => Promise<void>;
-  onCreateApplication: (name: string) => Promise<number>;
-  onCreateModule: (name: string, applicationId: number | null) => Promise<number>;
-  onCreateEnvironment: (value: string) => Promise<number>;
-  onCreateUserRole: (value: string) => Promise<number>;
+  onCreateApplication: (name: string) => Promise<TaxonomyId>;
+  onCreateModule: (name: string, applicationId: TaxonomyId | null) => Promise<TaxonomyId>;
+  onCreateEnvironment: (value: string) => Promise<TaxonomyId>;
+  onCreateUserRole: (value: string) => Promise<TaxonomyId>;
 }
 
 export function QuickCaptureForm({
@@ -65,10 +65,10 @@ export function QuickCaptureForm({
   onCreateUserRole
 }: QuickCaptureFormProps) {
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null);
-  const [applicationId, setApplicationId] = useState<number | null>(null);
-  const [moduleId, setModuleId] = useState<number | null>(null);
-  const [environmentId, setEnvironmentId] = useState<number | null>(null);
-  const [userRoleId, setUserRoleId] = useState<number | null>(null);
+  const [applicationId, setApplicationId] = useState<TaxonomyId | null>(null);
+  const [moduleId, setModuleId] = useState<TaxonomyId | null>(null);
+  const [environmentId, setEnvironmentId] = useState<TaxonomyId | null>(null);
+  const [userRoleId, setUserRoleId] = useState<TaxonomyId | null>(null);
   const [note, setNote] = useState('');
   const [reviewScreenshot, setReviewScreenshot] = useState('');
   const [presetNotice, setPresetNotice] = useState('');
@@ -102,11 +102,12 @@ export function QuickCaptureForm({
     [settings.userRoles]
   );
   const presetOptions = useMemo(() => settings.presets.slice(0, 3), [settings.presets]);
-  const taxonomyReadOnly = settings.currentWorkspaceRole === 'member' || settings.currentWorkspaceRole === 'developer';
+  const developerReadOnly = settings.currentWorkspaceRole === 'developer';
+  const taxonomyReadOnly = developerReadOnly;
 
   useEffect(() => {
     if (applicationId == null && settings.applications[0]) setApplicationId(settings.applications[0].id);
-    if ((moduleId == null || !moduleOptions.some((module) => module.value === moduleId)) && moduleOptions[0]) setModuleId(moduleOptions[0].value as number);
+    if ((moduleId == null || !moduleOptions.some((module) => module.value === moduleId)) && moduleOptions[0]) setModuleId(moduleOptions[0].value);
     if (moduleId != null && !moduleOptions.length) setModuleId(null);
     if (environmentId == null && settings.environments[0]) setEnvironmentId(settings.environments[0].id);
     if (userRoleId == null && settings.userRoles[0]) setUserRoleId(settings.userRoles[0].id);
@@ -169,17 +170,19 @@ export function QuickCaptureForm({
   };
 
   const save = async (): Promise<void> => {
-    if (!note.trim()) return;
+    if (developerReadOnly || !note.trim()) return;
     await onSave({ applicationId, moduleId, environmentId, userRoleId, note });
     setNote('');
   };
 
   const takeScreenshot = (): void => {
+    if (developerReadOnly) return;
     screenshotButtonRef.current?.focus();
     void onTakeScreenshot();
   };
 
   const attachReviewedScreenshot = async (dataUrl: string): Promise<void> => {
+    if (developerReadOnly) return;
     await window.bugPocket.attachPendingQuickScreenshot(dataUrl);
     setReviewScreenshot('');
     await window.bugPocket.restoreQuickCaptureCompact();
@@ -302,7 +305,7 @@ export function QuickCaptureForm({
             </div>
             <div className="quick-review-actions">
               <button className="quick-review-discard" type="button" onClick={() => void discardReviewedScreenshot()}>Discard</button>
-              <button className="quick-review-attach" type="button" onClick={attachReviewedScreenshotFromHeader}>Attach</button>
+              <button className="quick-review-attach" type="button" disabled={developerReadOnly} onClick={attachReviewedScreenshotFromHeader}>Attach</button>
             </div>
           </div>
           <ScreenshotAnnotator
@@ -355,7 +358,7 @@ export function QuickCaptureForm({
           shortcut={quickPanelShortcuts.application}
           value={applicationId}
           options={applicationOptions}
-          onChange={(value) => { setSelectedPresetId(null); setApplicationId(typeof value === 'number' ? value : null); }}
+          onChange={(value) => { setSelectedPresetId(null); setApplicationId(value); }}
           onCreate={taxonomyReadOnly ? undefined : onCreateApplication}
         />
         <QuickSearchSelect
@@ -364,7 +367,7 @@ export function QuickCaptureForm({
           shortcut={quickPanelShortcuts.module}
           value={moduleId}
           options={moduleOptions}
-          onChange={(value) => { setSelectedPresetId(null); setModuleId(typeof value === 'number' ? value : null); }}
+          onChange={(value) => { setSelectedPresetId(null); setModuleId(value); }}
           onCreate={taxonomyReadOnly ? undefined : (name) => onCreateModule(name, applicationId)}
         />
         <QuickSearchSelect
@@ -373,7 +376,7 @@ export function QuickCaptureForm({
           shortcut={quickPanelShortcuts.environment}
           value={environmentId}
           options={environmentOptions}
-          onChange={(value) => { setSelectedPresetId(null); setEnvironmentId(typeof value === 'number' ? value : null); }}
+          onChange={(value) => { setSelectedPresetId(null); setEnvironmentId(value); }}
           onCreate={taxonomyReadOnly ? undefined : onCreateEnvironment}
         />
         <QuickSearchSelect
@@ -382,14 +385,15 @@ export function QuickCaptureForm({
           shortcut={quickPanelShortcuts.userRole}
           value={userRoleId}
           options={userRoleOptions}
-          onChange={(value) => { setSelectedPresetId(null); setUserRoleId(typeof value === 'number' ? value : null); }}
-          onCreate={onCreateUserRole}
+          onChange={(value) => { setSelectedPresetId(null); setUserRoleId(value); }}
+          onCreate={taxonomyReadOnly ? undefined : onCreateUserRole}
         />
           </div>
           <label className="grow">
             <span className="quick-label-row">Bug Note <kbd>{quickPanelShortcuts.note}</kbd></span>
-            <textarea ref={noteRef} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Short note. Clean it up later." />
+            <textarea ref={noteRef} value={note} disabled={developerReadOnly} onChange={(event) => setNote(event.target.value)} placeholder="Short note. Clean it up later." />
           </label>
+          {developerReadOnly && <p className="quick-read-only-notice">Developer access is read-only. Captures and taxonomy changes are disabled.</p>}
           {attachments.length > 0 && (
             <div className="attachment-strip quick-attachment-status">
               <span>{attachments.length} screenshot{attachments.length === 1 ? '' : 's'} attached</span>
@@ -400,11 +404,11 @@ export function QuickCaptureForm({
           )}
           <div className="quick-actions">
             <div className="quick-action-item">
-              <button className="screenshot-button" ref={screenshotButtonRef} title="Take screenshot (Alt+S)" onClick={takeScreenshot}><Camera size={16} /> Screenshot</button>
+              <button className="screenshot-button" ref={screenshotButtonRef} disabled={developerReadOnly} title={developerReadOnly ? 'Developer access is read-only' : 'Take screenshot (Alt+S)'} onClick={takeScreenshot}><Camera size={16} /> Screenshot</button>
               <span className="button-shortcut"><kbd>{quickPanelShortcuts.screenshot}</kbd></span>
             </div>
             <div className="quick-action-item">
-              <button className="primary" disabled={!note.trim() || saving} onClick={save}><Save size={17} /> Save</button>
+              <button className="primary" disabled={developerReadOnly || !note.trim() || saving} onClick={save}><Save size={17} /> Save</button>
               <span className="button-shortcut"><kbd>{quickPanelShortcuts.save}</kbd></span>
             </div>
           </div>

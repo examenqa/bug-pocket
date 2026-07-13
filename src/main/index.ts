@@ -1,18 +1,31 @@
-import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog } from 'electron';
+import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog, safeStorage } from 'electron';
 import log from 'electron-log/main';
 import { autoUpdater } from 'electron-updater';
-import { copyFileSync, createReadStream, createWriteStream, existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { BugPocketDatabase } from './database';
 import { triageBugWithOllama } from './ai/ollamaTriage';
 import { getByokAiConfig, processIssueWithByokAi, saveByokAiConfig, triageBugWithByokAi } from './ai/byokIssueProcessor';
+import { registerGetByokAiConfigIpc } from './ipc/byokAiConfigIpc';
+import { registerBugDeletionIpc } from './ipc/bugDeletionIpc';
+import { createIpcArgumentValidators, createSecureIpcRegistrar } from './ipc/secureIpc';
+import { assertWorkspaceWriteAccess } from './ipc/workspaceWriteAccess';
+import { resolveVerifiedTriageAttachmentPath } from './ai/triageAttachment';
 import { SyncEngine } from './sync/syncService';
-import type { AiConfigSaveInput, AiIssueProcessPayload, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting } from '../shared/types';
+import { createBackupArchive, restoreBackupArchive } from './sync/backupService';
+import { getAssetPath } from './assetPaths';
+import { configureAutoUpdater, installDownloadedUpdate, runGracefulShutdown } from './updater';
+import type { AiConfigSaveInput, AiIssueProcessPayload, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting, TaxonomyId } from '../shared/types';
 
-if (!app.isPackaged) {
+const packagedSmokeUserData = process.env.BUG_POCKET_SMOKE_USER_DATA?.trim();
+const packagedSmokeTest = app.isPackaged && process.env.BUG_POCKET_PACKAGED_SMOKE_TEST === '1' && Boolean(packagedSmokeUserData);
+
+if (packagedSmokeTest && packagedSmokeUserData) {
+  app.setPath('userData', packagedSmokeUserData);
+} else if (!app.isPackaged) {
   app.setPath('userData', `${app.getPath('userData')}-dev`);
 }
 
@@ -28,7 +41,10 @@ let tray: Tray | null = null;
 let db: BugPocketDatabase;
 let syncEngine: SyncEngine;
 let isQuitting = false;
-let currentScreenshotSource = '';
+let shutdownInProgress = false;
+let gracefulShutdownComplete = false;
+let gracefulShutdownPromise: Promise<void> | null = null;
+let currentScreenshotSource: Buffer | null = null;
 let pendingQuickScreenshotDataUrl = '';
 let screenshotBugId: number | null = null;
 let mainWasVisibleBeforeSnip = false;
@@ -44,9 +60,105 @@ const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 const backgroundStartArg = '--background-start';
 const windowBackgroundColor = '#F8FAFC';
 
+function pauseRendererForShutdown(): void {
+  BrowserWindow.getAllWindows().forEach((window) => {
+    window.webContents.send('app:shutdown-started');
+    window.setIgnoreMouseEvents(true);
+    window.setFocusable(false);
+  });
+  globalShortcut.unregisterAll();
+}
+
+async function gracefulShutdown(): Promise<void> {
+  if (gracefulShutdownComplete) return;
+  if (gracefulShutdownPromise) return gracefulShutdownPromise;
+
+  shutdownInProgress = true;
+  isQuitting = true;
+
+  gracefulShutdownPromise = runGracefulShutdown({
+    pauseRenderer: pauseRendererForShutdown,
+    stopAndDrain: async () => {
+      await syncEngine?.stopAndDrain();
+    },
+    disconnectWorkspace: async () => {
+      if (db?.isOpen()) {
+        db.checkpoint();
+        await Promise.resolve(db.disconnectWorkspace());
+        db.close();
+      }
+    }
+  }).then(() => {
+    gracefulShutdownComplete = true;
+  });
+
+  try {
+    await gracefulShutdownPromise;
+  } catch (error) {
+    gracefulShutdownPromise = null;
+    shutdownInProgress = false;
+    isQuitting = false;
+    BrowserWindow.getAllWindows().forEach((window) => {
+      window.setIgnoreMouseEvents(false);
+      window.setFocusable(true);
+    });
+    throw error;
+  }
+}
+
+async function waitForSafeStorageEncryption(timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!safeStorage.isEncryptionAvailable()) {
+    if (Date.now() >= deadline) {
+      throw new Error('Windows secure storage did not become available. Cloud authentication was not initialized.');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 function rendererUrl(route: string): string {
   if (isDev) return `${process.env['ELECTRON_RENDERER_URL']}#${route}`;
   return `${pathToFileURL(join(__dirname, '../renderer/index.html')).toString()}#${route}`;
+}
+
+function isTrustedRendererUrl(candidateUrl: string): boolean {
+  try {
+    const candidate = new URL(candidateUrl);
+    if (isDev) {
+      const expected = new URL(process.env['ELECTRON_RENDERER_URL']!);
+      return candidate.protocol === expected.protocol && candidate.host === expected.host && candidate.pathname === expected.pathname;
+    }
+    const expected = pathToFileURL(join(__dirname, '../renderer/index.html'));
+    return candidate.protocol === 'file:' && candidate.pathname === expected.pathname;
+  } catch {
+    return false;
+  }
+}
+
+function openSafeExternalUrl(candidateUrl: string): void {
+  try {
+    const parsed = new URL(candidateUrl);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return;
+    void shell.openExternal(parsed.toString()).catch((error) => {
+      console.error('Unable to open external URL.', error);
+    });
+  } catch {
+    // Invalid and non-web URLs are intentionally ignored at the navigation boundary.
+  }
+}
+
+function hardenRendererWindow(window: BrowserWindow): void {
+  const guardNavigation = (event: Electron.Event, targetUrl: string): void => {
+    if (isTrustedRendererUrl(targetUrl)) return;
+    event.preventDefault();
+    openSafeExternalUrl(targetUrl);
+  };
+  window.webContents.on('will-navigate', guardNavigation);
+  window.webContents.on('will-redirect', guardNavigation);
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    openSafeExternalUrl(url);
+    return { action: 'deny' };
+  });
 }
 
 function preloadPath(): string {
@@ -55,31 +167,11 @@ function preloadPath(): string {
   return existsSync(mjsPreload) ? mjsPreload : join(__dirname, '../preload/index.js');
 }
 
-function iconPath(): string {
-  return app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '../../build/icon.ico');
-}
-
 function enforceStartupPreference(enabled: boolean): void {
   app.setLoginItemSettings({
     openAtLogin: enabled,
     openAsHidden: true,
     args: enabled ? [backgroundStartArg] : []
-  });
-}
-
-function initializeAutoUpdater(): void {
-  autoUpdater.logger = log;
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on('error', (error) => {
-    log.error('[auto-updater] Update check failed:', error);
-  });
-  autoUpdater.on('update-available', (info) => {
-    log.info('[auto-updater] Update available:', info.version);
-  });
-  autoUpdater.on('update-downloaded', (info) => {
-    log.info('[auto-updater] Update downloaded and ready on app quit:', info.version);
-    mainWindow?.webContents.send('update-ready');
   });
 }
 
@@ -91,16 +183,19 @@ function createMainWindow(route = '/dashboard', showOnReady = true): void {
     minHeight: 620,
     title: 'Bug Pocket',
     show: false,
-    icon: iconPath(),
+    icon: getAssetPath('icon.ico'),
     resizable: true,
     backgroundColor: windowBackgroundColor,
     autoHideMenuBar: true,
     webPreferences: {
       preload: preloadPath(),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
     }
   });
+  hardenRendererWindow(mainWindow);
   mainWindow.webContents.on('context-menu', (_event, params) => {
     if (!params.isEditable && !params.selectionText.trim()) return;
     const menu = Menu.buildFromTemplate([
@@ -156,16 +251,19 @@ function createQuickWindow(): void {
     resizable: false,
     title: 'Quick Capture - Bug Pocket',
     show: false,
-    icon: iconPath(),
+    icon: getAssetPath('icon.ico'),
     backgroundColor: '#022F63',
     autoHideMenuBar: true,
     skipTaskbar: false,
     webPreferences: {
       preload: preloadPath(),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
     }
   });
+  hardenRendererWindow(quickWindow);
   quickWindowLoaded = false;
   quickWindowReady = new Promise((resolve) => {
     quickWindow?.webContents.once('did-finish-load', () => {
@@ -287,12 +385,13 @@ function restoreMainAfterSnip(): void {
 
 function resetSnipWindowState(): void {
   mainWasVisibleBeforeSnip = false;
+  currentScreenshotSource = null;
 }
 
 function notifySaved(message = 'Capture saved locally.'): void {
   mainWindow?.webContents.send('app:toast', message);
   if (!mainWindow?.isVisible() && Notification.isSupported()) {
-    new Notification({ title: 'Bug Pocket', body: message, icon: iconPath() }).show();
+    new Notification({ title: 'Bug Pocket', body: message, icon: getAssetPath('icon.ico') }).show();
   }
 }
 
@@ -325,10 +424,31 @@ function notifySettingsChanged(): void {
   });
 }
 
+function assertAppAcceptingMutations(): void {
+  if (shutdownInProgress) throw new Error('Bug Pocket is shutting down. New changes are temporarily paused.');
+}
+
 function mutateSettings<T>(action: () => T): T {
+  assertAppAcceptingMutations();
   const result = action();
   notifySettingsChanged();
   return result;
+}
+
+function assertCurrentWorkspaceWriteAccess(): void {
+  const workspaceId = db.getCurrentWorkspaceId();
+  if (!workspaceId) return;
+  assertWorkspaceWriteAccess(db.getWorkspaceRole(workspaceId));
+}
+
+function mutateWorkspace<T>(action: () => T): T {
+  assertAppAcceptingMutations();
+  assertCurrentWorkspaceWriteAccess();
+  return action();
+}
+
+function mutateWorkspaceSettings<T>(action: () => T): T {
+  return mutateWorkspace(() => mutateSettings(action));
 }
 
 async function exportBackup(): Promise<BackupExportResult> {
@@ -385,28 +505,40 @@ async function importBackup(): Promise<BackupImportResult> {
   if (openResult.canceled || !openResult.filePaths[0]) return { success: false, canceled: true };
   const backupPath = openResult.filePaths[0];
   const userDataPath = app.getPath('userData');
+  let restoreLifecycleStarted = false;
 
   try {
-    const extractZipModule = (await import('extract-zip')) as unknown as { default?: (zipPath: string, options: { dir: string }) => Promise<void> } & ((zipPath: string, options: { dir: string }) => Promise<void>);
-    const extractZip = extractZipModule.default ?? extractZipModule;
-    if (typeof extractZip !== 'function') throw new Error('Backup extractor could not be loaded.');
-
-    try {
-      syncEngine?.stop();
-      db.checkpoint();
-      db.close();
-    } catch {
-      // Continue so a restore can recover even if the current database is unhealthy.
-    }
-
-    cleanupSqliteSidecars(userDataPath);
-    await extractZip(backupPath, { dir: userDataPath });
-    cleanupSqliteSidecars(userDataPath);
-
-    db = new BugPocketDatabase();
-    db.applyAfterRestorePatch();
+    await restoreBackupArchive(backupPath, userDataPath, {
+      beforeCommit: async () => {
+        restoreLifecycleStarted = true;
+        await syncEngine?.stopAndWait();
+        db.checkpoint();
+        db.close();
+      },
+      afterCommit: () => {
+        try {
+          db = new BugPocketDatabase();
+          db.applyAfterRestorePatch();
+        } catch (error) {
+          try {
+            db?.close();
+          } catch {
+            // The restore service will roll back the staged filesystem swap.
+          }
+          throw error;
+        }
+      },
+      beforeRollback: () => {
+        try {
+          db?.close();
+        } catch {
+          // The rollback still needs to restore the original files.
+        }
+      }
+    });
     syncEngine = new SyncEngine(db, () => mainWindow?.webContents.send('bugs:changed'));
     syncEngine.initialize();
+    await syncEngine.restorePersistedSession();
     registerAppShortcuts();
 
     setTimeout(() => {
@@ -418,167 +550,24 @@ async function importBackup(): Promise<BackupImportResult> {
     return { success: true, filePath: backupPath };
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : 'Backup import failed.';
-    try {
-      db = new BugPocketDatabase();
-      syncEngine = new SyncEngine(db, () => mainWindow?.webContents.send('bugs:changed'));
-      syncEngine.initialize();
-      registerAppShortcuts();
-    } catch {
-      // If reopening fails, surface the original restore error.
+    if (restoreLifecycleStarted) {
+      try {
+        if (db.isOpen()) db.close();
+        db = new BugPocketDatabase();
+        syncEngine = new SyncEngine(db, () => mainWindow?.webContents.send('bugs:changed'));
+        syncEngine.initialize();
+        await syncEngine.restorePersistedSession();
+        registerAppShortcuts();
+      } catch {
+        // If reopening fails, surface the original restore error.
+      }
     }
     return { success: false, filePath: backupPath, error: message };
   }
 }
 
-function cleanupSqliteSidecars(userDataPath: string): void {
-  readdirSync(userDataPath, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && (/\.sqlite-wal$/i.test(entry.name) || /\.sqlite-shm$/i.test(entry.name)))
-    .forEach((entry) => {
-    const filePath = join(userDataPath, entry.name);
-    if (!existsSync(filePath)) return;
-    try {
-      unlinkSync(filePath);
-    } catch {
-      // Sidecar cleanup is best effort; extraction/reopen will report if this matters.
-    }
-  });
-}
-
 async function writeBackupArchive(filePath: string): Promise<BackupExportResult> {
-  const tempDatabasePaths: string[] = [];
-  try {
-    db.checkpoint();
-    const databaseFiles = db.getBackupDatabaseFiles();
-    const archiveDatabaseFiles = databaseFiles
-      .filter((file) => existsSync(file.filePath))
-      .map((file) => {
-        const tempPath = join(app.getPath('userData'), `bug-pocket-temp-${file.role}-${Date.now()}-${randomUUID()}.sqlite`);
-        copyFileSync(file.filePath, tempPath);
-        tempDatabasePaths.push(tempPath);
-        return { ...file, tempPath };
-      });
-    const attachmentsDir = db.screenshotsDir;
-    const referencedAttachments = db.listBackupAttachmentFiles();
-    const uniqueReferencedAttachments = new Map<string, { fileName: string; filePath: string }>();
-    referencedAttachments.forEach((attachment) => {
-      uniqueReferencedAttachments.set(attachment.file_name, { fileName: attachment.file_name, filePath: attachment.file_path });
-    });
-    const archivedAttachmentFiles = new Map<string, { fileName: string; filePath: string; source: 'database' | 'orphaned-file' }>();
-    uniqueReferencedAttachments.forEach((attachment) => {
-      if (existsSync(attachment.filePath)) archivedAttachmentFiles.set(attachment.fileName, { ...attachment, source: 'database' });
-    });
-    if (existsSync(attachmentsDir)) {
-      readdirSync(attachmentsDir, { withFileTypes: true }).forEach((entry) => {
-        if (!entry.isFile() || archivedAttachmentFiles.has(entry.name)) return;
-        const filePath = join(attachmentsDir, entry.name);
-        archivedAttachmentFiles.set(entry.name, { fileName: entry.name, filePath, source: 'orphaned-file' });
-      });
-    }
-    const attachmentManifest = {
-      exported_at: new Date().toISOString(),
-      database: archiveDatabaseFiles.find((file) => file.role === 'workspace')?.archiveName ?? archiveDatabaseFiles[0]?.archiveName ?? 'local.sqlite',
-      databases: {
-        local_db: archiveDatabaseFiles.find((file) => file.role === 'local')?.archiveName ?? null,
-        workspace_db: archiveDatabaseFiles.find((file) => file.role === 'workspace')?.archiveName ?? null,
-        current_workspace_id: archiveDatabaseFiles.find((file) => file.role === 'workspace')?.workspaceId ?? null,
-        files: archiveDatabaseFiles.map((file) => ({
-          role: file.role,
-          path: file.archiveName,
-          workspace_id: file.workspaceId ?? null
-        }))
-      },
-      attachment_directory: 'attachments',
-      referenced_attachment_count: referencedAttachments.length,
-      archived_attachment_count: archivedAttachmentFiles.size,
-      missing_referenced_attachments: referencedAttachments
-        .filter((attachment) => !existsSync(attachment.file_path))
-        .map((attachment) => ({
-          id: attachment.id,
-          bug_id: attachment.bug_id,
-          parent_id: attachment.parent_id,
-          file_name: attachment.file_name,
-          content_hash: attachment.content_hash,
-          file_extension: attachment.file_extension,
-          created_at: attachment.created_at
-        })),
-      archived_attachments: Array.from(archivedAttachmentFiles.values()).map((attachment) => ({
-        file_name: attachment.fileName,
-        source: attachment.source
-      }))
-    };
-    const { ZipArchive } = (await import('archiver')) as unknown as {
-      ZipArchive: new (options: { zlib: { level: number } }) => {
-        append: (source: NodeJS.ReadableStream | string | Buffer, data: { name: string }) => void;
-        finalize: () => Promise<void>;
-        on: (event: 'error' | 'warning', listener: (error: Error) => void) => void;
-        pipe: (destination: NodeJS.WritableStream) => void;
-        pointer: () => number;
-      };
-    };
-
-    const result = await new Promise<BackupExportResult>((resolve) => {
-      const output = createWriteStream(filePath);
-      const archive = new ZipArchive({ zlib: { level: 9 } });
-      let settled = false;
-
-      const finish = (result: BackupExportResult): void => {
-        if (settled) return;
-        settled = true;
-        resolve(result);
-      };
-      const fail = (error: Error): void => {
-        finish({ success: false, filePath, error: error.message || 'Backup export failed.' });
-      };
-
-      output.on('close', () => {
-        finish({ success: true, filePath, bytesWritten: archive.pointer() });
-      });
-      output.on('error', fail);
-      archive.on('error', fail);
-      archive.on('warning', (error) => {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-        fail(error);
-      });
-
-      archive.pipe(output);
-      archiveDatabaseFiles.forEach((databaseFile) => {
-        archive.append(createReadStream(databaseFile.tempPath), { name: databaseFile.archiveName });
-      });
-      archivedAttachmentFiles.forEach((attachment) => {
-        if (!existsSync(attachment.filePath) || !statSync(attachment.filePath).isFile()) return;
-        archive.append(createReadStream(attachment.filePath), { name: `attachments/${attachment.fileName}` });
-      });
-      archive.append(JSON.stringify(attachmentManifest, null, 2), { name: 'backup-manifest.json' });
-      archive.finalize().catch(fail);
-    });
-    if (!result.success && existsSync(filePath)) {
-      try {
-        unlinkSync(filePath);
-      } catch {
-        // Failed backup artifacts are best-effort cleanup.
-      }
-    }
-    return result;
-  } catch (caught) {
-    const message = caught instanceof Error ? caught.message : 'Backup export failed.';
-    if (existsSync(filePath)) {
-      try {
-        unlinkSync(filePath);
-      } catch {
-        // Failed backup artifacts are best-effort cleanup.
-      }
-    }
-    return { success: false, filePath, error: message };
-  } finally {
-    tempDatabasePaths.forEach((tempDatabasePath) => {
-      if (!existsSync(tempDatabasePath)) return;
-      try {
-        unlinkSync(tempDatabasePath);
-      } catch {
-        // Temporary backup copies are best-effort cleanup.
-      }
-    });
-  }
+  return createBackupArchive(filePath, db, app.getPath('userData'));
 }
 
 async function runAutomatedStartupBackup(): Promise<void> {
@@ -657,7 +646,7 @@ async function cancelScreenshotCapture(): Promise<void> {
 }
 
 function createTray(): void {
-  const icon = nativeImage.createFromPath(iconPath()).resize({ width: 16, height: 16 });
+  const icon = nativeImage.createFromPath(getAssetPath('icon.ico')).resize({ width: 16, height: 16 });
   tray = new Tray(icon);
   tray.setToolTip('Bug Pocket');
   tray.setContextMenu(
@@ -698,9 +687,9 @@ async function startScreenshotCapture(bugId?: number): Promise<void> {
     types: ['screen'],
     thumbnailSize: { width, height }
   });
-  const source = sources[0];
+  const source = sources.find((candidate) => candidate.display_id === String(primaryDisplay.id)) ?? sources[0];
   if (!source) throw new Error('No screen source available.');
-  currentScreenshotSource = source.thumbnail.toDataURL();
+  currentScreenshotSource = source.thumbnail.toPNG();
   snipWindow = new BrowserWindow({
     x: primaryDisplay.bounds.x,
     y: primaryDisplay.bounds.y,
@@ -714,9 +703,12 @@ async function startScreenshotCapture(bugId?: number): Promise<void> {
     webPreferences: {
       preload: preloadPath(),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
     }
   });
+  hardenRendererWindow(snipWindow);
   snipWindow.webContents.once('did-finish-load', () => {
     snipWindow?.webContents.send('screenshot:source', currentScreenshotSource);
     snipWindow?.focus();
@@ -831,11 +823,13 @@ async function discardPendingQuickScreenshot(): Promise<void> {
 
 
 async function triageBugWithConfiguredAi(bugData: unknown): Promise<string> {
+  const verifiedPayload = bugData as AiTriageBugPayload;
   const byokConfig = getByokAiConfig(db);
-  if (byokConfig.hasApiKey) return triageBugWithByokAi(db, bugData);
+  if (byokConfig.hasApiKey) return triageBugWithByokAi(db, verifiedPayload);
 
   if (db.getAiTriageEnabled()) {
-    const localResult = await triageBugWithOllama(bugData as AiTriageBugPayload, db.getOllamaModelName());
+    const verifiedImagePath = resolveVerifiedTriageAttachmentPath(db, verifiedPayload);
+    const localResult = await triageBugWithOllama(verifiedPayload, db.getOllamaModelName(), verifiedImagePath);
     if (!localResult.success) throw new Error(localResult.error || 'Local AI triage failed.');
     return JSON.stringify(normalizeOllamaTriageResult(localResult.result));
   }
@@ -854,107 +848,113 @@ function normalizeOllamaTriageResult(result: AiTriageResult): Record<string, str
 }
 
 function registerIpc(): void {
-  ipcMain.handle('window:openQuickCapture', () => openQuickCapture());
-  ipcMain.handle('window:hideQuickCapture', () => {
+  const secureIpc = createSecureIpcRegistrar(
+    ipcMain,
+    createIpcArgumentValidators(),
+    (event) => Boolean(event.senderFrame && !event.senderFrame.parent && isTrustedRendererUrl(event.senderFrame.url))
+  );
+  secureIpc.handle('window:openQuickCapture', () => openQuickCapture());
+  secureIpc.handle('window:hideQuickCapture', () => {
     pendingQuickScreenshotDataUrl = '';
     restoreQuickCaptureCompactSize();
     quickWindow?.hide();
   });
-  ipcMain.handle('window:expandQuickCaptureForReview', () => resizeQuickCaptureForReview());
-  ipcMain.handle('window:restoreQuickCaptureCompact', () => restoreQuickCaptureCompactSize());
-  ipcMain.handle('window:openMain', (_event, route = '/dashboard') => openMainWindow(route));
-  ipcMain.handle('window:openSettings', (_event, section?: string) => openSettings(section));
-  ipcMain.handle('settings:get', () => settingsWithShortcutStatus());
-  ipcMain.handle('settings:addApplication', (_event, name: string, contextDescription?: string | null) => mutateSettings(() => db.addApplication(name, contextDescription ?? '')));
-  ipcMain.handle('settings:updateApplication', (_event, id: number, name: string, contextDescription = '') => mutateSettings(() => db.updateApplication(id, name, contextDescription)));
-  ipcMain.handle('settings:updateApplicationContext', (_event, id: number, contextDescription: string) => mutateSettings(() => db.updateApplicationContext(id, contextDescription)));
-  ipcMain.handle('settings:updateApplicationSync', (_event, id: number, isSynced: boolean) => mutateSettings(() => db.updateApplicationSync(id, isSynced)));
-  ipcMain.handle('settings:deleteApplication', (_event, id: number) => mutateSettings(() => db.deleteApplication(id)));
-  ipcMain.handle('settings:addModule', (_event, name: string, applicationId: number | null, contextDescription = '') => mutateSettings(() => db.addModule(name, applicationId, contextDescription)));
-  ipcMain.handle('settings:updateModule', (_event, id: number, name: string, applicationId: number | null, contextDescription = '') => mutateSettings(() => db.updateModule(id, name, applicationId, contextDescription)));
-  ipcMain.handle('settings:updateModuleContext', (_event, id: number, contextDescription: string) => mutateSettings(() => db.updateModuleContext(id, contextDescription)));
-  ipcMain.handle('settings:deleteModule', (_event, id: number) => mutateSettings(() => db.deleteModule(id)));
-  ipcMain.handle('settings:addEnvironment', (_event, name: string) => mutateSettings(() => db.addEnvironment(name)));
-  ipcMain.handle('settings:updateEnvironment', (_event, id: number, name: string) => mutateSettings(() => db.updateEnvironment(id, name)));
-  ipcMain.handle('settings:deleteEnvironment', (_event, id: number) => mutateSettings(() => db.deleteEnvironment(id)));
-  ipcMain.handle('settings:addDevice', (_event, name: string) => mutateSettings(() => db.addDevice(name)));
-  ipcMain.handle('settings:updateDevice', (_event, id: number, name: string) => mutateSettings(() => db.updateDevice(id, name)));
-  ipcMain.handle('settings:deleteDevice', (_event, id: number) => mutateSettings(() => db.deleteDevice(id)));
-  ipcMain.handle('settings:addBrowser', (_event, name: string) => mutateSettings(() => db.addBrowser(name)));
-  ipcMain.handle('settings:updateBrowser', (_event, id: number, name: string) => mutateSettings(() => db.updateBrowser(id, name)));
-  ipcMain.handle('settings:deleteBrowser', (_event, id: number) => mutateSettings(() => db.deleteBrowser(id)));
-  ipcMain.handle('settings:addUserRole', (_event, name: string) => mutateSettings(() => db.addUserRole(name)));
-  ipcMain.handle('settings:updateUserRole', (_event, id: number, name: string) => mutateSettings(() => db.updateUserRole(id, name)));
-  ipcMain.handle('settings:deleteUserRole', (_event, id: number) => mutateSettings(() => db.deleteUserRole(id)));
-  ipcMain.handle('settings:addConfigOption', (_event, type: string, value: string) => mutateSettings(() => db.addConfigOption(type, value)));
-  ipcMain.handle('settings:updateConfigOption', (_event, id: number, value: string) => mutateSettings(() => db.updateConfigOption(id, value)));
-  ipcMain.handle('settings:deleteConfigOption', (_event, id: number) => mutateSettings(() => db.deleteConfigOption(id)));
-  ipcMain.handle('settings:saveTemplate', (_event, id: number | null, name: string, templateText: string) => mutateSettings(() => db.saveTemplate(id, name, templateText)));
-  ipcMain.handle('settings:updateJiraWorkspaceUrl', (_event, value: string) => mutateSettings(() => db.updateJiraWorkspaceUrl(value)));
-  ipcMain.handle('settings:updateAutoBackupDirectoryPath', (_event, value: string) => mutateSettings(() => db.updateAutoBackupDirectoryPath(value)));
-  ipcMain.handle('settings:updateQuickCaptureAnnotationReview', (_event, enabled: boolean) => mutateSettings(() => db.updateQuickCaptureAnnotationReview(enabled)));
-  ipcMain.handle('settings:updateAiTriageOptions', (_event, enabled: boolean, modelName: string) => mutateSettings(() => db.updateAiTriageOptions(enabled, modelName)));
-  ipcMain.handle('get-ai-config', () => getByokAiConfig(db));
-  ipcMain.handle('save-ai-config', (_event, input: AiConfigSaveInput) =>
+  secureIpc.handle('window:expandQuickCaptureForReview', () => resizeQuickCaptureForReview());
+  secureIpc.handle('window:restoreQuickCaptureCompact', () => restoreQuickCaptureCompactSize());
+  secureIpc.handle('window:openMain', (_event, route = '/dashboard') => openMainWindow(route));
+  secureIpc.handle('window:openSettings', (_event, section?: string) => openSettings(section));
+  secureIpc.handle('settings:get', () => settingsWithShortcutStatus());
+  secureIpc.handle('settings:addApplication', (_event, name: string, contextDescription?: string | null) => mutateWorkspaceSettings(() => db.addApplication(name, contextDescription ?? '')));
+  secureIpc.handle('settings:updateApplication', (_event, id: TaxonomyId, name: string, contextDescription = '') => mutateWorkspaceSettings(() => db.updateApplication(id, name, contextDescription)));
+  secureIpc.handle('settings:updateApplicationContext', (_event, id: TaxonomyId, contextDescription: string) => mutateWorkspaceSettings(() => db.updateApplicationContext(id, contextDescription)));
+  secureIpc.handle('settings:updateApplicationSync', (_event, id: TaxonomyId, isSynced: boolean) => mutateWorkspaceSettings(() => db.updateApplicationSync(id, isSynced)));
+  secureIpc.handle('settings:deleteApplication', (_event, id: TaxonomyId) => mutateWorkspaceSettings(() => db.deleteApplication(id)));
+  secureIpc.handle('settings:addModule', (_event, name: string, applicationId: TaxonomyId | null, contextDescription = '') => mutateWorkspaceSettings(() => db.addModule(name, applicationId, contextDescription)));
+  secureIpc.handle('settings:updateModule', (_event, id: TaxonomyId, name: string, applicationId: TaxonomyId | null, contextDescription = '') => mutateWorkspaceSettings(() => db.updateModule(id, name, applicationId, contextDescription)));
+  secureIpc.handle('settings:updateModuleContext', (_event, id: TaxonomyId, contextDescription: string) => mutateWorkspaceSettings(() => db.updateModuleContext(id, contextDescription)));
+  secureIpc.handle('settings:deleteModule', (_event, id: TaxonomyId) => mutateWorkspaceSettings(() => db.deleteModule(id)));
+  secureIpc.handle('settings:addEnvironment', (_event, name: string) => mutateWorkspaceSettings(() => db.addEnvironment(name)));
+  secureIpc.handle('settings:updateEnvironment', (_event, id: TaxonomyId, name: string) => mutateWorkspaceSettings(() => db.updateEnvironment(id, name)));
+  secureIpc.handle('settings:deleteEnvironment', (_event, id: TaxonomyId) => mutateWorkspaceSettings(() => db.deleteEnvironment(id)));
+  secureIpc.handle('settings:addDevice', (_event, name: string) => mutateWorkspaceSettings(() => db.addDevice(name)));
+  secureIpc.handle('settings:updateDevice', (_event, id: TaxonomyId, name: string) => mutateWorkspaceSettings(() => db.updateDevice(id, name)));
+  secureIpc.handle('settings:deleteDevice', (_event, id: TaxonomyId) => mutateWorkspaceSettings(() => db.deleteDevice(id)));
+  secureIpc.handle('settings:addBrowser', (_event, name: string) => mutateWorkspaceSettings(() => db.addBrowser(name)));
+  secureIpc.handle('settings:updateBrowser', (_event, id: TaxonomyId, name: string) => mutateWorkspaceSettings(() => db.updateBrowser(id, name)));
+  secureIpc.handle('settings:deleteBrowser', (_event, id: TaxonomyId) => mutateWorkspaceSettings(() => db.deleteBrowser(id)));
+  secureIpc.handle('settings:addUserRole', (_event, name: string) => mutateWorkspaceSettings(() => db.addUserRole(name)));
+  secureIpc.handle('settings:updateUserRole', (_event, id: TaxonomyId, name: string) => mutateWorkspaceSettings(() => db.updateUserRole(id, name)));
+  secureIpc.handle('settings:deleteUserRole', (_event, id: TaxonomyId) => mutateWorkspaceSettings(() => db.deleteUserRole(id)));
+  secureIpc.handle('settings:addConfigOption', (_event, type: string, value: string) => mutateWorkspaceSettings(() => db.addConfigOption(type, value)));
+  secureIpc.handle('settings:updateConfigOption', (_event, id: number, value: string) => mutateWorkspaceSettings(() => db.updateConfigOption(id, value)));
+  secureIpc.handle('settings:deleteConfigOption', (_event, id: number) => mutateWorkspaceSettings(() => db.deleteConfigOption(id)));
+  secureIpc.handle('settings:saveTemplate', (_event, id: number | null, name: string, templateText: string) => mutateWorkspaceSettings(() => db.saveTemplate(id, name, templateText)));
+  secureIpc.handle('settings:updateJiraWorkspaceUrl', (_event, value: string) => mutateSettings(() => db.updateJiraWorkspaceUrl(value)));
+  secureIpc.handle('settings:updateAutoBackupDirectoryPath', (_event, value: string) => mutateSettings(() => db.updateAutoBackupDirectoryPath(value)));
+  secureIpc.handle('settings:updateQuickCaptureAnnotationReview', (_event, enabled: boolean) => mutateSettings(() => db.updateQuickCaptureAnnotationReview(enabled)));
+  secureIpc.handle('settings:updateAiTriageOptions', (_event, enabled: boolean, modelName: string) => mutateSettings(() => db.updateAiTriageOptions(enabled, modelName)));
+  registerGetByokAiConfigIpc(secureIpc, () => getByokAiConfig(db));
+  secureIpc.handle('save-ai-config', (_event, input: AiConfigSaveInput) =>
     mutateSettings(() => saveByokAiConfig(db, input))
   );
-  ipcMain.handle('settings:updateSupabaseSettings', (_event, projectUrl: string, anonKey: string) =>
+  secureIpc.handle('settings:updateSupabaseSettings', (_event, projectUrl: string, anonKey: string) =>
     mutateSettings(() => {
       const result = db.updateSupabaseSettings(projectUrl, anonKey);
       syncEngine?.initialize();
       return result;
     })
   );
-  ipcMain.handle('settings:toggleStartup', (_event, enabled: boolean) =>
+  secureIpc.handle('settings:toggleStartup', (_event, enabled: boolean) =>
     mutateSettings(() => {
       const value = db.updateRunOnSystemStartup(enabled);
       enforceStartupPreference(value);
       return value;
     })
   );
-  ipcMain.handle('settings:mergeReference', (_event, tableName: ReferenceTable, sourceId: number, targetId: number) => mutateSettings(() => db.mergeReferenceOption(tableName, sourceId, targetId)));
-  ipcMain.handle('settings:createPreset', (_event, input: CapturePresetInput) => mutateSettings(() => db.createPreset(input)));
-  ipcMain.handle('settings:updatePreset', (_event, id: number, input: CapturePresetInput) => mutateSettings(() => db.updatePreset(id, input)));
-  ipcMain.handle('settings:deletePreset', (_event, id: number) => mutateSettings(() => db.deletePreset(id)));
-  ipcMain.handle('settings:updateShortcut', (_event, action: ShortcutAction, accelerator: string, enabled: boolean) => {
+  secureIpc.handle('settings:mergeReference', (_event, tableName: ReferenceTable, sourceId: TaxonomyId, targetId: TaxonomyId) => mutateWorkspaceSettings(() => db.mergeReferenceOption(tableName, sourceId, targetId)));
+  secureIpc.handle('settings:createPreset', (_event, input: CapturePresetInput) => mutateSettings(() => db.createPreset(input)));
+  secureIpc.handle('settings:updatePreset', (_event, id: number, input: CapturePresetInput) => mutateSettings(() => db.updatePreset(id, input)));
+  secureIpc.handle('settings:deletePreset', (_event, id: number) => mutateSettings(() => db.deletePreset(id)));
+  secureIpc.handle('settings:updateShortcut', (_event, action: ShortcutAction, accelerator: string, enabled: boolean) => {
     db.updateShortcut(action, accelerator, enabled);
     registerAppShortcuts();
     return settingsWithShortcutStatus().shortcuts.find((shortcut: ShortcutSetting) => shortcut.action === action);
   });
-  ipcMain.handle('shortcuts:suspend', () => suspendAppShortcuts());
-  ipcMain.handle('shortcuts:resume', () => registerAppShortcuts());
-  ipcMain.handle('bugs:list', (_event, filters) => db.listBugs(filters));
-  ipcMain.handle('bugs:count', () => db.getTotalBugCount());
-  ipcMain.handle('bugs:get', (_event, id: number) => db.getBug(id));
-  ipcMain.handle('bugs:createQuick', (_event, input) => {
-    const bug = db.createQuickBug(input);
+  secureIpc.handle('shortcuts:suspend', () => suspendAppShortcuts());
+  secureIpc.handle('shortcuts:resume', () => registerAppShortcuts());
+  secureIpc.handle('bugs:list', (_event, filters) => db.listBugs(filters));
+  secureIpc.handle('bugs:count', () => db.getTotalBugCount());
+  secureIpc.handle('bugs:get', (_event, id: number) => db.getBug(id));
+  secureIpc.handle('bugs:createQuick', (_event, input) => {
+    const bug = mutateWorkspace(() => db.createQuickBug(input));
     quickWindow?.hide();
     mainWindow?.webContents.send('bugs:changed');
     notifySaved('Capture saved locally.');
     return bug;
   });
-  ipcMain.handle('bugs:update', (_event, id: number, input) => {
-    const updated = db.updateBug(id, input);
+  secureIpc.handle('bugs:update', (_event, id: number, input) => {
+    const updated = mutateWorkspace(() => db.updateBug(id, input));
     mainWindow?.webContents.send('bugs:changed');
     return updated;
   });
-  ipcMain.handle('bugs:delete', (_event, id: number) => {
-    db.deleteBug(id);
-    mainWindow?.webContents.send('bugs:changed');
-    mainWindow?.webContents.send('app:toast', 'Report deleted.');
+  registerBugDeletionIpc(secureIpc, {
+    authorizeMutation: assertCurrentWorkspaceWriteAccess,
+    deleteBug: (id) => db.deleteBug(id),
+    emitBugsChanged: () => mainWindow?.webContents.send('bugs:changed'),
+    emitDeletedToast: () => mainWindow?.webContents.send('app:toast', 'Report deleted.')
   });
-  ipcMain.handle('attachments:delete', (_event, id: number) => {
-    db.deleteAttachment(id);
+  secureIpc.handle('attachments:delete', (_event, id: number) => {
+    mutateWorkspace(() => db.deleteAttachment(id));
     mainWindow?.webContents.send('bugs:changed');
   });
-  ipcMain.handle('attachments:download', async (_event, id: number) => {
+  secureIpc.handle('attachments:download', async (_event, id: number) => {
     const result = await downloadAttachment(id);
     if (result.success) mainWindow?.webContents.send('app:toast', 'Screenshot downloaded.');
     else if (!result.canceled) mainWindow?.webContents.send('app:toast', result.error || 'Unable to download screenshot.', 'error');
     return result;
   });
-  ipcMain.handle('attachments:saveAnnotated', (_event, parentId: number, dataUrl: string) => saveAnnotatedAttachment(parentId, dataUrl));
-  ipcMain.handle('attachments:previewDataUrl', (_event, id: number) => {
+  secureIpc.handle('attachments:saveAnnotated', (_event, parentId: number, dataUrl: string) => mutateWorkspace(() => saveAnnotatedAttachment(parentId, dataUrl)));
+  secureIpc.handle('attachments:previewDataUrl', (_event, id: number) => {
     const attachment = db.getAttachment(id);
     if (!attachment) return '';
     const filePath = db.resolveAttachmentPath(attachment.content_hash, attachment.file_extension);
@@ -966,62 +966,72 @@ function registerIpc(): void {
       return '';
     }
   });
-  ipcMain.handle('attachments:lineage', (_event, id: number) => db.getAttachmentLineage(id));
-  ipcMain.handle('attachments:resolvePath', (_event, id: number) => {
-    const attachment = db.getAttachment(id);
-    return attachment ? db.resolveAttachmentPath(attachment.content_hash, attachment.file_extension) : '';
-  });
-  ipcMain.handle('clipboard:copy', (_event, text: string) => clipboard.writeText(text));
-  ipcMain.handle('shell:openExternal', (_event, url: string) => {
+  secureIpc.handle('attachments:lineage', (_event, id: number) => db.getAttachmentLineage(id));
+  secureIpc.handle('clipboard:copy', (_event, text: string) => clipboard.writeText(text));
+  secureIpc.handle('shell:openExternal', (_event, url: string) => {
     const parsed = new URL(url);
     if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only web URLs can be opened.');
     return shell.openExternal(parsed.toString());
   });
-  ipcMain.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => syncEngine.sendFeedback(payload));
+  secureIpc.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => syncEngine.sendFeedback(payload));
 
-  ipcMain.handle('details:setDirty', (_event, dirty: boolean) => {
+  secureIpc.handle('details:setDirty', (_event, dirty: boolean) => {
     rendererHasDirtyDetails = !!dirty;
   });
-  ipcMain.handle('details:flushComplete', () => {
+  secureIpc.handle('details:flushComplete', () => {
     finishPendingMainClose();
   });
-  ipcMain.handle('screenshot:start', (_event, bugId?: number) => startScreenshotCapture(bugId));
-  ipcMain.handle('screenshot:getSource', () => currentScreenshotSource);
-  ipcMain.handle('screenshot:complete', (_event, dataUrl: string) => saveScreenshot(dataUrl));
-  ipcMain.handle('screenshot:cancel', () => cancelScreenshotCapture());
-  ipcMain.handle('quickScreenshot:getPending', () => pendingQuickScreenshotDataUrl);
-  ipcMain.handle('quickScreenshot:attachPending', (_event, dataUrl: string) => attachPendingQuickScreenshot(dataUrl));
-  ipcMain.handle('quickScreenshot:discardPending', () => discardPendingQuickScreenshot());
-  ipcMain.handle('backup:export', () => exportBackup());
-  ipcMain.handle('backup:import', () => importBackup());
-  ipcMain.handle('backup:chooseDirectory', () => chooseBackupDirectory());
-  ipcMain.handle('app:factoryReset', async () => {
+  secureIpc.handle('screenshot:start', (_event, bugId?: number) => mutateWorkspace(() => startScreenshotCapture(bugId)));
+  secureIpc.handle('screenshot:getSource', () => currentScreenshotSource);
+  secureIpc.handle('screenshot:complete', (_event, dataUrl: string) => mutateWorkspace(() => saveScreenshot(dataUrl)));
+  secureIpc.handle('screenshot:cancel', () => cancelScreenshotCapture());
+  secureIpc.handle('quickScreenshot:getPending', () => pendingQuickScreenshotDataUrl);
+  secureIpc.handle('quickScreenshot:attachPending', (_event, dataUrl: string) => mutateWorkspace(() => attachPendingQuickScreenshot(dataUrl)));
+  secureIpc.handle('quickScreenshot:discardPending', () => discardPendingQuickScreenshot());
+  secureIpc.handle('backup:export', () => exportBackup());
+  secureIpc.handle('backup:import', () => importBackup());
+  secureIpc.handle('backup:chooseDirectory', () => chooseBackupDirectory());
+  secureIpc.handle('app:clearCurrentWorkspace', async () => {
+    await syncEngine.pauseWorkspaceSync();
+    const result = await db.clearCurrentWorkspace();
+    mainWindow?.webContents.send('bugs:changed');
+    mainWindow?.webContents.send('settings:changed');
+    return { success: true, ...result };
+  });
+  secureIpc.handle('app:factoryReset', async () => {
+    await syncEngine.stopAndWait();
     await db.factoryReset();
     app.relaunch();
     app.exit(0);
     return { success: true };
   });
-  ipcMain.handle('sync:testConnection', () => syncEngine.testConnection());
-  ipcMain.handle('sync:authSignIn', (_event, email: string, password: string) => syncEngine.authSignIn(email, password));
-  ipcMain.handle('sync:authSignUp', (_event, email: string, password: string) => syncEngine.authSignUp(email, password));
-  ipcMain.handle('sync:authSignOut', () => syncEngine.authSignOut());
-  ipcMain.handle('sync:getSessionStatus', () => syncEngine.getSyncSessionStatus());
-  ipcMain.handle('sync:listWorkspaces', () => syncEngine.listWorkspaceMemberships());
-  ipcMain.handle('sync:updateWorkspaceName', (_event, workspaceId: string, name: string) => syncEngine.updateWorkspaceName(workspaceId, name));
-  ipcMain.handle('sync:getWorkspaceRole', (_event, workspaceId: string | null) => db.getWorkspaceRole(workspaceId));
-  ipcMain.handle('sync:getDiagnostics', () => db.getSyncDiagnostics());
-  ipcMain.handle('sync:forceRetry', async () => {
+  secureIpc.handle('app:installUpdate', () => installDownloadedUpdate(autoUpdater, gracefulShutdown));
+  secureIpc.handle('sync:testConnection', () => syncEngine.testConnection());
+  secureIpc.handle('sync:authSignIn', (_event, email: string, password: string) => syncEngine.authSignIn(email, password));
+  secureIpc.handle('sync:authSignUp', (_event, email: string, password: string) => syncEngine.authSignUp(email, password));
+  secureIpc.handle('sync:authSignOut', async () => {
+    const result = await syncEngine.authSignOut();
+    mainWindow?.webContents.send('bugs:changed');
+    return result;
+  });
+  secureIpc.handle('sync:getSessionStatus', () => syncEngine.getSyncSessionStatus());
+  secureIpc.handle('sync:listWorkspaces', () => syncEngine.listWorkspaceMemberships());
+  secureIpc.handle('sync:updateWorkspaceName', (_event, workspaceId: string, name: string) => mutateWorkspace(() => syncEngine.updateWorkspaceName(workspaceId, name)));
+  secureIpc.handle('sync:getWorkspaceRole', (_event, workspaceId: string | null) => db.getWorkspaceRole(workspaceId));
+  secureIpc.handle('sync:getDiagnostics', () => db.getSyncDiagnostics());
+  secureIpc.handle('sync:forceRetry', async () => {
+    assertCurrentWorkspaceWriteAccess();
     db.resetSyncQueueRetries();
     await syncEngine.retrySyncQueueNow();
     return db.getSyncDiagnostics();
   });
-  ipcMain.handle('sync:switchWorkspace', async (_event, workspaceId: string) => {
+  secureIpc.handle('sync:switchWorkspace', async (_event, workspaceId: string) => {
     const result = await syncEngine.switchWorkspace(workspaceId);
     if (result.success) mainWindow?.webContents.send('bugs:changed');
     return result;
   });
-  ipcMain.handle('ai:triageBug', (_event, bugData: unknown) => triageBugWithConfiguredAi(bugData));
-  ipcMain.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => processIssueWithByokAi(db, payload));
+  secureIpc.handle('ai:triageBug', (_event, bugData: unknown) => triageBugWithConfiguredAi(bugData));
+  secureIpc.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => processIssueWithByokAi(db, payload));
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -1033,18 +1043,38 @@ if (!gotTheLock) {
     openMainWindow('/dashboard');
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    await waitForSafeStorageEncryption();
     db = new BugPocketDatabase();
+    if (packagedSmokeTest) {
+      const bugCount = db.getTotalBugCount();
+      const packagedIconPath = getAssetPath('icon.ico');
+      const packagedIcon = nativeImage.createFromPath(packagedIconPath);
+      if (packagedIcon.isEmpty()) {
+        throw new Error(`Packaged Tray icon failed to load: ${packagedIconPath}`);
+      }
+      createTray();
+      console.log(`[packaged-smoke] database-ready bug-count=${bugCount}`);
+      console.log(`[packaged-smoke] native-integrations-ready tray-icon=${packagedIconPath}`);
+      tray?.destroy();
+      tray = null;
+      db.close();
+      app.exit(0);
+      return;
+    }
     syncEngine = new SyncEngine(db, () => mainWindow?.webContents.send('bugs:changed'));
     syncEngine.initialize();
+    await syncEngine.restorePersistedSession();
     enforceStartupPreference(db.getRunOnSystemStartup());
     registerIpc();
-    initializeAutoUpdater();
+    configureAutoUpdater(autoUpdater, log, {
+      onUpdateReady: () => mainWindow?.webContents.send('update-ready')
+    });
     createMainWindow('/dashboard', !process.argv.includes(backgroundStartArg));
     if (app.isPackaged) {
-      // Execute silent background update check against the private S3 feed.
       autoUpdater.checkForUpdatesAndNotify().catch((error) => {
-        log.error('[auto-updater] Silent update check failed:', error);
+        console.log('[auto-updater] Update check failed:', error);
+        log.error('[auto-updater] Update check failed:', error);
       });
     }
     createQuickWindow();
@@ -1053,13 +1083,36 @@ if (!gotTheLock) {
     setTimeout(() => {
       void runAutomatedStartupBackup();
     }, 1500);
+  }).catch((caught) => {
+    const message = caught instanceof Error ? caught.message : String(caught);
+    log.error('[startup] Bug Pocket initialization failed:', caught);
+    if (packagedSmokeTest) {
+      console.error(`[packaged-smoke] startup-failed ${message}`);
+      app.exit(1);
+      return;
+    }
+    dialog.showErrorBox('Bug Pocket could not start', message);
+    app.quit();
   });
 }
 
 app.on('window-all-closed', () => {});
 
+app.on('before-quit', (event) => {
+  if (gracefulShutdownComplete) return;
+  event.preventDefault();
+  void gracefulShutdown()
+    .then(() => app.quit())
+    .catch((error) => {
+      log.error('[shutdown] Graceful shutdown failed; quit was cancelled.', error);
+      dialog.showErrorBox(
+        'Bug Pocket could not close safely',
+        'An active operation could not be completed. Bug Pocket will remain open so your data is not interrupted.'
+      );
+    });
+});
+
 app.on('will-quit', () => {
-  syncEngine?.stop();
   globalShortcut.unregisterAll();
 });
 
