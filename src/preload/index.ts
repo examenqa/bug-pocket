@@ -89,6 +89,13 @@ const api = {
   clearCurrentWorkspace: () => ipcRenderer.invoke('app:clearCurrentWorkspace'),
   factoryReset: () => ipcRenderer.invoke('app:factoryReset'),
   installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
+  onUpdateReady: (callback: () => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('update-ready', listener);
+    return () => {
+      ipcRenderer.removeListener('update-ready', listener);
+    };
+  },
   triageBug: (bugData: unknown) => ipcRenderer.invoke('ai:triageBug', bugData),
   processIssueWithByokAi: (payload: AiIssueProcessPayload) => ipcRenderer.invoke('ai:processIssueWithByok', payload),
   onQuickScreenshotReviewReady: (callback: () => void) => {

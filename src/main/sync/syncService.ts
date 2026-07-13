@@ -6,6 +6,7 @@ import { createClient, type SupabaseClient, type SupportedStorage, type WebSocke
 import WebSocket from 'ws';
 import type { BugDetails, FeedbackPayload, SyncAuthResult, SyncConnectionResult, SyncQueueEvent, SyncSessionStatus, SyncWorkspaceOption, WorkspaceRole } from '../../shared/types';
 import type { BugPocketDatabase } from '../database';
+import { operationBarrier } from '../OperationBarrier';
 import {
   buildAttachmentDownloadTarget,
   normalizeAttachmentExtension,
@@ -311,7 +312,16 @@ export class SyncEngine {
     return authenticated;
   }
 
+  async resumeAfterFailedShutdown(): Promise<void> {
+    const authenticated = await this.restorePersistedSession();
+    if (authenticated) this.client?.auth.startAutoRefresh();
+  }
+
   async switchWorkspace(newWorkspaceId: string): Promise<SyncAuthResult> {
+    return operationBarrier.acquire(this.switchWorkspaceInternal(newWorkspaceId));
+  }
+
+  private async switchWorkspaceInternal(newWorkspaceId: string): Promise<SyncAuthResult> {
     const workspaceId = newWorkspaceId.trim();
     if (!workspaceId) {
       return {
@@ -371,7 +381,7 @@ export class SyncEngine {
       await this.waitForQueueIdle();
       this.retryCounts.clear();
       this.retryDelayUntil = 0;
-      this.database.connectToWorkspace(workspaceId);
+      await this.database.connectToWorkspaceTracked(workspaceId);
       this.database.setCloudSyncSessionActive(true);
     } catch (caught) {
       this.syncSuspended = false;

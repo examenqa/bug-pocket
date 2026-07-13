@@ -15,6 +15,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { basename, join, resolve, sep } from 'node:path';
 import type { BackupExportResult } from '../../shared/types';
+import { operationBarrier } from '../OperationBarrier';
 
 const manifestNames = ['manifest.json', 'backup-manifest.json'] as const;
 const stagingDirectoryName = '.staging_restore';
@@ -88,7 +89,7 @@ export function cleanupSqliteSidecars(userDataPath: string): void {
     });
 }
 
-export async function createBackupArchive(
+async function createBackupArchiveInternal(
   filePath: string,
   source: BackupArchiveSource,
   tempDirectory: string
@@ -214,6 +215,14 @@ export async function createBackupArchive(
   } finally {
     tempDatabasePaths.forEach((tempPath) => rmSync(tempPath, { force: true }));
   }
+}
+
+export function createBackupArchive(
+  filePath: string,
+  source: BackupArchiveSource,
+  tempDirectory: string
+): Promise<BackupExportResult> {
+  return operationBarrier.acquire(createBackupArchiveInternal(filePath, source, tempDirectory));
 }
 
 function validateArchivePath(rawPath: string, stagingPath: string): string {
@@ -421,7 +430,7 @@ async function commitValidatedBackup(
   }
 }
 
-export async function restoreBackupArchive(
+async function restoreBackupArchiveInternal(
   backupPath: string,
   userDataPath: string,
   hooks: RestoreBackupHooks
@@ -462,4 +471,12 @@ export async function restoreBackupArchive(
     rmSync(stagingPath, { recursive: true, force: true });
     throw error;
   }
+}
+
+export function restoreBackupArchive(
+  backupPath: string,
+  userDataPath: string,
+  hooks: RestoreBackupHooks
+): Promise<void> {
+  return operationBarrier.acquire(restoreBackupArchiveInternal(backupPath, userDataPath, hooks));
 }

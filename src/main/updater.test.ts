@@ -67,6 +67,9 @@ test('update installation drains sync and disconnects SQLite before terminating'
 
   const installation = installDownloadedUpdate(updater, () => runGracefulShutdown({
     pauseRenderer: () => lifecycle.push('renderer-paused'),
+    drainOperations: async () => {
+      lifecycle.push('operations-drained');
+    },
     stopAndDrain: () => syncService.stopAndDrain(),
     disconnectWorkspace: () => syncService.disconnectWorkspace()
   }));
@@ -85,6 +88,7 @@ test('update installation drains sync and disconnects SQLite before terminating'
   assert.deepEqual(updater.quitAndInstallArguments, [[true, false]], 'The installer must not relaunch the app.');
   assert.deepEqual(lifecycle, [
     'renderer-paused',
+    'operations-drained',
     'drain-started',
     'write-completed',
     'drain-completed',

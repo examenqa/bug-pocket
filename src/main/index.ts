@@ -17,7 +17,8 @@ import { resolveVerifiedTriageAttachmentPath } from './ai/triageAttachment';
 import { SyncEngine } from './sync/syncService';
 import { createBackupArchive, restoreBackupArchive } from './sync/backupService';
 import { getAssetPath } from './assetPaths';
-import { configureAutoUpdater, installDownloadedUpdate, runGracefulShutdown } from './updater';
+import { configureAutoUpdater, registerUpdateInstallIpc, runGracefulShutdown } from './updater';
+import { operationBarrier } from './OperationBarrier';
 import type { AiConfigSaveInput, AiIssueProcessPayload, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting, TaxonomyId } from '../shared/types';
 
 const packagedSmokeUserData = process.env.BUG_POCKET_SMOKE_USER_DATA?.trim();
@@ -78,6 +79,7 @@ async function gracefulShutdown(): Promise<void> {
 
   gracefulShutdownPromise = runGracefulShutdown({
     pauseRenderer: pauseRendererForShutdown,
+    drainOperations: () => operationBarrier.drain(),
     stopAndDrain: async () => {
       await syncEngine?.stopAndDrain();
     },
@@ -95,6 +97,7 @@ async function gracefulShutdown(): Promise<void> {
   try {
     await gracefulShutdownPromise;
   } catch (error) {
+    console.error('[shutdown] Graceful shutdown failed. Attempting to restore background services.', error);
     gracefulShutdownPromise = null;
     shutdownInProgress = false;
     isQuitting = false;
@@ -102,6 +105,20 @@ async function gracefulShutdown(): Promise<void> {
       window.setIgnoreMouseEvents(false);
       window.setFocusable(true);
     });
+    if (db?.isOpen()) {
+      try {
+        await syncEngine?.resumeAfterFailedShutdown();
+      } catch (recoveryError) {
+        console.error('[shutdown] Failed to restart background sync after shutdown recovery.', recoveryError);
+      }
+      try {
+        registerAppShortcuts();
+      } catch (recoveryError) {
+        console.error('[shutdown] Failed to restore global shortcuts after shutdown recovery.', recoveryError);
+      }
+    } else {
+      console.error('[shutdown] Database closure completed before the failure; background services cannot be restarted safely.');
+    }
     throw error;
   }
 }
@@ -947,12 +964,12 @@ function registerIpc(): void {
     mutateWorkspace(() => db.deleteAttachment(id));
     mainWindow?.webContents.send('bugs:changed');
   });
-  secureIpc.handle('attachments:download', async (_event, id: number) => {
+  secureIpc.handle('attachments:download', async (_event, id: number) => operationBarrier.acquire((async () => {
     const result = await downloadAttachment(id);
     if (result.success) mainWindow?.webContents.send('app:toast', 'Screenshot downloaded.');
     else if (!result.canceled) mainWindow?.webContents.send('app:toast', result.error || 'Unable to download screenshot.', 'error');
     return result;
-  });
+  })()));
   secureIpc.handle('attachments:saveAnnotated', (_event, parentId: number, dataUrl: string) => mutateWorkspace(() => saveAnnotatedAttachment(parentId, dataUrl)));
   secureIpc.handle('attachments:previewDataUrl', (_event, id: number) => {
     const attachment = db.getAttachment(id);
@@ -973,7 +990,7 @@ function registerIpc(): void {
     if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only web URLs can be opened.');
     return shell.openExternal(parsed.toString());
   });
-  secureIpc.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => syncEngine.sendFeedback(payload));
+  secureIpc.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => operationBarrier.acquire(syncEngine.sendFeedback(payload)));
 
   secureIpc.handle('details:setDirty', (_event, dirty: boolean) => {
     rendererHasDirtyDetails = !!dirty;
@@ -1005,7 +1022,7 @@ function registerIpc(): void {
     app.exit(0);
     return { success: true };
   });
-  secureIpc.handle('app:installUpdate', () => installDownloadedUpdate(autoUpdater, gracefulShutdown));
+  registerUpdateInstallIpc(secureIpc, autoUpdater, gracefulShutdown);
   secureIpc.handle('sync:testConnection', () => syncEngine.testConnection());
   secureIpc.handle('sync:authSignIn', (_event, email: string, password: string) => syncEngine.authSignIn(email, password));
   secureIpc.handle('sync:authSignUp', (_event, email: string, password: string) => syncEngine.authSignUp(email, password));
@@ -1030,8 +1047,8 @@ function registerIpc(): void {
     if (result.success) mainWindow?.webContents.send('bugs:changed');
     return result;
   });
-  secureIpc.handle('ai:triageBug', (_event, bugData: unknown) => triageBugWithConfiguredAi(bugData));
-  secureIpc.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => processIssueWithByokAi(db, payload));
+  secureIpc.handle('ai:triageBug', (_event, bugData: unknown) => operationBarrier.acquire(triageBugWithConfiguredAi(bugData)));
+  secureIpc.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => operationBarrier.acquire(processIssueWithByokAi(db, payload)));
 }
 
 const gotTheLock = app.requestSingleInstanceLock();

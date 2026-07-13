@@ -33,6 +33,7 @@ import type {
   WorkspaceRole,
   AiProvider
 } from '../shared/types';
+import { operationBarrier } from './OperationBarrier';
 import { resolveAttachmentFilePath, validateAttachmentMetadata } from './sync/attachmentPaths';
 
 const now = (): string => new Date().toISOString();
@@ -563,6 +564,11 @@ export class BugPocketDatabase {
     this.workspaceDb.pragma('foreign_keys = OFF');
     this.updateCurrentWorkspaceId(cleaned);
     return cleaned;
+  }
+
+  connectToWorkspaceTracked(workspaceId: string): Promise<string | null> {
+    const operation = Promise.resolve().then(() => this.connectToWorkspace(workspaceId));
+    return operationBarrier.acquire(operation);
   }
 
   private openDatabase(path: string, enforceForeignKeys = true): Database.Database {

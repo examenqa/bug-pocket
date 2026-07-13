@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, ChevronDown, Cloud, CloudOff, Database, FileText, HelpCircle, Home, Keyboard, Settings as SettingsIcon, SlidersHorizontal } from 'lucide-react';
+import { Bot, ChevronDown, Cloud, CloudOff, Database, FileText, HelpCircle, Home, Keyboard, RefreshCw, Settings as SettingsIcon, SlidersHorizontal } from 'lucide-react';
 import type { ScreenshotResult, SettingsData } from '../../shared/types';
 import { QuickCaptureDraft, QuickCaptureForm } from './components/QuickCaptureForm';
 import { useSettings } from './hooks/useSettings';
@@ -123,6 +123,8 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   const [supportAnchorRect, setSupportAnchorRect] = useState<DOMRect | null>(null);
   const supportButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(() => route.startsWith('/settings'));
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
   const showingDetails = selectedBugId != null && !route.startsWith('/settings');
   const activeView = route.startsWith('/settings') ? 'settings' : 'dashboard';
   const activeWorkspaceId = settings.currentWorkspaceId?.trim() ?? '';
@@ -135,6 +137,18 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   useEffect(() => {
     if (route.startsWith('/settings')) setIsSettingsExpanded(true);
   }, [route]);
+
+  useEffect(() => window.bugPocket.onUpdateReady(() => setUpdateAvailable(true)), []);
+
+  const installUpdate = async (): Promise<void> => {
+    setInstallingUpdate(true);
+    try {
+      await window.bugPocket.installUpdate();
+    } catch (error) {
+      console.error('Unable to install the staged update.', error);
+      setInstallingUpdate(false);
+    }
+  };
 
   const closeBugDetails = (): void => {
     setSelectedBugId(null);
@@ -224,6 +238,15 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
         }}
       />
       <SupportModal mode={supportModalMode} open={isSupportModalOpen} onClose={() => setIsSupportModalOpen(false)} />
+      {updateAvailable && (
+        <div className="update-ready-banner" role="status" aria-live="polite">
+          <RefreshCw size={18} aria-hidden="true" />
+          <span>Update Ready</span>
+          <button type="button" onClick={() => void installUpdate()} disabled={installingUpdate}>
+            {installingUpdate ? 'Restarting...' : 'Restart to Install'}
+          </button>
+        </div>
+      )}
       <main className="content">
         {route.startsWith('/settings') ? (
           <SettingsPage settings={settings} refresh={refresh} route={route} />
