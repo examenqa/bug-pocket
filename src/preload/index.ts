@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction } from '../shared/types';
+import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction, TaxonomyId } from '../shared/types';
 
 const api = {
   openQuickCapture: () => ipcRenderer.invoke('window:openQuickCapture'),
@@ -10,26 +10,26 @@ const api = {
   restoreQuickCaptureCompact: () => ipcRenderer.invoke('window:restoreQuickCaptureCompact'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   addApplication: (name: string, contextDescription?: string | null) => ipcRenderer.invoke('settings:addApplication', name, contextDescription ?? ''),
-  updateApplication: (id: number, name: string, contextDescription = '') => ipcRenderer.invoke('settings:updateApplication', id, name, contextDescription),
-  updateApplicationContext: (id: number, contextDescription: string) => ipcRenderer.invoke('settings:updateApplicationContext', id, contextDescription),
-  updateApplicationSync: (id: number, isSynced: boolean) => ipcRenderer.invoke('settings:updateApplicationSync', id, isSynced),
-  deleteApplication: (id: number) => ipcRenderer.invoke('settings:deleteApplication', id),
-  addModule: (name: string, applicationId: number | null, contextDescription = '') => ipcRenderer.invoke('settings:addModule', name, applicationId, contextDescription),
-  updateModule: (id: number, name: string, applicationId: number | null, contextDescription = '') => ipcRenderer.invoke('settings:updateModule', id, name, applicationId, contextDescription),
-  updateModuleContext: (id: number, contextDescription: string) => ipcRenderer.invoke('settings:updateModuleContext', id, contextDescription),
-  deleteModule: (id: number) => ipcRenderer.invoke('settings:deleteModule', id),
+  updateApplication: (id: TaxonomyId, name: string, contextDescription = '') => ipcRenderer.invoke('settings:updateApplication', id, name, contextDescription),
+  updateApplicationContext: (id: TaxonomyId, contextDescription: string) => ipcRenderer.invoke('settings:updateApplicationContext', id, contextDescription),
+  updateApplicationSync: (id: TaxonomyId, isSynced: boolean) => ipcRenderer.invoke('settings:updateApplicationSync', id, isSynced),
+  deleteApplication: (id: TaxonomyId) => ipcRenderer.invoke('settings:deleteApplication', id),
+  addModule: (name: string, applicationId: TaxonomyId | null, contextDescription = '') => ipcRenderer.invoke('settings:addModule', name, applicationId, contextDescription),
+  updateModule: (id: TaxonomyId, name: string, applicationId: TaxonomyId | null, contextDescription = '') => ipcRenderer.invoke('settings:updateModule', id, name, applicationId, contextDescription),
+  updateModuleContext: (id: TaxonomyId, contextDescription: string) => ipcRenderer.invoke('settings:updateModuleContext', id, contextDescription),
+  deleteModule: (id: TaxonomyId) => ipcRenderer.invoke('settings:deleteModule', id),
   addEnvironment: (name: string) => ipcRenderer.invoke('settings:addEnvironment', name),
-  updateEnvironment: (id: number, name: string) => ipcRenderer.invoke('settings:updateEnvironment', id, name),
-  deleteEnvironment: (id: number) => ipcRenderer.invoke('settings:deleteEnvironment', id),
+  updateEnvironment: (id: TaxonomyId, name: string) => ipcRenderer.invoke('settings:updateEnvironment', id, name),
+  deleteEnvironment: (id: TaxonomyId) => ipcRenderer.invoke('settings:deleteEnvironment', id),
   addDevice: (name: string) => ipcRenderer.invoke('settings:addDevice', name),
-  updateDevice: (id: number, name: string) => ipcRenderer.invoke('settings:updateDevice', id, name),
-  deleteDevice: (id: number) => ipcRenderer.invoke('settings:deleteDevice', id),
+  updateDevice: (id: TaxonomyId, name: string) => ipcRenderer.invoke('settings:updateDevice', id, name),
+  deleteDevice: (id: TaxonomyId) => ipcRenderer.invoke('settings:deleteDevice', id),
   addBrowser: (name: string) => ipcRenderer.invoke('settings:addBrowser', name),
-  updateBrowser: (id: number, name: string) => ipcRenderer.invoke('settings:updateBrowser', id, name),
-  deleteBrowser: (id: number) => ipcRenderer.invoke('settings:deleteBrowser', id),
+  updateBrowser: (id: TaxonomyId, name: string) => ipcRenderer.invoke('settings:updateBrowser', id, name),
+  deleteBrowser: (id: TaxonomyId) => ipcRenderer.invoke('settings:deleteBrowser', id),
   addUserRole: (name: string) => ipcRenderer.invoke('settings:addUserRole', name),
-  updateUserRole: (id: number, name: string) => ipcRenderer.invoke('settings:updateUserRole', id, name),
-  deleteUserRole: (id: number) => ipcRenderer.invoke('settings:deleteUserRole', id),
+  updateUserRole: (id: TaxonomyId, name: string) => ipcRenderer.invoke('settings:updateUserRole', id, name),
+  deleteUserRole: (id: TaxonomyId) => ipcRenderer.invoke('settings:deleteUserRole', id),
   addConfigOption: (type: string, value: string) => ipcRenderer.invoke('settings:addConfigOption', type, value),
   updateConfigOption: (id: number, value: string) => ipcRenderer.invoke('settings:updateConfigOption', id, value),
   deleteConfigOption: (id: number) => ipcRenderer.invoke('settings:deleteConfigOption', id),
@@ -39,7 +39,7 @@ const api = {
   updateAutoBackupDirectoryPath: (value: string) => ipcRenderer.invoke('settings:updateAutoBackupDirectoryPath', value),
   updateQuickCaptureAnnotationReview: (enabled: boolean) => ipcRenderer.invoke('settings:updateQuickCaptureAnnotationReview', enabled),
   updateAiTriageOptions: (enabled: boolean, modelName: string) => ipcRenderer.invoke('settings:updateAiTriageOptions', enabled, modelName),
-  getAiConfig: () => ipcRenderer.invoke('get-ai-config'),
+  getAiConfig: (): Promise<AiByokConfig> => ipcRenderer.invoke('get-ai-config'),
   saveAiConfig: (input: AiConfigSaveInput): Promise<AiByokConfig> => ipcRenderer.invoke('save-ai-config', input),
   updateSupabaseSettings: (projectUrl: string, anonKey: string) => ipcRenderer.invoke('settings:updateSupabaseSettings', projectUrl, anonKey),
   testSupabaseConnection: () => ipcRenderer.invoke('sync:testConnection'),
@@ -54,7 +54,7 @@ const api = {
   forceRetrySyncQueue: () => ipcRenderer.invoke('sync:forceRetry'),
   switchWorkspace: (workspaceId: string) => ipcRenderer.invoke('sync:switchWorkspace', workspaceId),
   toggleStartup: (enabled: boolean) => ipcRenderer.invoke('settings:toggleStartup', enabled),
-  mergeReference: (tableName: ReferenceTable, sourceId: number, targetId: number) => ipcRenderer.invoke('settings:mergeReference', tableName, sourceId, targetId),
+  mergeReference: (tableName: ReferenceTable, sourceId: TaxonomyId, targetId: TaxonomyId) => ipcRenderer.invoke('settings:mergeReference', tableName, sourceId, targetId),
   createPreset: (input: CapturePresetInput) => ipcRenderer.invoke('settings:createPreset', input),
   updatePreset: (id: number, input: CapturePresetInput) => ipcRenderer.invoke('settings:updatePreset', id, input),
   deletePreset: (id: number) => ipcRenderer.invoke('settings:deletePreset', id),
@@ -71,14 +71,13 @@ const api = {
   saveAnnotatedAttachment: (parentId: number, dataUrl: string) => ipcRenderer.invoke('attachments:saveAnnotated', parentId, dataUrl),
   getAttachmentPreview: (id: number) => ipcRenderer.invoke('attachments:previewDataUrl', id),
   getAttachmentLineage: (id: number) => ipcRenderer.invoke('attachments:lineage', id),
-  resolveAttachmentPath: (id: number) => ipcRenderer.invoke('attachments:resolvePath', id),
   copyText: (text: string) => ipcRenderer.invoke('clipboard:copy', text),
   openExternalUrl: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
   sendFeedback: (payload: FeedbackPayload) => ipcRenderer.invoke('support:sendFeedback', payload),
   setDetailsDirty: (dirty: boolean) => ipcRenderer.invoke('details:setDirty', dirty),
   detailsFlushComplete: () => ipcRenderer.invoke('details:flushComplete'),
   startScreenshotCapture: (bugId?: number) => ipcRenderer.invoke('screenshot:start', bugId),
-  getScreenshotSource: () => ipcRenderer.invoke('screenshot:getSource'),
+  getScreenshotSource: (): Promise<Uint8Array | null> => ipcRenderer.invoke('screenshot:getSource'),
   completeScreenshotCapture: (dataUrl: string) => ipcRenderer.invoke('screenshot:complete', dataUrl),
   cancelScreenshotCapture: () => ipcRenderer.invoke('screenshot:cancel'),
   getPendingQuickScreenshot: () => ipcRenderer.invoke('quickScreenshot:getPending'),
@@ -87,7 +86,9 @@ const api = {
   exportBackup: () => ipcRenderer.invoke('backup:export'),
   importBackup: () => ipcRenderer.invoke('backup:import'),
   chooseBackupDirectory: () => ipcRenderer.invoke('backup:chooseDirectory'),
+  clearCurrentWorkspace: () => ipcRenderer.invoke('app:clearCurrentWorkspace'),
   factoryReset: () => ipcRenderer.invoke('app:factoryReset'),
+  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
   triageBug: (bugData: unknown) => ipcRenderer.invoke('ai:triageBug', bugData),
   processIssueWithByokAi: (payload: AiIssueProcessPayload) => ipcRenderer.invoke('ai:processIssueWithByok', payload),
   onQuickScreenshotReviewReady: (callback: () => void) => {
@@ -104,8 +105,8 @@ const api = {
       ipcRenderer.removeListener('screenshot:captured', listener);
     };
   },
-  onScreenshotSource: (callback: (dataUrl: string) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, dataUrl: string): void => callback(dataUrl);
+  onScreenshotSource: (callback: (pngBytes: Uint8Array) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, pngBytes: Uint8Array): void => callback(pngBytes);
     ipcRenderer.on('screenshot:source', listener);
     return () => {
       ipcRenderer.removeListener('screenshot:source', listener);

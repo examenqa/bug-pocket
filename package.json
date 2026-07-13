@@ -8,7 +8,22 @@
     "dev": "electron-vite dev",
     "build": "tsc --noEmit && electron-vite build && node scripts/fix-preload.js",
     "start": "electron-vite build && node scripts/fix-preload.js && electron .",
-    "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder --win nsis"
+    "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder --win nsis",
+    "test:packaged-smoke": "node scripts/smoke-test.cjs",
+    "test:packaged-smoke:build": "npm run build && electron-builder --win --dir && npm run test:packaged-smoke",
+    "test:updater": "node --import tsx --test src/main/updater.test.ts",
+    "test:security:workspace-self-enrollment": "node supabase/tests/workspace-self-enrollment.repro.cjs",
+    "test:security:supabase-schema-repeatability": "node --import tsx --test --test-name-pattern=\"schema-install\" src/main/sync/supabase.test.ts",
+    "test:security:supabase-boundaries": "node --import tsx --test src/main/sync/supabase.test.ts",
+    "test:security:attachment-paths": "node scripts/run-electron-test.cjs src/main/sync/syncService.test.ts",
+    "test:security:byok-ipc-leak": "node --test --test-isolation=none src/main/ipc/byokAiConfigIpc.test.ts",
+    "test:security:electron-boundaries": "node --test --test-isolation=none src/main/ipc/electronSecurityBoundaries.test.ts",
+    "test:security:developer-ipc": "node --test --test-isolation=none src/main/ipc/developerRoleAuthorization.test.ts",
+    "test:security:triage-attachment": "node --test --test-isolation=none src/main/ai/triageAttachment.test.ts",
+    "test:security:logout-db-handle": "node scripts/run-electron-test.cjs src/main/database.test.ts",
+    "test:security:destructive-backup-restore": "node scripts/run-electron-test.cjs src/main/sync/backupService.test.ts",
+    "test:regression:taxonomy-uuid": "node --import tsx --test src/renderer/src/components/shared/OptionSelect.test.tsx",
+    "test:security:phase1": "npm run test:security:attachment-paths && npm run test:security:byok-ipc-leak && npm run test:security:electron-boundaries && npm run test:security:developer-ipc && npm run test:security:triage-attachment"
   },
   "build": {
     "appId": "com.bugpocket.app",
@@ -16,7 +31,7 @@
     "asar": true,
     "asarUnpack": [
       "**/*.node",
-      "**/node_modules/better-sqlite3/**/*"
+      "node_modules/better-sqlite3/**/*"
     ],
     "npmRebuild": true,
     "publish": [
@@ -37,8 +52,11 @@
     ],
     "extraResources": [
       {
-        "from": "build/icon.ico",
-        "to": "icon.ico"
+        "from": "assets",
+        "to": "assets",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
@@ -84,6 +102,7 @@
     "electron": "30.0.0",
     "electron-builder": "26.8.1",
     "electron-vite": "2.3.0",
+    "tsx": "4.23.1",
     "typescript": "5.9.3",
     "vite": "5.4.21"
   },

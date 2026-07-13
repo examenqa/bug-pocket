@@ -1,16 +1,35 @@
 import React, { useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import type { TaxonomyId } from '../../../../shared/types';
 import { getSettingsPreviewItems } from './settingsUtils';
 
-export interface SettingsOptionItem {
-  id: number;
+export interface SettingsOptionItem<TId extends TaxonomyId = TaxonomyId> {
+  id: TId;
   label: string;
   contextDescription?: string;
-  applicationId?: number | null;
+  applicationId?: TaxonomyId | null;
   isSynced?: boolean;
 }
 
-export function OptionManager({
+interface OptionManagerProps<TId extends TaxonomyId> {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  mutationReady: boolean;
+  items: SettingsOptionItem<TId>[];
+  onAdd: (value: string, contextDescription?: string) => Promise<void>;
+  onUpdate: (id: TId, value: string, item: SettingsOptionItem<TId>) => Promise<void>;
+  onUpdateContext?: (id: TId, contextDescription: string, item: SettingsOptionItem<TId>) => Promise<void>;
+  onDelete: (id: TId, item: SettingsOptionItem<TId>) => Promise<void>;
+  onMerge?: (sourceId: TId, targetId: TId, sourceItem: SettingsOptionItem<TId>, targetItem: SettingsOptionItem<TId>) => Promise<void>;
+  onToggleSync?: (id: TId, isSynced: boolean, item: SettingsOptionItem<TId>) => Promise<void>;
+  addContextLabel?: string;
+  addContextRequired?: boolean;
+  readOnly?: boolean;
+  readOnlyMessage?: string;
+}
+
+export function OptionManager<TId extends TaxonomyId>({
   title,
   open,
   onToggle,
@@ -26,31 +45,15 @@ export function OptionManager({
   addContextRequired = false,
   readOnly = false,
   readOnlyMessage = 'Taxonomy is managed by workspace admins.'
-}: {
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  mutationReady: boolean;
-  items: SettingsOptionItem[];
-  onAdd: (value: string, contextDescription?: string) => Promise<void>;
-  onUpdate: (id: number, value: string, item: SettingsOptionItem) => Promise<void>;
-  onUpdateContext?: (id: number, contextDescription: string, item: SettingsOptionItem) => Promise<void>;
-  onDelete: (id: number, item: SettingsOptionItem) => Promise<void>;
-  onMerge?: (sourceId: number, targetId: number, sourceItem: SettingsOptionItem, targetItem: SettingsOptionItem) => Promise<void>;
-  onToggleSync?: (id: number, isSynced: boolean, item: SettingsOptionItem) => Promise<void>;
-  addContextLabel?: string;
-  addContextRequired?: boolean;
-  readOnly?: boolean;
-  readOnlyMessage?: string;
-}) {
+}: OptionManagerProps<TId>) {
   const [value, setValue] = useState('');
   const [addContext, setAddContext] = useState('');
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<TId | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editContext, setEditContext] = useState('');
   const editContextRef = useRef('');
-  const [mergingId, setMergingId] = useState<number | null>(null);
-  const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
+  const [mergingId, setMergingId] = useState<TId | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState<TId | null>(null);
   const [error, setError] = useState('');
   const previewItems = getSettingsPreviewItems(items);
   const hiddenCount = Math.max(0, items.length - previewItems.length);
@@ -65,7 +68,7 @@ export function OptionManager({
     }
   };
 
-  const startEdit = (item: SettingsOptionItem): void => {
+  const startEdit = (item: SettingsOptionItem<TId>): void => {
     if (readOnly) { setError(readOnlyMessage); return; }
     if (!mutationReady) { setError('Restart Bug Pocket to enable editing and removing settings.'); return; }
     setEditingId(item.id);
@@ -81,12 +84,12 @@ export function OptionManager({
     setEditContext(nextContext);
   };
 
-  const saveEditedItem = async (item: SettingsOptionItem): Promise<void> => {
+  const saveEditedItem = async (item: SettingsOptionItem<TId>): Promise<void> => {
     await onUpdate(item.id, editValue, { ...item, contextDescription: editContextRef.current });
     setEditingId(null);
   };
 
-  const saveContextOnly = async (item: SettingsOptionItem): Promise<void> => {
+  const saveContextOnly = async (item: SettingsOptionItem<TId>): Promise<void> => {
     if (onUpdateContext) {
       await onUpdateContext(item.id, editContextRef.current, item);
     } else {
@@ -95,7 +98,7 @@ export function OptionManager({
     setEditingId(null);
   };
 
-  const startMerge = (item: SettingsOptionItem): void => {
+  const startMerge = (item: SettingsOptionItem<TId>): void => {
     if (readOnly) { setError(readOnlyMessage); return; }
     if (!mutationReady || !onMerge) { setError('Restart Bug Pocket to enable merging settings.'); return; }
     const firstTarget = items.find((option) => option.id !== item.id);
@@ -180,7 +183,7 @@ export function OptionManager({
                     <select
                       className="option-merge-select"
                       value={mergeTargetId ?? ''}
-                      onChange={(event) => setMergeTargetId(Number(event.target.value) || null)}
+                      onChange={(event) => setMergeTargetId(items.find((target) => String(target.id) === event.target.value)?.id ?? null)}
                     >
                       {items.filter((target) => target.id !== item.id).map((target) => (
                         <option key={target.id} value={target.id}>{target.label}</option>

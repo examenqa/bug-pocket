@@ -1,10 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
-import { createClient, type SupabaseClient, type WebSocketLikeConstructor } from '@supabase/supabase-js';
+import { readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { createClient, type SupabaseClient, type SupportedStorage, type WebSocketLikeConstructor } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 import type { BugDetails, FeedbackPayload, SyncAuthResult, SyncConnectionResult, SyncQueueEvent, SyncSessionStatus, SyncWorkspaceOption, WorkspaceRole } from '../../shared/types';
 import type { BugPocketDatabase } from '../database';
+import {
+  buildAttachmentDownloadTarget,
+  normalizeAttachmentExtension,
+  validateAttachmentMetadata
+} from './attachmentPaths';
+import { pullWithCompositeCursors, type RemotePullClient, type RemotePullRow } from './compositeCursorPull';
+import { SafeStorageAdapter } from './SafeStorageAdapter';
 
 export interface SyncStatus {
   enabled: boolean;
@@ -24,16 +32,36 @@ type WorkspaceRow = {
 };
 
 type SyncPayload = Record<string, unknown>;
-type RemoteSyncRow = Record<string, unknown> & {
-  id: string;
-  updated_at?: string;
-  deleted_at?: string | null;
-};
+type RemoteSyncRow = RemotePullRow;
 
 const syncIntervalMs = 30_000;
 const maxSyncAttempts = 5;
 const syncBatchSize = 20;
 const uuidNamespace = 'bug-pocket-local-sync-v1';
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function variantNibble(value: string | undefined): string {
+  const nibble = Number.parseInt(value ?? '8', 16);
+  return ((nibble & 0x3) | 0x8).toString(16);
+}
+
+export function deriveRemoteEntityId(workspaceId: string, entityType: string, localId: number | string): string {
+  const stringValue = String(localId).trim();
+  if (uuidPattern.test(stringValue)) return stringValue;
+  const hash = createHash('sha256').update(`${uuidNamespace}:${workspaceId}:${entityType}:${stringValue}`).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${variantNibble(hash[16])}${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
+export function resolveRemoteTaxonomyId(
+  workspaceId: string,
+  entityType: 'application' | 'module' | 'environment',
+  value: unknown
+): string | null {
+  if (value === undefined || value === null) return null;
+  const stringValue = String(value).trim();
+  if (!stringValue) return null;
+  return uuidPattern.test(stringValue) ? stringValue : deriveRemoteEntityId(workspaceId, entityType, stringValue);
+}
 
 export class SyncEngine {
   private client: SupabaseClient | null = null;
@@ -42,14 +70,15 @@ export class SyncEngine {
   private initializedProjectUrl = '';
   private initializedAnonKey = '';
   private syncTimer: NodeJS.Timeout | null = null;
-  private syncInProgress = false;
+  private activeSyncRun: Promise<void> | null = null;
   private syncSuspended = false;
   private retryCounts = new Map<string, number>();
   private retryDelayUntil = 0;
 
   constructor(
     private readonly database: BugPocketDatabase,
-    private readonly emitBugsChanged: () => void = () => {}
+    private readonly emitBugsChanged: () => void = () => {},
+    private readonly authStorage: SupportedStorage = new SafeStorageAdapter(database)
   ) {}
 
   initialize(): SyncStatus {
@@ -58,6 +87,7 @@ export class SyncEngine {
 
     if (!this.projectUrl || !this.anonKey) {
       this.database.setCloudSyncSessionActive(false);
+      this.client?.auth.stopAutoRefresh();
       this.client = null;
       this.initializedProjectUrl = '';
       this.initializedAnonKey = '';
@@ -71,10 +101,12 @@ export class SyncEngine {
     }
 
     if (!this.client || this.initializedProjectUrl !== this.projectUrl || this.initializedAnonKey !== this.anonKey) {
+      this.client?.auth.stopAutoRefresh();
       this.client = createClient(this.projectUrl, this.anonKey, {
         auth: {
-          persistSession: false,
-          autoRefreshToken: false,
+          storage: this.authStorage,
+          persistSession: true,
+          autoRefreshToken: true,
           detectSessionInUrl: false
         },
         realtime: {
@@ -235,16 +267,48 @@ export class SyncEngine {
 
   async authSignOut(): Promise<SyncAuthResult> {
     const client = this.requireClient();
-    const { error } = await client.auth.signOut();
-    if (error) return this.authFailure(error.message);
-    this.database.setCloudSyncSessionActive(false);
+    this.syncSuspended = true;
     this.stopBackgroundSync();
-    this.database.updateCurrentWorkspaceId(null);
+    await this.waitForQueueIdle();
+
+    let signOutError: string | null = null;
+    try {
+      const { error } = await client.auth.signOut();
+      signOutError = error?.message ?? null;
+    } catch (caught) {
+      signOutError = caught instanceof Error ? caught.message : String(caught);
+    } finally {
+      client.auth.stopAutoRefresh();
+      this.retryCounts.clear();
+      this.retryDelayUntil = 0;
+      this.database.setCloudSyncSessionActive(false);
+      this.database.disconnectWorkspace();
+      // signOut removes the encrypted Supabase session through SafeStorageAdapter;
+      // clear the separate workspace routing ID only after that completes.
+      this.database.updateCurrentWorkspaceId(null);
+    }
+
+    if (signOutError) return this.authFailure(signOutError);
     return {
       success: true,
       authenticated: false,
       message: 'Signed out. Cloud sync is disconnected.'
     };
+  }
+
+  async restorePersistedSession(): Promise<boolean> {
+    const status = this.initialize();
+    if (!status.configured || !this.client) return false;
+
+    const { data, error } = await this.client.auth.getSession();
+    if (error) throw new Error(`Could not restore the saved Supabase session: ${error.message}`);
+
+    const authenticated = Boolean(data.session);
+    const workspaceId = this.database.getCurrentWorkspaceId();
+    this.database.setCloudSyncSessionActive(authenticated && Boolean(workspaceId));
+    if (authenticated && workspaceId) this.startBackgroundSync();
+    else this.stopBackgroundSync();
+    return authenticated;
   }
 
   async switchWorkspace(newWorkspaceId: string): Promise<SyncAuthResult> {
@@ -302,7 +366,7 @@ export class SyncEngine {
 
     const role = this.database.updateWorkspaceRole(workspaceId, membership.role);
     this.syncSuspended = true;
-    this.stopBackgroundSync(false);
+    this.stopBackgroundSync();
     try {
       await this.waitForQueueIdle();
       this.retryCounts.clear();
@@ -497,39 +561,66 @@ export class SyncEngine {
     void this.processQueue();
   }
 
-  stopBackgroundSync(resetInFlight = true): void {
+  stopBackgroundSync(): void {
     if (this.syncTimer) clearInterval(this.syncTimer);
     this.syncTimer = null;
-    if (resetInFlight) this.syncInProgress = false;
   }
 
   stop(): void {
     this.syncSuspended = true;
     this.stopBackgroundSync();
+    this.client?.auth.stopAutoRefresh();
+  }
+
+  async pauseWorkspaceSync(): Promise<void> {
+    this.syncSuspended = true;
+    this.stopBackgroundSync();
+    await this.waitForQueueIdle();
+    this.retryCounts.clear();
+    this.retryDelayUntil = 0;
+  }
+
+  async stopAndWait(): Promise<void> {
+    await this.stopAndDrain();
+  }
+
+  async stopAndDrain(): Promise<void> {
+    this.stop();
+    const activeRun = this.activeSyncRun;
+    if (activeRun) await activeRun;
   }
 
   async processQueue(): Promise<void> {
-    let syncStarted = false;
+    if (this.activeSyncRun) return this.activeSyncRun;
+
+    const syncRun = this.runSyncCycle();
+    this.activeSyncRun = syncRun;
+    try {
+      await syncRun;
+    } finally {
+      if (this.activeSyncRun === syncRun) this.activeSyncRun = null;
+    }
+  }
+
+  private async runSyncCycle(): Promise<void> {
     try {
       if (!this.database.isOpen()) return;
       const workspaceId = this.database.getCurrentWorkspaceId();
       if (!workspaceId) return;
       if (this.syncSuspended) return;
-      if (this.syncInProgress) return;
       if (Date.now() < this.retryDelayUntil) return;
 
       const client = this.client;
       if (!client) return;
-
-      this.syncInProgress = true;
-      syncStarted = true;
 
       const { data: userData, error: userError } = await client.auth.getUser();
       if (userError || !userData.user) return;
 
       await this.pullRemoteTaxonomyFor(client, workspaceId);
       await this.pullRemoteChangesFor(client, workspaceId);
-      await this.drainSyncQueue(client, workspaceId);
+      if (this.database.getWorkspaceRole(workspaceId) !== 'developer') {
+        await this.drainSyncQueue(client, workspaceId);
+      }
     } catch (caught) {
       const errorMessage = this.formatSyncError(caught);
       if (this.isMissingWorkspaceDatabaseError(caught)) {
@@ -537,8 +628,6 @@ export class SyncEngine {
       } else {
         console.error('[Bug Pocket Sync] Background sync cycle failed. The worker will retry on the next interval.', errorMessage);
       }
-    } finally {
-      if (syncStarted) this.syncInProgress = false;
     }
   }
 
@@ -584,51 +673,35 @@ export class SyncEngine {
   }
 
   private async pullRemoteChangesFor(client: SupabaseClient, workspaceId: string): Promise<boolean> {
-    const watermark = this.database.getRemoteSyncWatermark(workspaceId) || '1970-01-01T00:00:00.000Z';
-    let highestWatermark = watermark;
-    let changed = false;
-
-    const { data: bugs, error: bugsError } = await client
-      .from('bugs')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .gt('updated_at', watermark)
-      .order('updated_at', { ascending: true })
-      .limit(syncBatchSize);
-
-    if (bugsError) throw bugsError;
-
-    for (const row of (bugs ?? []) as RemoteSyncRow[]) {
-      if (this.database.upsertRemoteBug(row)) changed = true;
-      highestWatermark = this.maxTimestamp(highestWatermark, row.updated_at);
-    }
-
-    const { data: attachments, error: attachmentsError } = await client
-      .from('attachments')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .gt('updated_at', watermark)
-      .order('updated_at', { ascending: true })
-      .limit(syncBatchSize);
-
-    if (attachmentsError) throw attachmentsError;
-
-    for (const row of (attachments ?? []) as RemoteSyncRow[]) {
-      if (this.database.upsertRemoteAttachment(row)) {
-        changed = true;
-        await this.downloadAttachmentBinary(
-          client,
-          workspaceId,
-          this.stringOrNull(row.content_hash),
-          this.normalizeExtension(this.stringOrNull(row.file_extension) ?? '.png')
-        );
-      }
-      highestWatermark = this.maxTimestamp(highestWatermark, row.updated_at);
-    }
-
-    if (highestWatermark !== watermark) this.database.updateRemoteSyncWatermark(workspaceId, highestWatermark);
-    if (changed) this.emitBugsChanged();
-    return changed;
+    return pullWithCompositeCursors({
+      client: client as unknown as RemotePullClient,
+      workspaceId,
+      batchSize: syncBatchSize,
+      getCursor: (entityType) => this.database.getRemoteSyncCursor(workspaceId, entityType),
+      applyBugBatch: (rows) => this.database.applyRemoteBugBatch(rows),
+      applyAttachmentBatch: async (rows) => {
+        const validatedRows = rows.map((row) => {
+          const attachmentMetadata = validateAttachmentMetadata(row.content_hash, row.file_extension);
+          return {
+            ...row,
+            content_hash: attachmentMetadata.contentHash,
+            file_extension: attachmentMetadata.extension
+          };
+        });
+        const attachmentChanged = this.database.applyRemoteAttachmentBatch(validatedRows);
+        for (const row of validatedRows) {
+          await this.downloadAttachmentBinary(
+            client,
+            workspaceId,
+            String(row.content_hash),
+            String(row.file_extension)
+          );
+        }
+        return attachmentChanged;
+      },
+      updateCursor: (entityType, cursor) => this.database.updateRemoteSyncCursor(workspaceId, entityType, cursor),
+      emitChanged: this.emitBugsChanged
+    });
   }
 
   private async pullRemoteTaxonomyFor(client: SupabaseClient, workspaceId: string): Promise<boolean> {
@@ -810,8 +883,11 @@ export class SyncEngine {
   private async syncAttachmentEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
     const id = this.localUuid(workspaceId, 'attachment', event.entity_id);
     const contentHash = this.stringOrNull(payload.content_hash);
-    const fileExtension = this.normalizeExtension(this.stringOrNull(payload.file_extension) ?? '.png');
-    const storageKey = contentHash ? `${workspaceId}/${contentHash}${fileExtension}` : null;
+    const fileExtension = normalizeAttachmentExtension(this.stringOrNull(payload.file_extension) ?? '.png');
+    const storageTarget = contentHash
+      ? buildAttachmentDownloadTarget(this.database.screenshotsDir, workspaceId, contentHash, fileExtension)
+      : null;
+    const storageKey = storageTarget?.storageKey ?? null;
 
     if (event.operation === 'DELETE') {
       const stamp = new Date().toISOString();
@@ -828,15 +904,15 @@ export class SyncEngine {
       return;
     }
 
-    if (contentHash && storageKey) {
-      const filePath = this.database.resolveAttachmentPath(contentHash, fileExtension);
+    if (contentHash && storageTarget) {
+      const filePath = storageTarget.localPath;
       if (!existsSync(filePath)) {
         // The metadata row can still sync; a future pull may recover the binary from cloud storage.
       } else {
         const fileBytes = await readFile(filePath);
         const { error: uploadError } = await client.storage
           .from('attachments')
-          .upload(storageKey, fileBytes, {
+          .upload(storageTarget.storageKey, fileBytes, {
             contentType: String(payload.mime_type || 'image/png'),
             upsert: true
           });
@@ -871,16 +947,38 @@ export class SyncEngine {
     fileExtension: string
   ): Promise<void> {
     if (!contentHash) return;
-    const extension = this.normalizeExtension(fileExtension || '.png');
-    if (this.database.attachmentFileExists(contentHash, extension)) return;
+    const target = buildAttachmentDownloadTarget(
+      this.database.screenshotsDir,
+      workspaceId,
+      contentHash,
+      fileExtension || '.png'
+    );
+    if (this.database.attachmentFileExists(contentHash, target.extension)) return;
 
-    const storageKey = `${workspaceId}/${contentHash}${extension}`;
-    const { data, error } = await client.storage.from('attachments').download(storageKey);
-    if (error) throw new Error(`Attachment download failed for ${storageKey}: ${error.message}`);
-    if (!data) throw new Error(`Attachment download returned no data for ${storageKey}.`);
+    const temporaryPath = join(dirname(target.localPath), `${contentHash}.tmp`);
+    try {
+      const { data, error } = await client.storage.from('attachments').download(target.storageKey);
+      if (error) throw new Error(`Attachment download failed for ${target.storageKey}: ${error.message}`);
+      if (!data) throw new Error(`Attachment download returned no data for ${target.storageKey}.`);
 
-    const bytes = Buffer.from(await data.arrayBuffer());
-    await writeFile(this.database.resolveAttachmentPath(contentHash, extension), bytes);
+      const bytes = Buffer.from(await data.arrayBuffer());
+      await writeFile(temporaryPath, bytes);
+
+      const downloadedHash = createHash('sha256')
+        .update(await readFile(temporaryPath))
+        .digest('hex');
+      if (downloadedHash.toLowerCase() !== contentHash.toLowerCase()) {
+        throw new Error(
+          `Attachment integrity check failed for ${target.storageKey}: SHA-256 mismatch ` +
+          `(expected ${contentHash}, received ${downloadedHash}).`
+        );
+      }
+
+      await rename(temporaryPath, target.localPath);
+    } catch (caught) {
+      await rm(temporaryPath, { force: true }).catch(() => undefined);
+      throw caught;
+    }
   }
 
   private serializeBugPayload(workspaceId: string, id: string, payload: SyncPayload): SyncPayload {
@@ -923,7 +1021,7 @@ export class SyncEngine {
       bug_id: bugId ? this.localUuid(workspaceId, 'bug', bugId) : null,
       parent_id: parentId ? this.localUuid(workspaceId, 'attachment', parentId) : null,
       content_hash: this.stringOrNull(payload.content_hash),
-      file_extension: this.normalizeExtension(this.stringOrNull(payload.file_extension) ?? '.png'),
+      file_extension: normalizeAttachmentExtension(this.stringOrNull(payload.file_extension) ?? '.png'),
       mime_type: String(payload.mime_type ?? 'image/png'),
       source_type: String(payload.source_type ?? 'other'),
       sync_status: 'Synced',
@@ -936,14 +1034,8 @@ export class SyncEngine {
   }
 
   private async waitForQueueIdle(): Promise<void> {
-    const startedAt = Date.now();
-    while (this.syncInProgress && Date.now() - startedAt < 5000) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-
-    if (this.syncInProgress) {
-      throw new Error('Cloud sync is still processing. Try switching workspaces again in a moment.');
-    }
+    const activeSyncRun = this.activeSyncRun;
+    if (activeSyncRun) await activeSyncRun;
   }
 
   private requireClient(): SupabaseClient {
@@ -994,16 +1086,8 @@ export class SyncEngine {
     return event.op_id || String(event.id);
   }
 
-  private maxTimestamp(current: string, candidate: string | undefined): string {
-    if (!candidate) return current;
-    return new Date(candidate).getTime() > new Date(current).getTime() ? candidate : current;
-  }
-
   private remoteTaxonomyId(workspaceId: string, entityType: 'application' | 'module' | 'environment', value: unknown): string | null {
-    if (value === undefined || value === null) return null;
-    const stringValue = String(value).trim();
-    if (!stringValue) return null;
-    return this.remoteEntityId(workspaceId, entityType, stringValue);
+    return resolveRemoteTaxonomyId(workspaceId, entityType, value);
   }
 
   private numericLocalId(value: number | string): number {
@@ -1013,23 +1097,11 @@ export class SyncEngine {
   }
 
   private remoteEntityId(workspaceId: string, entityType: string, localId: number | string): string {
-    const stringValue = String(localId).trim();
-    if (this.isUuid(stringValue)) return stringValue;
-    return this.localUuid(workspaceId, entityType, stringValue);
+    return deriveRemoteEntityId(workspaceId, entityType, localId);
   }
 
   private localUuid(workspaceId: string, entityType: string, localId: number | string): string {
-    const hash = createHash('sha256').update(`${uuidNamespace}:${workspaceId}:${entityType}:${localId}`).digest('hex');
-    return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-${this.variantNibble(hash[16])}${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-  }
-
-  private isUuid(value: string): boolean {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-  }
-
-  private variantNibble(value: string | undefined): string {
-    const nibble = Number.parseInt(value ?? '8', 16);
-    return ((nibble & 0x3) | 0x8).toString(16);
+    return deriveRemoteEntityId(workspaceId, entityType, localId);
   }
 
   private stringOrNull(value: unknown): string | null {
@@ -1038,7 +1110,4 @@ export class SyncEngine {
     return trimmed || null;
   }
 
-  private normalizeExtension(value: string): string {
-    return value.startsWith('.') ? value : `.${value}`;
-  }
 }

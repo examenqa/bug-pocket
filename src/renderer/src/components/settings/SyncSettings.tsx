@@ -12,6 +12,7 @@ interface SyncSettingsProps {
 type AuthMode = 'login' | 'signup';
 
 export function SyncSettings({ settings, mutationReady, refresh, showToast }: SyncSettingsProps) {
+  const developerReadOnly = settings.currentWorkspaceRole === 'developer';
   const [projectUrl, setProjectUrl] = useState(settings.supabaseProjectUrl ?? '');
   const [anonKey, setAnonKey] = useState(settings.supabaseAnonKey ?? '');
   const [saving, setSaving] = useState(false);
@@ -184,6 +185,7 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
   };
 
   const saveWorkspaceName = async (): Promise<void> => {
+    if (developerReadOnly) return;
     const workspaceId = activeWorkspaceId.trim();
     const nextName = workspaceNameDraft.trim();
     if (!workspaceId || !nextName) {
@@ -315,7 +317,7 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
                 ) : (
                   <div className="sync-workspace-name-row">
                     <strong title={activeWorkspaceName}>{activeWorkspaceName}</strong>
-                    <button type="button" className="icon-button" aria-label="Edit workspace name" disabled={!activeWorkspaceId || savingWorkspaceName} onClick={startWorkspaceNameEdit}>
+                    <button type="button" className="icon-button" aria-label="Edit workspace name" disabled={developerReadOnly || !activeWorkspaceId || savingWorkspaceName} onClick={startWorkspaceNameEdit}>
                       <Pencil size={16} />
                     </button>
                   </div>
@@ -465,13 +467,13 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
               </li>
               <li>
                 <strong>Schema Setup</strong>
-                <span>Open Bug Pocket’s schema draft and run it in the Supabase SQL Editor to build the required tables.</span>
+                <span>Open Bug Pocket’s installation schema and run it in the Supabase SQL Editor to build the required tables.</span>
                 <button
                   type="button"
                   className="secondary sync-schema-link"
-                  onClick={() => void window.bugPocket.openExternalUrl('https://github.com/examenqa/bug-pocket/blob/main/supabase/schema-draft.sql')}
+                  onClick={() => void window.bugPocket.openExternalUrl('https://github.com/examenqa/bug-pocket/blob/main/supabase/schema-install.sql')}
                 >
-                  <ExternalLink size={15} /> Open schema-draft.sql
+                  <ExternalLink size={15} /> Open schema-install.sql
                 </button>
               </li>
             </ol>

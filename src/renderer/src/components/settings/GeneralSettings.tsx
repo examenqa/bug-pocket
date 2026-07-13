@@ -30,8 +30,8 @@ export function GeneralSettings({
       if (message.includes('active preset')) showToast('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.', 'error');
     }
   };
-  const taxonomyReadOnly = settings.currentWorkspaceRole === 'member';
-  const taxonomyReadOnlyMessage = 'Taxonomy is managed by workspace admins.';
+  const taxonomyReadOnly = settings.currentWorkspaceRole === 'developer';
+  const taxonomyReadOnlyMessage = 'Developer access is read-only. Taxonomy is managed by workspace writers.';
 
   return (
     <div className="settings-tab-stack">
@@ -87,6 +87,8 @@ export function GeneralSettings({
             open={openSettingsCard === 'devices'}
             onToggle={() => toggleSettingsCard('devices')}
             mutationReady={mutationReady}
+            readOnly={taxonomyReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             items={settings.devices.map((item) => ({ id: item.id, label: item.value }))}
             onAdd={async (value) => { await window.bugPocket.addDevice(value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateDevice(id, value); await refresh(); }}
@@ -98,6 +100,8 @@ export function GeneralSettings({
             open={openSettingsCard === 'browsers'}
             onToggle={() => toggleSettingsCard('browsers')}
             mutationReady={mutationReady}
+            readOnly={taxonomyReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             items={settings.browsers.map((item) => ({ id: item.id, label: item.value }))}
             onAdd={async (value) => { await window.bugPocket.addBrowser(value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateBrowser(id, value); await refresh(); }}
@@ -109,6 +113,8 @@ export function GeneralSettings({
             open={openSettingsCard === 'user-roles'}
             onToggle={() => toggleSettingsCard('user-roles')}
             mutationReady={mutationReady}
+            readOnly={taxonomyReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             items={settings.userRoles.map((item) => ({ id: item.id, label: item.value }))}
             onAdd={async (value) => { await window.bugPocket.addUserRole(value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateUserRole(id, value); await refresh(); }}
@@ -120,6 +126,8 @@ export function GeneralSettings({
             open={openSettingsCard === 'entry-types'}
             onToggle={() => toggleSettingsCard('entry-types')}
             mutationReady={mutationReady}
+            readOnly={taxonomyReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             items={settings.entryTypes.map((item) => ({ id: item.id, label: item.value }))}
             onAdd={async (value) => { await window.bugPocket.addConfigOption('entry_type', value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateConfigOption(id, value); await refresh(); }}
@@ -130,6 +138,8 @@ export function GeneralSettings({
             open={openSettingsCard === 'severity-values'}
             onToggle={() => toggleSettingsCard('severity-values')}
             mutationReady={mutationReady}
+            readOnly={taxonomyReadOnly}
+            readOnlyMessage={taxonomyReadOnlyMessage}
             items={settings.severities.map((item) => ({ id: item.id, label: item.value }))}
             onAdd={async (value) => { await window.bugPocket.addConfigOption('severity', value); await refresh(); }}
             onUpdate={async (id, value) => { await window.bugPocket.updateConfigOption(id, value); await refresh(); }}

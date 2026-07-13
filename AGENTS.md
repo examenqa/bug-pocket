@@ -16,7 +16,7 @@ The app is intentionally local-first. Captures and attachments save immediately 
 - `electron-vite`
 - SQLite via `better-sqlite3`
 - Local filesystem attachment storage using content-addressed files
-- Supabase Phase 3 push-sync scaffold: credentials, auth/session capture, workspace routing, RLS schema draft, background `sync_queue` drain, and Supabase Storage attachment upload
+- Supabase Phase 3 push-sync scaffold: credentials, auth/session capture, workspace routing, idempotent RLS installation schema, background `sync_queue` drain, and Supabase Storage attachment upload
 - Windows-first behavior with system tray and global shortcuts
 
 Core commands:
@@ -111,7 +111,7 @@ Important files:
 **Build & resources**
 - `build/icon.ico`: multi-layer Windows icon used by electron-builder and runtime tray/window/notification icon loading.
 - `resources/bug-pocket-icon.png` and `resources/bug-pocket-title.png`: renderer/runtime brand artwork and packaged extra resources.
-- `supabase/schema-draft.sql`: future cloud schema draft.
+- `supabase/schema-install.sql`: idempotent BYOC cloud installation schema.
 
 ## Current UX
 
@@ -747,7 +747,7 @@ Cloud sync is in an early Phase 3 push-only implementation:
 - Reference merge events are written to cloud `sync_events` for future server-side reconciliation.
 - Successful events update local `bugs` / `attachments` to `Synced`, stamp `last_sync_at`, and remove the processed queue row.
 - Failed events use basic exponential backoff and mark the local primary record `Sync Failed` after repeated failures.
-- `supabase/schema-draft.sql` contains the current workspace-scoped PostgreSQL schema draft plus RLS helper/policies.
+- `supabase/schema-install.sql` contains the current idempotent workspace-scoped PostgreSQL installation schema plus RLS helper/policies.
 
 Current sync limitations:
 

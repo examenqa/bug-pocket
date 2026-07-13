@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Pencil, Plus, Trash2, X } from 'lucide-react';
-import type { Application, Module } from '../../../../shared/types';
+import type { Application, Module, TaxonomyId } from '../../../../shared/types';
 import { getSettingsPreviewItems } from './settingsUtils';
+import { resolveTaxonomyId } from '../../utils/taxonomyIds';
 
 export function ModuleManager({
   open,
@@ -24,10 +25,10 @@ export function ModuleManager({
   readOnly?: boolean;
   readOnlyMessage?: string;
 }) {
-  const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(applications[0]?.id ?? null);
+  const [selectedApplicationId, setSelectedApplicationId] = useState<TaxonomyId | null>(applications[0]?.id ?? null);
   const [value, setValue] = useState('');
   const [addContext, setAddContext] = useState('');
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<TaxonomyId | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editContext, setEditContext] = useState('');
   const editContextRef = useRef('');
@@ -92,7 +93,7 @@ export function ModuleManager({
     setEditContext(nextContext);
   };
 
-  const renderModuleRow = (module: Module, applicationId?: number) => (
+  const renderModuleRow = (module: Module, applicationId?: TaxonomyId) => (
     <div className="option-row module-option-row" key={module.id}>
       {editingId === module.id ? (
         <div className="option-edit-stack">
@@ -150,7 +151,7 @@ export function ModuleManager({
           {readOnly && <p className="settings-helper">{readOnlyMessage}</p>}
           {!readOnly && (
             <div className="module-add-row module-add-row-with-context">
-              <select value={selectedApplicationId ?? ''} onChange={(event) => setSelectedApplicationId(Number(event.target.value) || null)}>
+              <select value={selectedApplicationId ?? ''} onChange={(event) => setSelectedApplicationId(resolveTaxonomyId(event.target.value, applications))}>
                 {applications.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
               </select>
               <input value={value} onChange={(event) => setValue(event.target.value)} placeholder={selectedApplication ? `Add module for ${selectedApplication.name}` : 'Choose an application'} />

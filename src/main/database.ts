@@ -1,8 +1,8 @@
 import Database from 'better-sqlite3';
 import { app } from 'electron';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname, join, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import type {
   Application,
@@ -20,6 +20,7 @@ import type {
   ReferenceOption,
   ReferenceTable,
   ReportTemplate,
+  RemoteSyncCursor,
   SettingsData,
   ShortcutAction,
   ShortcutSetting,
@@ -28,9 +29,11 @@ import type {
   SyncQueueEvent,
   SyncQueueOperation,
   SyncStatus,
+  TaxonomyId,
   WorkspaceRole,
   AiProvider
 } from '../shared/types';
+import { resolveAttachmentFilePath, validateAttachmentMetadata } from './sync/attachmentPaths';
 
 const now = (): string => new Date().toISOString();
 
@@ -64,7 +67,7 @@ const defaultShortcuts: Array<Pick<ShortcutSetting, 'action' | 'label' | 'accele
   { action: 'global_screenshot', label: 'Global Screenshot', accelerator: 'CommandOrControl+Alt+S', is_enabled: 1, sort_order: 2 }
 ];
 const MAX_CAPTURE_PRESETS = 3;
-const DATABASE_SCHEMA_VERSION = 1;
+const DATABASE_SCHEMA_VERSION = 2;
 
 const quickReportTemplate = `🚨 *[{{severity}}] {{title}}*
 *Context:* {{application}} > {{module}} | {{environment}} | {{user_role}}
@@ -218,8 +221,8 @@ export class BugPocketDatabase {
   private readonly localDbPath: string;
   private cloudSyncSessionActive = false;
 
-  constructor() {
-    this.dataDir = app.getPath('userData');
+  constructor(dataDirOverride?: string) {
+    this.dataDir = dataDirOverride ?? app.getPath('userData');
     mkdirSync(this.dataDir, { recursive: true });
     this.localDbPath = join(this.dataDir, 'local.sqlite');
     const legacyDbPath = join(this.dataDir, 'bug-pocket.sqlite');
@@ -241,7 +244,7 @@ export class BugPocketDatabase {
   }
 
   get screenshotsDir(): string {
-    const dir = join(app.getPath('userData'), 'attachments');
+    const dir = join(this.dataDir, 'attachments');
     mkdirSync(dir, { recursive: true });
     return dir;
   }
@@ -276,33 +279,39 @@ export class BugPocketDatabase {
     file_path: string;
     created_at: string;
   }> {
-    const dataDb = this.workspaceDataDb();
-    const rows = dataDb
-      .prepare(
-        `SELECT id, bug_id, parent_id, content_hash, file_extension, created_at
-         FROM attachments
-         WHERE content_hash IS NOT NULL AND content_hash != ''
-         ORDER BY id`
-      )
-      .all() as Array<{
+    type AttachmentReference = {
       id: number;
       bug_id: number | null;
       parent_id: number | null;
       content_hash: string;
       file_extension: string;
       created_at: string;
-    }>;
+    };
+    const sourceDatabases = this.workspaceDb ? [this.localDb, this.workspaceDb] : [this.localDb];
+    const referencedFiles = new Map<string, AttachmentReference & { file_name: string; file_path: string }>();
 
-    return rows.map((row) => {
-      const extension = row.file_extension.startsWith('.') ? row.file_extension : `.${row.file_extension}`;
-      const fileName = `${row.content_hash}${extension}`;
-      return {
-        ...row,
-        file_extension: extension,
-        file_name: fileName,
-        file_path: this.resolveAttachmentPath(row.content_hash, extension)
-      };
-    });
+    for (const sourceDb of sourceDatabases) {
+      const rows = sourceDb
+        .prepare(
+          `SELECT id, bug_id, parent_id, content_hash, file_extension, created_at
+           FROM attachments
+           WHERE content_hash IS NOT NULL AND content_hash != ''
+           ORDER BY id`
+        )
+        .all() as AttachmentReference[];
+      for (const row of rows) {
+        const extension = row.file_extension.startsWith('.') ? row.file_extension : `.${row.file_extension}`;
+        const fileName = `${row.content_hash}${extension}`;
+        referencedFiles.set(fileName, {
+          ...row,
+          file_extension: extension,
+          file_name: fileName,
+          file_path: this.resolveAttachmentPath(row.content_hash, extension)
+        });
+      }
+    }
+
+    return Array.from(referencedFiles.values());
   }
 
   checkpoint(): void {
@@ -311,31 +320,160 @@ export class BugPocketDatabase {
   }
 
   close(): void {
-    this.workspaceDb?.close();
-    this.workspaceDb = null;
+    this.disconnectWorkspace();
     this.localDb.close();
+  }
+
+  disconnectWorkspace(): void {
+    if (this.workspaceDb) {
+      this.workspaceDb.close();
+      this.workspaceDb = null;
+    }
+    this.db = this.localDb;
   }
 
   isOpen(): boolean {
     return (this.localDb as unknown as { open?: boolean }).open !== false;
   }
 
+  async clearCurrentWorkspace(): Promise<{ workspaceId: string; deletedAttachmentFiles: number }> {
+    const workspaceId = this.getCurrentWorkspaceId();
+    if (!workspaceId || !this.workspaceDb) throw new Error('No workspace is currently connected.');
+
+    const workspacePath = this.workspaceDatabasePath(workspaceId);
+    const attachmentRows = this.workspaceDb
+      .prepare(
+        `SELECT DISTINCT content_hash, file_extension
+         FROM attachments
+         WHERE content_hash IS NOT NULL AND content_hash != ''`
+      )
+      .all() as Array<{ content_hash: string; file_extension: string }>;
+
+    this.disconnectWorkspace();
+    try {
+      await this.removeSqliteDatabaseFiles(workspacePath);
+    } catch (caught) {
+      this.connectToWorkspace(workspaceId);
+      throw caught;
+    }
+
+    this.updateCurrentWorkspaceId(null);
+    this.setCloudSyncSessionActive(false);
+
+    let deletedAttachmentFiles = 0;
+    const checkedHashes = new Set<string>();
+    for (const attachment of attachmentRows) {
+      const normalizedHash = attachment.content_hash.toLowerCase();
+      if (checkedHashes.has(normalizedHash)) continue;
+      checkedHashes.add(normalizedHash);
+      if (this.isAttachmentHashReferencedByAnyDatabase(attachment.content_hash, workspacePath)) continue;
+
+      const sameHashRows = attachmentRows.filter((row) => row.content_hash.toLowerCase() === normalizedHash);
+      for (const row of sameHashRows) {
+        try {
+          const attachmentPath = this.resolveAttachmentPath(row.content_hash, row.file_extension);
+          if (attachmentPath && existsSync(attachmentPath)) {
+            await rm(attachmentPath, { force: true });
+            deletedAttachmentFiles += 1;
+          }
+        } catch {
+          // Malformed legacy metadata is never converted into a filesystem path.
+        }
+      }
+    }
+
+    return { workspaceId, deletedAttachmentFiles };
+  }
+
   async factoryReset(): Promise<void> {
     const attachmentsDir = this.screenshotsDir;
-    const dataDb = this.workspaceDataDb();
-    const tx = dataDb.transaction(() => {
-      dataDb.prepare('DELETE FROM sync_queue').run();
-      dataDb.prepare('DELETE FROM attachments').run();
-      dataDb.prepare('DELETE FROM bugs').run();
-    });
+    this.disconnectWorkspace();
 
-    tx();
+    const workspaceFiles = readdirSync(this.dataDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /^ws_.+\.sqlite(?:-wal|-shm)?$/i.test(entry.name))
+      .map((entry) => join(this.dataDir, entry.name));
+    await Promise.all(workspaceFiles.map((filePath) => rm(filePath, { force: true })));
+
+    this.localDb.pragma('foreign_keys = OFF');
+    try {
+      const wipeLocalData = this.localDb.transaction(() => {
+        // Preset records are retained, but their taxonomy links cannot point at rows being reset.
+        this.localDb
+          .prepare(
+            `UPDATE presets
+             SET application_id = NULL, module_id = NULL, environment_id = NULL,
+                 user_role_id = NULL, entry_type_id = NULL, updated_at = ?`
+          )
+          .run(now());
+        for (const table of [
+          'sync_queue',
+          'attachments',
+          'bugs',
+          'modules',
+          'applications',
+          'environments',
+          'devices',
+          'browsers',
+          'user_roles',
+          'config_options'
+        ]) {
+          if (this.tableExists(this.localDb, table)) {
+            this.localDb.prepare(`DELETE FROM ${this.quoteIdentifier(table)}`).run();
+          }
+        }
+      });
+      wipeLocalData();
+    } finally {
+      this.localDb.pragma('foreign_keys = ON');
+    }
+
+    this.updateCurrentWorkspaceId(null);
+    this.setCloudSyncSessionActive(false);
     await rm(attachmentsDir, { recursive: true, force: true });
     mkdirSync(attachmentsDir, { recursive: true });
   }
 
+  private async removeSqliteDatabaseFiles(databasePath: string): Promise<void> {
+    await Promise.all([
+      databasePath,
+      `${databasePath}-wal`,
+      `${databasePath}-shm`
+    ].map((filePath) => rm(filePath, { force: true })));
+  }
+
+  private isAttachmentHashReferencedByAnyDatabase(contentHash: string, excludedDatabasePath: string): boolean {
+    const excludedPath = resolve(excludedDatabasePath).toLowerCase();
+    const databasePaths = readdirSync(this.dataDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.sqlite'))
+      .map((entry) => join(this.dataDir, entry.name))
+      .filter((filePath) => resolve(filePath).toLowerCase() !== excludedPath);
+
+    for (const databasePath of databasePaths) {
+      const isLocalDatabase = resolve(databasePath).toLowerCase() === resolve(this.localDbPath).toLowerCase();
+      let connection: Database.Database | null = null;
+      try {
+        connection = isLocalDatabase
+          ? this.localDb
+          : new Database(databasePath, { readonly: true, fileMustExist: true });
+        if (!this.tableExists(connection, 'attachments')) continue;
+        const reference = connection
+          .prepare('SELECT 1 AS referenced FROM attachments WHERE LOWER(content_hash) = LOWER(?) LIMIT 1')
+          .get(contentHash) as { referenced: number } | undefined;
+        if (reference) return true;
+      } catch {
+        // An unreadable database may still own the blob, so preserve it conservatively.
+        return true;
+      } finally {
+        if (!isLocalDatabase) connection?.close();
+      }
+    }
+    return false;
+  }
+
   applyAfterRestorePatch(): void {
-    const manifestPath = join(this.dataDir, 'backup-manifest.json');
+    const manifestPath = existsSync(join(this.dataDir, 'manifest.json'))
+      ? join(this.dataDir, 'manifest.json')
+      : join(this.dataDir, 'backup-manifest.json');
     const restoredSingleDatabasePath = join(this.dataDir, 'bug-pocket.sqlite');
     const defaultWorkspacePath = this.workspaceDatabasePath(defaultLocalWorkspaceId);
     const restoredManifest = this.readRestoreManifest(manifestPath);
@@ -397,8 +535,7 @@ export class BugPocketDatabase {
 
   resolveAttachmentPath(contentHash: string | null, fileExtension: string): string {
     if (!contentHash) return '';
-    const extension = fileExtension.startsWith('.') ? fileExtension : `.${fileExtension}`;
-    return join(this.screenshotsDir, `${contentHash}${extension}`);
+    return resolveAttachmentFilePath(this.screenshotsDir, contentHash, fileExtension);
   }
 
   attachmentFileExists(contentHash: string | null, fileExtension: string): boolean {
@@ -409,14 +546,13 @@ export class BugPocketDatabase {
   connectToWorkspace(workspaceId: string): string | null {
     const cleaned = workspaceId.trim();
     if (!cleaned) {
-      this.workspaceDb?.close();
-      this.workspaceDb = null;
+      this.disconnectWorkspace();
       this.updateCurrentWorkspaceId(null);
       return null;
     }
 
     const nextPath = this.workspaceDatabasePath(cleaned);
-    this.workspaceDb?.close();
+    this.disconnectWorkspace();
     // Workspace databases are a loose offline cache. Taxonomy/config tables are exposed from
     // local.sqlite via attached temp views, and SQLite cannot enforce REFERENCES across attached
     // database files. Keep workspace FK checks disabled here; Supabase remains the authoritative
@@ -443,6 +579,7 @@ export class BugPocketDatabase {
       const version = Number(connection.pragma('user_version', { simple: true }) ?? 0);
       this.migrate();
       if (workspace) this.ensureWorkspaceUuidTaxonomySchema();
+      else this.ensureLocalTextTaxonomyReferences();
       if (version < DATABASE_SCHEMA_VERSION) {
         connection.pragma(`user_version = ${DATABASE_SCHEMA_VERSION}`);
       }
@@ -642,6 +779,66 @@ export class BugPocketDatabase {
     `);
   }
 
+  private ensureLocalTextTaxonomyReferences(): void {
+    this.rebuildTableWithTextColumns('bugs', ['application_id', 'module_id', 'environment_id']);
+    this.rebuildTableWithTextColumns('presets', ['application_id', 'module_id', 'environment_id']);
+  }
+
+  private rebuildTableWithTextColumns(table: 'bugs' | 'presets', targetColumns: string[]): void {
+    const columns = this.localDb.prepare(`PRAGMA table_info(${this.quoteIdentifier(table)})`).all() as Array<{ name: string; type: string }>;
+    const schema = this.localDb
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(table) as { sql: string } | undefined;
+    if (!schema?.sql) throw new Error(`Cannot migrate missing ${table} schema.`);
+    const textColumnsReady = targetColumns.every((target) => columns.find((column) => column.name === target)?.type.toUpperCase().includes('TEXT'));
+    const hasPresetTaxonomyForeignKeys = table === 'presets' && targetColumns.some((column) =>
+      new RegExp(`${column}\\s+TEXT[^,]*REFERENCES`, 'i').test(schema.sql)
+    );
+    if (textColumnsReady && !hasPresetTaxonomyForeignKeys) return;
+
+    const temporaryTable = `${table}_taxonomy_text`;
+    let createSql = schema.sql.replace(
+      new RegExp(`CREATE TABLE(?: IF NOT EXISTS)?\\s+[\"\\[]?${table}[\"\\]]?`, 'i'),
+      `CREATE TABLE ${temporaryTable}`
+    );
+    for (const column of targetColumns) {
+      createSql = createSql.replace(
+        new RegExp(`([\"\\[]?${column}[\"\\]]?\\s+)INTEGER\\b`, 'i'),
+        '$1TEXT'
+      );
+      if (table === 'presets') {
+        createSql = createSql.replace(
+          new RegExp(`([\"\\[]?${column}[\"\\]]?\\s+TEXT\\s+NULL)\\s+REFERENCES\\s+[^,]+`, 'i'),
+          '$1'
+        );
+      }
+    }
+
+    const indexSql = this.localDb
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL")
+      .all(table) as Array<{ sql: string }>;
+    const columnNames = columns.map((column) => column.name);
+    const insertColumns = columnNames.map((column) => this.quoteIdentifier(column)).join(', ');
+    const selectColumns = columnNames
+      .map((column) => targetColumns.includes(column) ? `CAST(${this.quoteIdentifier(column)} AS TEXT)` : this.quoteIdentifier(column))
+      .join(', ');
+
+    this.localDb.pragma('foreign_keys = OFF');
+    try {
+      const migrateTable = this.localDb.transaction(() => {
+        this.localDb.exec(`DROP TABLE IF EXISTS ${this.quoteIdentifier(temporaryTable)}`);
+        this.localDb.exec(createSql);
+        this.localDb.exec(`INSERT INTO ${this.quoteIdentifier(temporaryTable)} (${insertColumns}) SELECT ${selectColumns} FROM ${this.quoteIdentifier(table)}`);
+        this.localDb.exec(`DROP TABLE ${this.quoteIdentifier(table)}`);
+        this.localDb.exec(`ALTER TABLE ${this.quoteIdentifier(temporaryTable)} RENAME TO ${this.quoteIdentifier(table)}`);
+        indexSql.forEach((index) => this.localDb.exec(index.sql));
+      });
+      migrateTable();
+    } finally {
+      this.localDb.pragma('foreign_keys = ON');
+    }
+  }
+
   private migrate(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS applications (
@@ -706,9 +903,9 @@ export class BugPocketDatabase {
 
       CREATE TABLE IF NOT EXISTS bugs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        application_id INTEGER NULL REFERENCES applications(id) ON DELETE SET NULL,
-        module_id INTEGER NULL REFERENCES modules(id) ON DELETE SET NULL,
-        environment_id INTEGER NULL REFERENCES environments(id) ON DELETE SET NULL,
+        application_id TEXT NULL REFERENCES applications(id) ON DELETE SET NULL,
+        module_id TEXT NULL REFERENCES modules(id) ON DELETE SET NULL,
+        environment_id TEXT NULL REFERENCES environments(id) ON DELETE SET NULL,
         device_id INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL,
         browser_id INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL,
         user_role_id INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL,
@@ -777,9 +974,11 @@ export class BugPocketDatabase {
       CREATE TABLE IF NOT EXISTS presets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
-        application_id INTEGER NULL REFERENCES applications(id) ON DELETE RESTRICT,
-        module_id INTEGER NULL REFERENCES modules(id) ON DELETE RESTRICT,
-        environment_id INTEGER NULL REFERENCES environments(id) ON DELETE RESTRICT,
+        -- Presets remain in local.sqlite and may point at UUID taxonomies in workspaceDb.
+        -- Cross-database foreign keys are impossible in SQLite; validate these IDs in application code.
+        application_id TEXT NULL,
+        module_id TEXT NULL,
+        environment_id TEXT NULL,
         user_role_id INTEGER NULL REFERENCES user_roles(id) ON DELETE RESTRICT,
         entry_type_id INTEGER NULL REFERENCES config_options(id) ON DELETE RESTRICT,
         created_at TEXT NOT NULL,
@@ -823,7 +1022,7 @@ export class BugPocketDatabase {
     this.ensureColumn('modules', 'is_active', 'INTEGER NOT NULL DEFAULT 1');
     this.ensureReferenceColumns();
     this.ensureColumn('bugs', 'entry_type', "TEXT NOT NULL DEFAULT 'Bug'");
-    this.ensureColumn('bugs', 'environment_id', 'INTEGER NULL REFERENCES environments(id) ON DELETE SET NULL');
+    this.ensureColumn('bugs', 'environment_id', 'TEXT NULL REFERENCES environments(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'device_id', 'INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'browser_id', 'INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL');
     this.ensureColumn('bugs', 'user_role_id', 'INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL');
@@ -1136,9 +1335,9 @@ export class BugPocketDatabase {
 
       CREATE TABLE bugs_status_limited (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        application_id INTEGER NULL REFERENCES applications(id) ON DELETE SET NULL,
-        module_id INTEGER NULL REFERENCES modules(id) ON DELETE SET NULL,
-        environment_id INTEGER NULL REFERENCES environments(id) ON DELETE SET NULL,
+        application_id TEXT NULL REFERENCES applications(id) ON DELETE SET NULL,
+        module_id TEXT NULL REFERENCES modules(id) ON DELETE SET NULL,
+        environment_id TEXT NULL REFERENCES environments(id) ON DELETE SET NULL,
         device_id INTEGER NULL REFERENCES devices(id) ON DELETE SET NULL,
         browser_id INTEGER NULL REFERENCES browsers(id) ON DELETE SET NULL,
         user_role_id INTEGER NULL REFERENCES user_roles(id) ON DELETE SET NULL,
@@ -1279,7 +1478,7 @@ export class BugPocketDatabase {
 
   private shouldSyncApplication(applicationId: number | string | null): boolean {
     if (applicationId == null) return true;
-    const row = this.db.prepare('SELECT is_synced FROM applications WHERE id = ?').get(applicationId) as { is_synced: number } | undefined;
+    const row = this.taxonomyDb().prepare('SELECT is_synced FROM applications WHERE id = ?').get(applicationId) as { is_synced: number } | undefined;
     return row ? row.is_synced !== 0 : false;
   }
 
@@ -1322,16 +1521,16 @@ export class BugPocketDatabase {
   }
 
   private applicationPayload(id: number | string): Record<string, unknown> | null {
-    return (this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Record<string, unknown> | undefined) ?? null;
+    return (this.taxonomyDb().prepare('SELECT * FROM applications WHERE id = ?').get(id) as Record<string, unknown> | undefined) ?? null;
   }
 
   private modulePayload(id: number | string): Record<string, unknown> | null {
-    return (this.db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Record<string, unknown> | undefined) ?? null;
+    return (this.taxonomyDb().prepare('SELECT * FROM modules WHERE id = ?').get(id) as Record<string, unknown> | undefined) ?? null;
   }
 
   private environmentPayload(id: number | string): Record<string, unknown> | null {
     return (
-      (this.db
+      (this.taxonomyDb()
         .prepare('SELECT id, name, COALESCE(NULLIF(value, \'\'), name) AS value, sort_order, is_active, created_at, updated_at FROM environments WHERE id = ?')
         .get(id) as Record<string, unknown> | undefined) ?? null
     );
@@ -1560,9 +1759,10 @@ Attachments:
   }
 
   getSettings(): SettingsData {
+    const taxonomyDb = this.taxonomyDb();
     return {
-      applications: this.db.prepare('SELECT * FROM applications WHERE is_active = 1 ORDER BY name').all() as Application[],
-      modules: this.db
+      applications: taxonomyDb.prepare('SELECT * FROM applications WHERE is_active = 1 ORDER BY name').all() as Application[],
+      modules: taxonomyDb
         .prepare(
           `
           SELECT modules.*
@@ -1622,19 +1822,40 @@ Attachments:
 
   private getSetting(key: string): string {
     return (
-      this.db
+      this.localDb
         .prepare('SELECT value FROM app_settings WHERE key = ?')
         .get(key) as { value: string } | undefined
     )?.value ?? '';
   }
 
   private setSetting(key: string, value: string): void {
-    this.db
+    this.localDb
       .prepare(
         `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
       )
       .run(key, value, now());
+  }
+
+  getEncryptedSupabaseAuthItem(storageKey: string): Buffer | null {
+    const value = this.getSetting(this.supabaseAuthStorageKey(storageKey));
+    return value ? Buffer.from(value, 'base64') : null;
+  }
+
+  setEncryptedSupabaseAuthItem(storageKey: string, encrypted: Buffer): void {
+    this.setSetting(this.supabaseAuthStorageKey(storageKey), encrypted.toString('base64'));
+  }
+
+  removeEncryptedSupabaseAuthItem(storageKey: string): void {
+    this.localDb
+      .prepare('DELETE FROM app_settings WHERE key = ?')
+      .run(this.supabaseAuthStorageKey(storageKey));
+  }
+
+  private supabaseAuthStorageKey(storageKey: string): string {
+    const cleaned = storageKey.trim();
+    if (!cleaned || cleaned.length > 512) throw new Error('Invalid Supabase auth storage key.');
+    return `supabase_auth_${createHash('sha256').update(cleaned).digest('hex')}`;
   }
 
   getJiraWorkspaceUrl(): string | null {
@@ -1732,20 +1953,72 @@ Attachments:
 
   updateWorkspaceRole(workspaceId: string, role: string | null | undefined): WorkspaceRole {
     const cleanedWorkspaceId = workspaceId.trim();
-    const normalizedRole: WorkspaceRole = role === 'owner' || role === 'admin' || role === 'member' ? role : 'member';
+    const normalizedRole: WorkspaceRole =
+      role === 'owner' || role === 'admin' || role === 'member' || role === 'developer'
+        ? role
+        : 'member';
     if (cleanedWorkspaceId) this.setSetting(this.workspaceRoleKey(cleanedWorkspaceId), normalizedRole);
     return normalizedRole;
   }
 
-  getRemoteSyncWatermark(workspaceId: string): string {
-    const key = this.remoteSyncWatermarkKey(workspaceId);
-    return this.getSetting(key).trim();
+  getRemoteSyncCursor(workspaceId: string, entityType: 'bug' | 'attachment'): RemoteSyncCursor {
+    const stored = this.getSetting(this.remoteSyncCursorKey(workspaceId, entityType)).trim();
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as Partial<RemoteSyncCursor>;
+        if (typeof parsed.updated_at === 'string' && !Number.isNaN(Date.parse(parsed.updated_at)) && typeof parsed.id === 'string') {
+          return { updated_at: parsed.updated_at, id: parsed.id };
+        }
+      } catch {
+        // Fall through to the legacy shared watermark migration.
+      }
+    }
+
+    const legacyTimestamp = this.getSetting(this.legacyRemoteSyncWatermarkKey(workspaceId)).trim();
+    // A shared legacy watermark cannot be safely split because either table may
+    // already have rows stranded behind it. Reset both new cursors for one
+    // idempotent full replay instead of carrying forward potential data loss.
+    if (legacyTimestamp) {
+      return { updated_at: '1970-01-01T00:00:00.000Z', id: '' };
+    }
+    return {
+      updated_at: '1970-01-01T00:00:00.000Z',
+      id: ''
+    };
   }
 
-  updateRemoteSyncWatermark(workspaceId: string, timestamp: string): string {
-    const cleaned = timestamp.trim();
-    this.setSetting(this.remoteSyncWatermarkKey(workspaceId), cleaned);
-    return cleaned;
+  updateRemoteSyncCursor(
+    workspaceId: string,
+    entityType: 'bug' | 'attachment',
+    cursor: RemoteSyncCursor
+  ): RemoteSyncCursor {
+    if (Number.isNaN(Date.parse(cursor.updated_at))) throw new Error('Remote sync cursor timestamp is invalid.');
+    const normalized = { updated_at: cursor.updated_at.trim(), id: cursor.id.trim() };
+    if (!normalized.id) throw new Error('Remote sync cursor ID is required after a completed batch.');
+    this.setSetting(this.remoteSyncCursorKey(workspaceId, entityType), JSON.stringify(normalized));
+    return normalized;
+  }
+
+  applyRemoteBugBatch(rows: Array<Record<string, unknown>>): boolean {
+    const transaction = this.requireWorkspaceDb().transaction(() => {
+      let changed = false;
+      for (const row of rows) {
+        if (this.upsertRemoteBug(row)) changed = true;
+      }
+      return changed;
+    });
+    return transaction();
+  }
+
+  applyRemoteAttachmentBatch(rows: Array<Record<string, unknown>>): boolean {
+    const transaction = this.requireWorkspaceDb().transaction(() => {
+      let changed = false;
+      for (const row of rows) {
+        if (this.upsertRemoteAttachment(row)) changed = true;
+      }
+      return changed;
+    });
+    return transaction();
   }
 
   markRemoteId(entityType: 'bug' | 'attachment', localId: number, remoteId: string): void {
@@ -1924,6 +2197,10 @@ Attachments:
   }
 
   upsertRemoteAttachment(remoteAttachment: Record<string, unknown>): boolean {
+    const attachmentMetadata = validateAttachmentMetadata(
+      remoteAttachment.content_hash,
+      remoteAttachment.file_extension
+    );
     const db = this.requireWorkspaceDb();
     const remoteId = this.remoteString(remoteAttachment.id);
     if (!remoteId) return false;
@@ -1947,8 +2224,8 @@ Attachments:
       remote_id: remoteId,
       bug_id: bug?.id ?? null,
       parent_id: parent?.id ?? null,
-      content_hash: this.remoteString(remoteAttachment.content_hash) || null,
-      file_extension: this.remoteString(remoteAttachment.file_extension) || '.png',
+      content_hash: attachmentMetadata.contentHash,
+      file_extension: attachmentMetadata.extension,
       mime_type: this.remoteString(remoteAttachment.mime_type) || 'image/png',
       source_type: this.remoteString(remoteAttachment.source_type) || 'other',
       sync_status: 'Synced' as SyncStatus,
@@ -1986,8 +2263,13 @@ Attachments:
     return true;
   }
 
-  private remoteSyncWatermarkKey(workspaceId: string): string {
+  private legacyRemoteSyncWatermarkKey(workspaceId: string): string {
     return `last_remote_sync_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+  }
+
+  private remoteSyncCursorKey(workspaceId: string, entityType: 'bug' | 'attachment'): string {
+    const safeWorkspaceId = workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_');
+    return `${entityType}_cursor_${safeWorkspaceId}`;
   }
 
   private workspaceRoleKey(workspaceId: string): string {
@@ -2001,6 +2283,14 @@ Attachments:
 
   private workspaceDataDb(): Database.Database {
     return this.workspaceDb ?? this.localDb;
+  }
+
+  private taxonomyDb(): Database.Database {
+    return this.workspaceDb ?? this.localDb;
+  }
+
+  private referenceDb(type: ReferenceTable): Database.Database {
+    return type === 'environment' ? this.taxonomyDb() : this.localDb;
   }
 
   private remoteString(value: unknown): string {
@@ -2232,13 +2522,16 @@ Attachments:
     }
   }
 
-  private requireExists(table: string, id: number, label: string): void {
-    const row = this.db.prepare(`SELECT id FROM ${table} WHERE id = ? AND is_active = 1`).get(id);
+  private requireExists(table: string, id: TaxonomyId, label: string): void {
+    const db = table === 'applications' || table === 'modules' || table === 'environments'
+      ? this.taxonomyDb()
+      : this.localDb;
+    const row = db.prepare(`SELECT id FROM ${table} WHERE id = ? AND is_active = 1`).get(id);
     if (!row) throw new Error(`${label} was not found.`);
   }
 
-  private assertNotUsedByPreset(column: 'application_id' | 'module_id' | 'environment_id' | 'user_role_id' | 'entry_type_id', id: number): void {
-    const row = this.db.prepare(`SELECT COUNT(*) AS count FROM presets WHERE ${column} = ?`).get(id) as { count: number };
+  private assertNotUsedByPreset(column: 'application_id' | 'module_id' | 'environment_id' | 'user_role_id' | 'entry_type_id', id: TaxonomyId): void {
+    const row = this.localDb.prepare(`SELECT COUNT(*) AS count FROM presets WHERE ${column} = ?`).get(id) as { count: number };
     if (row.count > 0) throw new Error('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.');
   }
 
@@ -2250,26 +2543,32 @@ Attachments:
 
   private getReferenceOptions(type: ReferenceTable): ReferenceOption[] {
     const table = referenceTables[type];
-    return this.db
+    return this.referenceDb(type)
       .prepare(`SELECT id, name, COALESCE(NULLIF(value, ''), name) AS value, sort_order, is_active, created_at, updated_at FROM ${table} WHERE is_active = 1 ORDER BY sort_order, name`)
       .all() as ReferenceOption[];
   }
 
   private addReferenceOption(type: ReferenceTable, name: string, sortOrder?: number, stamp = now()): ReferenceOption {
     const table = referenceTables[type];
+    const db = this.referenceDb(type);
     const cleaned = name.trim();
     if (!cleaned) throw new Error('Option value is required.');
-    const existing = this.db.prepare(`SELECT * FROM ${table} WHERE name = ?`).get(cleaned) as ReferenceOption | undefined;
+    const existing = db.prepare(`SELECT * FROM ${table} WHERE name = ?`).get(cleaned) as ReferenceOption | undefined;
     if (existing) {
-      this.db.prepare(`UPDATE ${table} SET is_active = 1, value = name, updated_at = ? WHERE id = ?`).run(stamp, existing.id);
-      return this.db.prepare(`SELECT id, name, COALESCE(NULLIF(value, ''), name) AS value, sort_order, is_active, created_at, updated_at FROM ${table} WHERE id = ?`).get(existing.id) as ReferenceOption;
+      db.prepare(`UPDATE ${table} SET is_active = 1, value = name, updated_at = ? WHERE id = ?`).run(stamp, existing.id);
+      return db.prepare(`SELECT id, name, COALESCE(NULLIF(value, ''), name) AS value, sort_order, is_active, created_at, updated_at FROM ${table} WHERE id = ?`).get(existing.id) as ReferenceOption;
     }
-    const maxOrder = this.db.prepare(`SELECT COALESCE(MAX(sort_order), 0) as sort_order FROM ${table}`).get() as { sort_order: number };
+    const maxOrder = db.prepare(`SELECT COALESCE(MAX(sort_order), 0) as sort_order FROM ${table}`).get() as { sort_order: number };
     const order = sortOrder ?? maxOrder.sort_order + 1;
-    this.db
-      .prepare(`INSERT INTO ${table} (name, value, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)`)
+    if (type === 'environment' && this.workspaceDb) {
+      const id = randomUUID();
+      db.prepare(`INSERT INTO ${table} (id, name, value, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)`)
+        .run(id, cleaned, cleaned, order, stamp, stamp);
+      return db.prepare(`SELECT id, name, COALESCE(NULLIF(value, ''), name) AS value, sort_order, is_active, created_at, updated_at FROM ${table} WHERE id = ?`).get(id) as ReferenceOption;
+    }
+    db.prepare(`INSERT INTO ${table} (name, value, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)`)
       .run(cleaned, cleaned, order, stamp, stamp);
-    return this.db.prepare(`SELECT id, name, COALESCE(NULLIF(value, ''), name) AS value, sort_order, is_active, created_at, updated_at FROM ${table} WHERE id = last_insert_rowid()`).get() as ReferenceOption;
+    return db.prepare(`SELECT id, name, COALESCE(NULLIF(value, ''), name) AS value, sort_order, is_active, created_at, updated_at FROM ${table} WHERE id = last_insert_rowid()`).get() as ReferenceOption;
   }
 
   addEnvironment(name: string): ReferenceOption {
@@ -2278,13 +2577,13 @@ Attachments:
     return environment;
   }
 
-  updateEnvironment(id: number, name: string): ReferenceOption {
+  updateEnvironment(id: TaxonomyId, name: string): ReferenceOption {
     const environment = this.updateReferenceOption('environment', id, name);
     this.enqueueEnvironmentSyncEvent(environment.id, 'UPDATE', this.environmentPayload(environment.id));
     return environment;
   }
 
-  deleteEnvironment(id: number): void {
+  deleteEnvironment(id: TaxonomyId): void {
     this.assertNotUsedByPreset('environment_id', id);
     this.deleteReferenceOption('environment', id);
     this.enqueueEnvironmentSyncEvent(id, 'DELETE', this.environmentPayload(id));
@@ -2294,11 +2593,11 @@ Attachments:
     return this.addReferenceOption('device', name);
   }
 
-  updateDevice(id: number, name: string): ReferenceOption {
+  updateDevice(id: TaxonomyId, name: string): ReferenceOption {
     return this.updateReferenceOption('device', id, name);
   }
 
-  deleteDevice(id: number): void {
+  deleteDevice(id: TaxonomyId): void {
     this.deleteReferenceOption('device', id);
   }
 
@@ -2306,11 +2605,11 @@ Attachments:
     return this.addReferenceOption('browser', name);
   }
 
-  updateBrowser(id: number, name: string): ReferenceOption {
+  updateBrowser(id: TaxonomyId, name: string): ReferenceOption {
     return this.updateReferenceOption('browser', id, name);
   }
 
-  deleteBrowser(id: number): void {
+  deleteBrowser(id: TaxonomyId): void {
     this.deleteReferenceOption('browser', id);
   }
 
@@ -2318,37 +2617,39 @@ Attachments:
     return this.addReferenceOption('user_role', name);
   }
 
-  updateUserRole(id: number, name: string): ReferenceOption {
+  updateUserRole(id: TaxonomyId, name: string): ReferenceOption {
     return this.updateReferenceOption('user_role', id, name);
   }
 
-  deleteUserRole(id: number): void {
+  deleteUserRole(id: TaxonomyId): void {
     this.assertNotUsedByPreset('user_role_id', id);
     this.deleteReferenceOption('user_role', id);
   }
 
-  private updateReferenceOption(type: ReferenceTable, id: number, name: string): ReferenceOption {
+  private updateReferenceOption(type: ReferenceTable, id: TaxonomyId, name: string): ReferenceOption {
     const table = referenceTables[type];
+    const db = this.referenceDb(type);
     const cleaned = name.trim();
     if (!cleaned) throw new Error('Option value is required.');
-    const duplicate = this.db.prepare(`SELECT id FROM ${table} WHERE name = ? AND id != ?`).get(cleaned, id) as { id: number } | undefined;
+    const duplicate = db.prepare(`SELECT id FROM ${table} WHERE name = ? AND id != ?`).get(cleaned, id) as { id: TaxonomyId } | undefined;
     if (duplicate) throw new Error('Option already exists.');
-    this.db.prepare(`UPDATE ${table} SET name = ?, value = ?, updated_at = ? WHERE id = ?`).run(cleaned, cleaned, now(), id);
-    return this.db.prepare(`SELECT id, name, COALESCE(NULLIF(value, ''), name) AS value, sort_order, is_active, created_at, updated_at FROM ${table} WHERE id = ?`).get(id) as ReferenceOption;
+    db.prepare(`UPDATE ${table} SET name = ?, value = ?, updated_at = ? WHERE id = ?`).run(cleaned, cleaned, now(), id);
+    return db.prepare(`SELECT id, name, COALESCE(NULLIF(value, ''), name) AS value, sort_order, is_active, created_at, updated_at FROM ${table} WHERE id = ?`).get(id) as ReferenceOption;
   }
 
-  private deleteReferenceOption(type: ReferenceTable, id: number): void {
+  private deleteReferenceOption(type: ReferenceTable, id: TaxonomyId): void {
     const table = referenceTables[type];
-    this.db.prepare(`UPDATE ${table} SET is_active = 0, updated_at = ? WHERE id = ?`).run(now(), id);
+    this.referenceDb(type).prepare(`UPDATE ${table} SET is_active = 0, updated_at = ? WHERE id = ?`).run(now(), id);
   }
 
-  mergeReferenceOption(tableName: ReferenceTable | string, sourceId: number, targetId: number): void {
+  mergeReferenceOption(tableName: ReferenceTable | string, sourceId: TaxonomyId, targetId: TaxonomyId): void {
     const type = this.normalizeReferenceTable(tableName);
     if (sourceId === targetId) throw new Error('Choose a different target to merge into.');
     const table = referenceTables[type];
     const foreignKey = referenceForeignKeys[type];
-    const source = this.db.prepare(`SELECT id, name, value FROM ${table} WHERE id = ?`).get(sourceId) as ReferenceOption | undefined;
-    const target = this.db.prepare(`SELECT id, name, value FROM ${table} WHERE id = ?`).get(targetId) as ReferenceOption | undefined;
+    const referenceDb = this.referenceDb(type);
+    const source = referenceDb.prepare(`SELECT id, name, value FROM ${table} WHERE id = ?`).get(sourceId) as ReferenceOption | undefined;
+    const target = referenceDb.prepare(`SELECT id, name, value FROM ${table} WHERE id = ?`).get(targetId) as ReferenceOption | undefined;
     if (!source) throw new Error('Duplicate reference item was not found.');
     if (!target) throw new Error('Canonical reference item was not found.');
 
@@ -2361,10 +2662,10 @@ Attachments:
 
     const updateLocalReferences = this.localDb.transaction(() => {
       const presetResult = this.localDb.prepare(`UPDATE presets SET ${foreignKey} = ?, updated_at = ? WHERE ${foreignKey} = ?`).run(targetId, now(), sourceId);
-      this.localDb.prepare(`DELETE FROM ${table} WHERE id = ?`).run(sourceId);
       return presetResult;
     });
     const presetResult = updateLocalReferences();
+    referenceDb.prepare(`DELETE FROM ${table} WHERE id = ?`).run(sourceId);
 
     if (this.isCloudSyncReady()) {
       this.enqueueSyncEvent('reference', targetId, 'MERGE', {
@@ -2390,22 +2691,36 @@ Attachments:
   }
 
   addApplication(name: string, contextDescription = ''): Application {
+    const db = this.taxonomyDb();
     const cleaned = name.trim();
     const context = contextDescription.trim() || null;
     if (!cleaned) throw new Error('Application name is required.');
     const stamp = now();
-    const existing = this.db.prepare('SELECT * FROM applications WHERE name = ?').get(cleaned) as Application | undefined;
+    const existing = db.prepare('SELECT * FROM applications WHERE name = ?').get(cleaned) as Application | undefined;
     if (existing) {
-      this.db.prepare('UPDATE applications SET context_description = COALESCE(?, context_description), is_active = 1, updated_at = ? WHERE id = ?').run(context, stamp, existing.id);
-      const application = this.db.prepare('SELECT * FROM applications WHERE id = ?').get(existing.id) as Application;
+      db.prepare('UPDATE applications SET context_description = COALESCE(?, context_description), is_active = 1, updated_at = ? WHERE id = ?').run(context, stamp, existing.id);
+      const application = db.prepare('SELECT * FROM applications WHERE id = ?').get(existing.id) as Application;
       this.enqueueApplicationSyncEvent(application.id, 'UPDATE', this.applicationPayload(application.id));
       return application;
     }
-    const tx = this.db.transaction(() => {
-      this.db.prepare('INSERT INTO applications (name, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, 1, 1, ?, ?)').run(cleaned, context, stamp, stamp);
-      const application = this.db.prepare('SELECT * FROM applications WHERE id = last_insert_rowid()').get() as Application;
-      this.db.prepare('INSERT INTO modules (application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)').run(application.id, 'General', null, stamp, stamp);
-      const module = this.db.prepare('SELECT * FROM modules WHERE id = last_insert_rowid()').get() as Module;
+    const tx = db.transaction(() => {
+      let application: Application;
+      let module: Module;
+      if (this.workspaceDb) {
+        const applicationId = randomUUID();
+        const moduleId = randomUUID();
+        db.prepare('INSERT INTO applications (id, name, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, ?, 1, 1, ?, ?)')
+          .run(applicationId, cleaned, context, stamp, stamp);
+        application = db.prepare('SELECT * FROM applications WHERE id = ?').get(applicationId) as Application;
+        db.prepare('INSERT INTO modules (id, application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)')
+          .run(moduleId, application.id, 'General', null, stamp, stamp);
+        module = db.prepare('SELECT * FROM modules WHERE id = ?').get(moduleId) as Module;
+      } else {
+        db.prepare('INSERT INTO applications (name, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, 1, 1, ?, ?)').run(cleaned, context, stamp, stamp);
+        application = db.prepare('SELECT * FROM applications WHERE id = last_insert_rowid()').get() as Application;
+        db.prepare('INSERT INTO modules (application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)').run(application.id, 'General', null, stamp, stamp);
+        module = db.prepare('SELECT * FROM modules WHERE id = last_insert_rowid()').get() as Module;
+      }
       return { application, module };
     });
     const { application, module } = tx();
@@ -2414,80 +2729,94 @@ Attachments:
     return application;
   }
 
-  updateApplication(id: number, name: string, contextDescription = ''): Application {
+  updateApplication(id: TaxonomyId, name: string, contextDescription = ''): Application {
+    const db = this.taxonomyDb();
     const cleaned = name.trim();
     if (!cleaned) throw new Error('Application name is required.');
-    const duplicate = this.db.prepare('SELECT id FROM applications WHERE name = ? AND id != ?').get(cleaned, id) as { id: number } | undefined;
+    const duplicate = db.prepare('SELECT id FROM applications WHERE name = ? AND id != ?').get(cleaned, id) as { id: TaxonomyId } | undefined;
     if (duplicate) throw new Error('Application already exists.');
-    this.db.prepare('UPDATE applications SET name = ?, context_description = ?, updated_at = ? WHERE id = ?').run(cleaned, contextDescription.trim() || null, now(), id);
-    const application = this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
+    db.prepare('UPDATE applications SET name = ?, context_description = ?, updated_at = ? WHERE id = ?').run(cleaned, contextDescription.trim() || null, now(), id);
+    const application = db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
     this.enqueueApplicationSyncEvent(application.id, 'UPDATE', this.applicationPayload(application.id));
     return application;
   }
 
-  updateApplicationSync(id: number, isSynced: boolean): Application {
-    this.db.prepare('UPDATE applications SET is_synced = ?, updated_at = ? WHERE id = ?').run(isSynced ? 1 : 0, now(), id);
-    const application = this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
+  updateApplicationSync(id: TaxonomyId, isSynced: boolean): Application {
+    const db = this.taxonomyDb();
+    db.prepare('UPDATE applications SET is_synced = ?, updated_at = ? WHERE id = ?').run(isSynced ? 1 : 0, now(), id);
+    const application = db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
     this.enqueueApplicationSyncEvent(application.id, 'UPDATE', this.applicationPayload(application.id));
     return application;
   }
 
-  updateApplicationContext(id: number, contextDescription: string): Application {
-    this.db.prepare('UPDATE applications SET context_description = ?, updated_at = ? WHERE id = ?').run(contextDescription.trim() || null, now(), id);
-    const application = this.db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
+  updateApplicationContext(id: TaxonomyId, contextDescription: string): Application {
+    const db = this.taxonomyDb();
+    db.prepare('UPDATE applications SET context_description = ?, updated_at = ? WHERE id = ?').run(contextDescription.trim() || null, now(), id);
+    const application = db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
     this.enqueueApplicationSyncEvent(application.id, 'UPDATE', this.applicationPayload(application.id));
     return application;
   }
 
-  deleteApplication(id: number): void {
+  deleteApplication(id: TaxonomyId): void {
     this.assertNotUsedByPreset('application_id', id);
-    this.db.prepare('UPDATE applications SET is_active = 0, updated_at = ? WHERE id = ?').run(now(), id);
+    this.taxonomyDb().prepare('UPDATE applications SET is_active = 0, updated_at = ? WHERE id = ?').run(now(), id);
     this.enqueueApplicationSyncEvent(id, 'DELETE', this.applicationPayload(id));
   }
 
-  addModule(name: string, applicationId: number | null, contextDescription = ''): Module {
+  addModule(name: string, applicationId: TaxonomyId | null, contextDescription = ''): Module {
+    const db = this.taxonomyDb();
     const cleaned = name.trim();
     const context = contextDescription.trim() || null;
     if (!cleaned) throw new Error('Module name is required.');
     const stamp = now();
-    const existing = this.db
+    const existing = db
       .prepare('SELECT * FROM modules WHERE name = ? AND ((? IS NULL AND application_id IS NULL) OR application_id = ?) LIMIT 1')
       .get(cleaned, applicationId, applicationId) as Module | undefined;
     if (existing) {
-      this.db.prepare('UPDATE modules SET context_description = COALESCE(?, context_description), is_active = 1, updated_at = ? WHERE id = ?').run(context, stamp, existing.id);
-      const module = this.db.prepare('SELECT * FROM modules WHERE id = ?').get(existing.id) as Module;
+      db.prepare('UPDATE modules SET context_description = COALESCE(?, context_description), is_active = 1, updated_at = ? WHERE id = ?').run(context, stamp, existing.id);
+      const module = db.prepare('SELECT * FROM modules WHERE id = ?').get(existing.id) as Module;
       this.enqueueModuleSyncEvent(module.id, 'UPDATE', this.modulePayload(module.id));
       return module;
     }
-    this.db.prepare('INSERT INTO modules (application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)').run(applicationId, cleaned, context, stamp, stamp);
-    const module = this.db.prepare('SELECT * FROM modules WHERE id = last_insert_rowid()').get() as Module;
+    let module: Module;
+    if (this.workspaceDb) {
+      const id = randomUUID();
+      db.prepare('INSERT INTO modules (id, application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)')
+        .run(id, applicationId, cleaned, context, stamp, stamp);
+      module = db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Module;
+    } else {
+      db.prepare('INSERT INTO modules (application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)').run(applicationId, cleaned, context, stamp, stamp);
+      module = db.prepare('SELECT * FROM modules WHERE id = last_insert_rowid()').get() as Module;
+    }
     this.enqueueModuleSyncEvent(module.id, 'INSERT', this.modulePayload(module.id));
     return module;
   }
 
-  updateModule(id: number, name: string, applicationId: number | null, contextDescription = ''): Module {
+  updateModule(id: TaxonomyId, name: string, applicationId: TaxonomyId | null, contextDescription = ''): Module {
+    const db = this.taxonomyDb();
     const cleaned = name.trim();
     if (!cleaned) throw new Error('Module name is required.');
-    const duplicate = this.db
+    const duplicate = db
       .prepare('SELECT id FROM modules WHERE name = ? AND ((? IS NULL AND application_id IS NULL) OR application_id = ?) AND id != ? AND is_active = 1 LIMIT 1')
-      .get(cleaned, applicationId, applicationId, id) as { id: number } | undefined;
+      .get(cleaned, applicationId, applicationId, id) as { id: TaxonomyId } | undefined;
     if (duplicate) throw new Error('Module already exists for this application.');
-    this.db.prepare('UPDATE modules SET application_id = ?, name = ?, context_description = ?, updated_at = ? WHERE id = ?').run(applicationId, cleaned, contextDescription.trim() || null, now(), id);
-    const module = this.db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Module;
+    db.prepare('UPDATE modules SET application_id = ?, name = ?, context_description = ?, updated_at = ? WHERE id = ?').run(applicationId, cleaned, contextDescription.trim() || null, now(), id);
+    const module = db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Module;
     this.enqueueModuleSyncEvent(module.id, 'UPDATE', this.modulePayload(module.id));
     return module;
   }
 
-  updateModuleContext(id: number, contextDescription: string): Module {
-    this.db.prepare('UPDATE modules SET context_description = ?, updated_at = ? WHERE id = ?').run(contextDescription.trim() || null, now(), id);
-    const module = this.db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Module;
+  updateModuleContext(id: TaxonomyId, contextDescription: string): Module {
+    const db = this.taxonomyDb();
+    db.prepare('UPDATE modules SET context_description = ?, updated_at = ? WHERE id = ?').run(contextDescription.trim() || null, now(), id);
+    const module = db.prepare('SELECT * FROM modules WHERE id = ?').get(id) as Module;
     this.enqueueModuleSyncEvent(module.id, 'UPDATE', this.modulePayload(module.id));
     return module;
   }
 
-  deleteModule(id: number): void {
+  deleteModule(id: TaxonomyId): void {
     this.assertNotUsedByPreset('module_id', id);
-    this.db.prepare('UPDATE modules SET is_active = 0, updated_at = ? WHERE id = ?').run(now(), id);
+    this.taxonomyDb().prepare('UPDATE modules SET is_active = 0, updated_at = ? WHERE id = ?').run(now(), id);
     this.enqueueModuleSyncEvent(id, 'DELETE', this.modulePayload(id));
   }
 

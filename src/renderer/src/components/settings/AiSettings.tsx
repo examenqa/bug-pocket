@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { AiByokConfig, AiProvider } from '../../../../shared/types';
+import type { AiByokConfig, AiConfigSaveInput, AiProvider } from '../../../../shared/types';
 
 interface AiSettingsProps {
   mutationReady: boolean;
@@ -65,8 +65,7 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
   const [baseUrl, setBaseUrl] = useState(providerPresets.OpenRouter.baseUrl);
   const [modelId, setModelId] = useState(providerPresets.OpenRouter.modelId);
   const [apiKey, setApiKey] = useState('');
-  const [apiKeys, setApiKeys] = useState<Partial<Record<AiProvider, string>>>({});
-  const [hasApiKey, setHasApiKey] = useState(false);
+  const [configuredProviders, setConfiguredProviders] = useState<Partial<Record<AiProvider, boolean>>>({});
   const [customSystemPrompt, setCustomSystemPrompt] = useState(defaultPrompt);
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [promptBeforeEdit, setPromptBeforeEdit] = useState(defaultPrompt);
@@ -74,20 +73,19 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
+  const hasApiKey = Boolean(configuredProviders[provider]);
 
   const loadConfig = async (): Promise<void> => {
     const config = (await window.bugPocket.getAiConfig()) as AiByokConfig;
-    const loadedApiKeys = config.apiKeys ?? (config.apiKey ? { [config.provider]: config.apiKey } : {});
     setProvider(config.provider);
     setBaseUrl(config.baseUrl || providerPresets[config.provider].baseUrl);
     setModelId(config.modelId || providerPresets[config.provider].modelId);
-    setApiKeys(loadedApiKeys);
-    setHasApiKey(Boolean(loadedApiKeys[config.provider] || config.hasApiKey));
+    setConfiguredProviders(config.configuredProviders);
     const normalizedPrompt = normalizePrompt(config.customSystemPrompt);
     setCustomSystemPrompt(normalizedPrompt);
     setPromptBeforeEdit(normalizedPrompt);
     setIsEditingPrompt(false);
-    setApiKey(loadedApiKeys[config.provider] ?? '');
+    setApiKey('');
   };
 
   useEffect(() => {
@@ -110,8 +108,7 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
     setProvider(nextProvider);
     setBaseUrl(providerPresets[nextProvider].baseUrl);
     setModelId(providerPresets[nextProvider].modelId);
-    setApiKey(apiKeys[nextProvider] ?? '');
-    setHasApiKey(Boolean(apiKeys[nextProvider]));
+    setApiKey('');
     setStatus('');
     setError('');
   };
@@ -125,25 +122,28 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
       const cleanedModelId = modelId.trim();
       if (!cleanedBaseUrl) throw new Error('Base URL is required.');
       if (!cleanedModelId) throw new Error('Model ID is required.');
+      const replacementKey = apiKey.trim();
+      const apiKeyOperation: AiConfigSaveInput['apiKeyOperation'] = clearApiKey
+        ? { action: 'clear' }
+        : replacementKey
+          ? { action: 'replace', value: replacementKey }
+          : undefined;
       const config = (await window.bugPocket.saveAiConfig({
         provider,
         baseUrl: cleanedBaseUrl,
         modelId: cleanedModelId,
-        apiKey: clearApiKey ? undefined : apiKey.trim() || undefined,
-        clearApiKey,
+        apiKeyOperation,
         customSystemPrompt: customSystemPrompt.trim() || defaultPrompt
       })) as AiByokConfig;
-      const savedApiKeys = config.apiKeys ?? (config.apiKey ? { [config.provider]: config.apiKey } : {});
       setProvider(config.provider);
       setBaseUrl(config.baseUrl || cleanedBaseUrl);
       setModelId(config.modelId || cleanedModelId);
-      setApiKeys(savedApiKeys);
-      setHasApiKey(Boolean(savedApiKeys[config.provider] || config.hasApiKey));
+      setConfiguredProviders(config.configuredProviders);
       const normalizedPrompt = normalizePrompt(config.customSystemPrompt);
       setCustomSystemPrompt(normalizedPrompt);
       setPromptBeforeEdit(normalizedPrompt);
       setIsEditingPrompt(false);
-      setApiKey(savedApiKeys[config.provider] ?? '');
+      setApiKey('');
       await refresh();
       setStatus(clearApiKey ? `${provider} API key cleared.` : 'AI processing settings saved.');
       window.setTimeout(() => setStatus(''), 1800);
@@ -206,7 +206,7 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
             type="password"
             value={apiKey}
             onChange={(event) => setApiKey(event.target.value)}
-            placeholder={hasApiKey ? `Stored for ${provider}. Edit to replace it.` : 'Paste your API key'}
+            placeholder={hasApiKey ? '••••••••' : 'Paste your API key'}
             disabled={saving || !mutationReady}
           />
         </label>

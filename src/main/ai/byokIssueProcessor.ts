@@ -1,6 +1,8 @@
 import { nativeImage, safeStorage } from 'electron';
-import type { AiByokConfig, AiIssueProcessPayload, AiIssueProcessResult, AiProvider } from '../../shared/types';
+import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiIssueProcessResult, AiProvider, AiTriageBugPayload } from '../../shared/types';
 import type { BugPocketDatabase } from '../database';
+import { buildRendererByokAiConfig, decryptStoredApiKey } from './byokConfigResponse';
+import { resolveVerifiedTriageAttachmentPath } from './triageAttachment';
 
 const legacyDefaultSystemPrompts = [
   'You are a Senior QA Engineer. Analyze the user\'s text and the provided Base64 screenshot. Identify exact UI elements, button states, and error messages. You MUST generate the following details as a strict JSON object with exactly these keys:\n\ntitle: A strict limit of 50 characters maximum (5-7 words). Do not include error codes or lengthy descriptions here.\n\nbugNote: A highly detailed description of the failure and visual UI state.\n\nstepsToReproduce: You MUST write 3 to 5 numbered steps reverse-engineered from the visual context. NEVER leave this blank and NEVER use placeholders. Assume the logical journey required to reach the screen.\n\nexpectedResult: What should have happened.\n\nactualResult: What actually happened.\nDo not output any markdown outside this JSON object.',
@@ -36,32 +38,20 @@ type ChatCompletionResponse = {
 };
 
 export function getByokAiConfig(database: BugPocketDatabase): AiByokConfig {
-  const provider = database.getByokAiProvider();
-  const encryptedKeys = database.getEncryptedByokAiApiKeys();
-  const apiKeys = decryptApiKeyMap(encryptedKeys);
-  const hasApiKeys = Object.fromEntries(
-    Object.entries(encryptedKeys).map(([key, value]) => [key, Boolean(value)])
-  ) as Partial<Record<AiProvider, boolean>>;
-
-  return {
-    provider,
-    baseUrl: database.getByokAiBaseUrl(),
-    modelId: database.getByokAiModelId(),
-    hasApiKey: Boolean(encryptedKeys[provider]),
-    hasApiKeys,
-    apiKey: apiKeys[provider] ?? '',
-    apiKeys,
-    customSystemPrompt: database.getByokAiCustomSystemPrompt()
-  };
+  return buildRendererByokAiConfig(database);
 }
 
 export function saveByokAiConfig(
   database: BugPocketDatabase,
-  input: { provider: AiProvider; baseUrl: string; modelId: string; apiKey?: string; clearApiKey?: boolean; customSystemPrompt: string }
+  input: AiConfigSaveInput
 ): AiByokConfig {
   let encryptedApiKey: string | null | undefined;
-  if (input.clearApiKey) encryptedApiKey = '';
-  else if (input.apiKey?.trim()) encryptedApiKey = encryptApiKey(input.apiKey.trim());
+  if (input.apiKeyOperation?.action === 'clear') encryptedApiKey = '';
+  else if (input.apiKeyOperation?.action === 'replace') {
+    const replacementKey = input.apiKeyOperation.value.trim();
+    if (!replacementKey) throw new Error('Replacement API key cannot be empty.');
+    encryptedApiKey = encryptApiKey(replacementKey);
+  }
 
   database.updateByokAiConfig(input.provider, normalizeBaseUrl(input.baseUrl), input.modelId.trim(), encryptedApiKey, input.customSystemPrompt);
   return getByokAiConfig(database);
@@ -69,7 +59,7 @@ export function saveByokAiConfig(
 
 export async function processIssueWithByokAi(database: BugPocketDatabase, payload: AiIssueProcessPayload): Promise<AiIssueProcessResult> {
   const config = getByokAiConfig(database);
-  const apiKey = decryptApiKey(database.getEncryptedByokAiApiKey(config.provider));
+  const apiKey = decryptStoredApiKey(database.getEncryptedByokAiApiKey(config.provider), safeStorage);
   if (!apiKey) return { success: false, provider: config.provider, error: 'AI API key is not configured.' };
 
   const baseUrl = normalizeBaseUrl(config.baseUrl);
@@ -96,7 +86,7 @@ export async function processIssueWithByokAi(database: BugPocketDatabase, payloa
 }
 export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: unknown): Promise<string> {
   const config = getByokAiConfig(database);
-  const apiKey = decryptApiKey(database.getEncryptedByokAiApiKey(config.provider));
+  const apiKey = decryptStoredApiKey(database.getEncryptedByokAiApiKey(config.provider), safeStorage);
   if (!apiKey) throw new Error('AI API key is not configured. Add one in Settings > AI Processing.');
 
   const baseUrl = normalizeBaseUrl(config.baseUrl);
@@ -106,7 +96,7 @@ export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: 
 
   const systemPrompt = normalizeSystemPrompt(config.customSystemPrompt);
   const userPrompt = buildTriagePrompt(bugData);
-  const imageDataUrl = readBugImageDataUrl(bugData);
+  const imageDataUrl = readBugImageDataUrl(database, bugData);
   const output = await callOpenAiCompatibleChat({ apiKey, baseUrl, modelId, provider: config.provider, systemPrompt, userPrompt, imageDataUrl });
   return extractJsonObjectString(output);
 }
@@ -114,24 +104,6 @@ export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: 
 function encryptApiKey(apiKey: string): string {
   if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure key storage is not available on this Windows profile.');
   return safeStorage.encryptString(apiKey).toString('base64');
-}
-
-function decryptApiKey(encryptedValue: string): string {
-  if (!encryptedValue || !safeStorage.isEncryptionAvailable()) return '';
-  try {
-    return safeStorage.decryptString(Buffer.from(encryptedValue, 'base64'));
-  } catch {
-    return '';
-  }
-}
-
-function decryptApiKeyMap(encryptedKeys: Partial<Record<AiProvider, string>>): Partial<Record<AiProvider, string>> {
-  const decrypted: Partial<Record<AiProvider, string>> = {};
-  (Object.entries(encryptedKeys) as Array<[AiProvider, string]>).forEach(([provider, encryptedValue]) => {
-    const apiKey = decryptApiKey(encryptedValue);
-    if (apiKey) decrypted[provider] = apiKey;
-  });
-  return decrypted;
 }
 
 function normalizeBaseUrl(value: string): string {
@@ -148,9 +120,8 @@ function extractJsonObjectString(value: string): string {
   return (match ? match[0] : value).trim();
 }
 
-function readBugImageDataUrl(bugData: unknown): string | undefined {
-  const payload = bugData as { image_file_path?: unknown } | null;
-  const imageFilePath = typeof payload?.image_file_path === 'string' ? payload.image_file_path : '';
+function readBugImageDataUrl(database: BugPocketDatabase, bugData: unknown): string | undefined {
+  const imageFilePath = resolveVerifiedTriageAttachmentPath(database, bugData as AiTriageBugPayload);
   if (!imageFilePath) return undefined;
 
   const image = nativeImage.createFromPath(imageFilePath);
@@ -174,7 +145,7 @@ const aiPromptOmittedKeys = new Set([
   'file_name',
   'file_path',
   'filename',
-  'image_file_path',
+  'attachment_id',
   'mime_type',
   'path'
 ]);

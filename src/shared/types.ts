@@ -6,9 +6,15 @@ export type ShortcutAction = 'quick_capture' | 'main_panel' | 'global_screenshot
 export type ReferenceTable = 'environment' | 'device' | 'browser' | 'user_role';
 export type SyncQueueEntityType = 'application' | 'module' | 'environment' | 'bug' | 'attachment' | 'reference';
 export type SyncQueueOperation = 'INSERT' | 'UPDATE' | 'DELETE' | 'MERGE';
+export type TaxonomyId = string | number;
+
+export interface RemoteSyncCursor {
+  updated_at: string;
+  id: string;
+}
 
 export interface Application {
-  id: number;
+  id: TaxonomyId;
   name: string;
   context_description: string | null;
   is_active: number;
@@ -18,8 +24,8 @@ export interface Application {
 }
 
 export interface Module {
-  id: number;
-  application_id: number | null;
+  id: TaxonomyId;
+  application_id: TaxonomyId | null;
   name: string;
   context_description: string | null;
   is_active: number;
@@ -36,7 +42,7 @@ export interface ConfigOption {
 }
 
 export interface ReferenceOption {
-  id: number;
+  id: TaxonomyId;
   name: string;
   value: string;
   sort_order: number;
@@ -66,12 +72,12 @@ export interface AttachmentLineage {
 
 export interface Bug {
   id: number;
-  application_id: number | null;
-  module_id: number | null;
-  environment_id: number | null;
-  device_id: number | null;
-  browser_id: number | null;
-  user_role_id: number | null;
+  application_id: TaxonomyId | null;
+  module_id: TaxonomyId | null;
+  environment_id: TaxonomyId | null;
+  device_id: TaxonomyId | null;
+  browser_id: TaxonomyId | null;
+  user_role_id: TaxonomyId | null;
   application_name?: string | null;
   module_name?: string | null;
   entry_type: string;
@@ -125,10 +131,10 @@ export interface ShortcutSetting {
 export interface CapturePreset {
   id: number;
   name: string;
-  application_id: number | null;
-  module_id: number | null;
-  environment_id: number | null;
-  user_role_id: number | null;
+  application_id: TaxonomyId | null;
+  module_id: TaxonomyId | null;
+  environment_id: TaxonomyId | null;
+  user_role_id: TaxonomyId | null;
   entry_type_id: number | null;
   created_at: string;
   updated_at: string;
@@ -136,35 +142,35 @@ export interface CapturePreset {
 
 export interface CapturePresetInput {
   name: string;
-  application_id: number | null;
-  module_id: number | null;
-  environment_id: number | null;
-  user_role_id: number | null;
+  application_id: TaxonomyId | null;
+  module_id: TaxonomyId | null;
+  environment_id: TaxonomyId | null;
+  user_role_id: TaxonomyId | null;
   entry_type_id: number | null;
 }
 
 export interface QuickBugInput {
   entry_type: string;
-  application_id: number | null;
-  module_id: number | null;
-  environment_id: number | null;
-  device_id?: number | string | null;
-  browser_id?: number | string | null;
-  user_role_id: number | null;
-  workspace_id?: number | string | null;
-  created_by?: number | string | null;
+  application_id: TaxonomyId | null;
+  module_id: TaxonomyId | null;
+  environment_id: TaxonomyId | null;
+  device_id?: TaxonomyId | null;
+  browser_id?: TaxonomyId | null;
+  user_role_id: TaxonomyId | null;
+  workspace_id?: TaxonomyId | null;
+  created_by?: TaxonomyId | null;
   note: string;
   attachment_ids: number[];
 }
 
 export interface BugUpdateInput {
   entry_type: string;
-  application_id: number | null;
-  module_id: number | null;
-  environment_id: number | null;
-  device_id: number | null;
-  browser_id: number | null;
-  user_role_id: number | null;
+  application_id: TaxonomyId | null;
+  module_id: TaxonomyId | null;
+  environment_id: TaxonomyId | null;
+  device_id: TaxonomyId | null;
+  browser_id: TaxonomyId | null;
+  user_role_id: TaxonomyId | null;
   title: string;
   note: string;
   other_details: string;
@@ -188,7 +194,7 @@ export interface SettingsData {
   severities: ConfigOption[];
   issuePlatforms: ConfigOption[];
   entryTypes: ConfigOption[];
-  environments: ReferenceOption[];
+  environments: Environment[];
   devices: ReferenceOption[];
   browsers: ReferenceOption[];
   userRoles: ReferenceOption[];
@@ -211,9 +217,9 @@ export interface SettingsData {
 export interface BugFilters {
   search?: string;
   entryType?: string | 'all';
-  applicationId?: number | 'all';
-  moduleId?: number | 'all';
-  environmentId?: number | 'all';
+  applicationId?: TaxonomyId | 'all';
+  moduleId?: TaxonomyId | 'all';
+  environmentId?: TaxonomyId | 'all';
   status?: string | 'all';
   severity?: string | 'all';
   syncStatus?: SyncStatus | 'all';
@@ -288,7 +294,7 @@ export interface SyncSessionStatus {
   workspaceRole?: WorkspaceRole;
 }
 
-export type WorkspaceRole = 'owner' | 'admin' | 'member';
+export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'developer';
 
 export interface SyncWorkspaceOption {
   workspaceId: string;
@@ -309,19 +315,20 @@ export interface AiConfigSaveInput {
   provider: AiProvider;
   baseUrl: string;
   modelId: string;
-  apiKey?: string;
-  clearApiKey?: boolean;
+  apiKeyOperation?:
+    | { action: 'replace'; value: string }
+    | { action: 'clear' };
   customSystemPrompt: string;
 }
+
+export interface Environment extends ReferenceOption {}
 
 export interface AiByokConfig {
   provider: AiProvider;
   baseUrl: string;
   modelId: string;
   hasApiKey: boolean;
-  hasApiKeys?: Partial<Record<AiProvider, boolean>>;
-  apiKey?: string;
-  apiKeys?: Partial<Record<AiProvider, string>>;
+  configuredProviders: Record<AiProvider, boolean>;
   customSystemPrompt: string;
 }
 
@@ -371,7 +378,7 @@ export interface AiTriageBugPayload {
   expected_result?: string;
   actual_result?: string;
   other_details?: string;
-  image_file_path?: string;
+  attachment_id?: string;
   refinement_note?: string;
 }
 

@@ -37,7 +37,7 @@ The current app already includes:
 - Windows startup toggle with background startup behavior
 - Dev/prod user-data isolation
 - Local Ollama AI triage implementation exists in code but is currently locked behind a coming-soon state
-- Supabase Phase 1 scaffold: local Project URL / anon key settings, connection test, SyncEngine client initialization, and workspace-scoped schema draft
+- Supabase Phase 1 scaffold: local Project URL / publishable key settings, connection test, SyncEngine client initialization, and workspace-scoped installation schema
 
 Do not remove or weaken the local-first desktop behavior.
 
