@@ -97,6 +97,7 @@ async function gracefulShutdown(): Promise<void> {
   try {
     await gracefulShutdownPromise;
   } catch (error) {
+    console.error('[shutdown] Graceful shutdown failed. Attempting to restore background services.', error);
     gracefulShutdownPromise = null;
     shutdownInProgress = false;
     isQuitting = false;
@@ -104,6 +105,20 @@ async function gracefulShutdown(): Promise<void> {
       window.setIgnoreMouseEvents(false);
       window.setFocusable(true);
     });
+    if (db?.isOpen()) {
+      try {
+        await syncEngine?.resumeAfterFailedShutdown();
+      } catch (recoveryError) {
+        console.error('[shutdown] Failed to restart background sync after shutdown recovery.', recoveryError);
+      }
+      try {
+        registerAppShortcuts();
+      } catch (recoveryError) {
+        console.error('[shutdown] Failed to restore global shortcuts after shutdown recovery.', recoveryError);
+      }
+    } else {
+      console.error('[shutdown] Database closure completed before the failure; background services cannot be restarted safely.');
+    }
     throw error;
   }
 }

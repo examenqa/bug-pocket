@@ -312,6 +312,11 @@ export class SyncEngine {
     return authenticated;
   }
 
+  async resumeAfterFailedShutdown(): Promise<void> {
+    const authenticated = await this.restorePersistedSession();
+    if (authenticated) this.client?.auth.startAutoRefresh();
+  }
+
   async switchWorkspace(newWorkspaceId: string): Promise<SyncAuthResult> {
     return operationBarrier.acquire(this.switchWorkspaceInternal(newWorkspaceId));
   }
