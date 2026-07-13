@@ -18,12 +18,20 @@ export interface UpdaterLifecycleOptions {
 
 export interface GracefulShutdownTasks {
   pauseRenderer(): void;
+  drainOperations(): Promise<void>;
   stopAndDrain(): Promise<void>;
   disconnectWorkspace(): void | Promise<void>;
 }
 
+export interface UpdateInstallIpcRegistrar {
+  handle(channel: 'app:installUpdate', listener: () => Promise<void>): void;
+}
+
+export let isUpdateStaged = false;
+
 export async function runGracefulShutdown(tasks: GracefulShutdownTasks): Promise<void> {
   tasks.pauseRenderer();
+  await tasks.drainOperations();
   await tasks.stopAndDrain();
   await tasks.disconnectWorkspace();
 }
@@ -35,6 +43,17 @@ export async function installDownloadedUpdate(
   await gracefulShutdown();
   // The installer remains silent and does not relaunch Bug Pocket after applying the update.
   updater.quitAndInstall(true, false);
+}
+
+export function registerUpdateInstallIpc(
+  registrar: UpdateInstallIpcRegistrar,
+  updater: Pick<AutoUpdaterPort, 'quitAndInstall'>,
+  gracefulShutdown: () => Promise<void>
+): void {
+  registrar.handle('app:installUpdate', async () => {
+    if (!isUpdateStaged) throw new Error('No update downloaded');
+    await installDownloadedUpdate(updater, gracefulShutdown);
+  });
 }
 
 export function configureAutoUpdater(
@@ -56,6 +75,7 @@ export function configureAutoUpdater(
     logger.info('[auto-updater] Update available:', info.version);
   });
   updater.on('update-downloaded', (info: { version?: string }) => {
+    isUpdateStaged = true;
     lifecycleConsole.log('[auto-updater] Update downloaded and staged for install on quit:', info.version);
     logger.info('[auto-updater] Update downloaded and staged for install on quit:', info.version);
     options.onUpdateReady();
