@@ -1,6 +1,6 @@
 {
   "name": "bug-pocket",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "description": "Windows-first quick bug capture desktop app for QA testers.",
   "main": "out/main/index.js",
   "scripts": {

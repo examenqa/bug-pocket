@@ -6,7 +6,7 @@ const {
   callOpenAiCompatibleChatWithFallback
 }: typeof import('./byokIssueProcessor') = require('./byokIssueProcessor.ts');
 
-test('retries Gemini with the secondary model after a retryable primary failure', async () => {
+test('steps through the active Gemini model cascade after retryable failures', async () => {
   const originalFetch = globalThis.fetch;
   const requestedModels: string[] = [];
 
@@ -15,10 +15,11 @@ test('retries Gemini with the secondary model after a retryable primary failure'
       const body = JSON.parse(String(init?.body)) as { model?: string };
       requestedModels.push(String(body.model));
 
-      if (requestedModels.length === 1) {
-        return new Response(JSON.stringify({ error: { message: 'Primary model unavailable' } }), {
-          status: 503,
-          statusText: 'Service Unavailable',
+      if (requestedModels.length < 3) {
+        const status = requestedModels.length === 1 ? 429 : 503;
+        return new Response(JSON.stringify({ error: { message: 'Model temporarily unavailable' } }), {
+          status,
+          statusText: status === 429 ? 'Too Many Requests' : 'Service Unavailable',
           headers: { 'content-type': 'application/json' }
         });
       }
@@ -41,13 +42,17 @@ test('retries Gemini with the secondary model after a retryable primary failure'
     });
 
     assert.equal(result, '{"title":"Fallback succeeded"}');
-    assert.deepEqual(requestedModels, ['gemini-3.5-flash', 'gemini-1.5-flash']);
+    assert.deepEqual(requestedModels, [
+      'gemini-3.5-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-flash'
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('does not hide an invalid Gemini model error behind a fallback', async () => {
+test('does not hide a non-retryable Gemini model error behind a fallback', async () => {
   const originalFetch = globalThis.fetch;
   let requestCount = 0;
 

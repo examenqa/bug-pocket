@@ -30,7 +30,11 @@ You MUST generate the output as a strict, valid JSON object using exactly the st
 "actualResult": "What actually happened."
 }`;
 
-const GEMINI_FALLBACK_MODEL = 'gemini-1.5-flash';
+const GEMINI_MODEL_CASCADE = [
+  'gemini-3.5-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash'
+] as const;
 
 type ChatCompletionResponse = {
   choices?: Array<{ message?: { content?: string } }>;
@@ -279,8 +283,8 @@ export async function callOpenAiCompatibleChatWithFallback(input: {
   userPrompt: string;
   imageDataUrl?: string;
 }): Promise<string> {
-  const models = input.provider === 'Gemini' && input.modelId !== GEMINI_FALLBACK_MODEL
-    ? [input.modelId, GEMINI_FALLBACK_MODEL]
+  const models = input.provider === 'Gemini'
+    ? GEMINI_MODEL_CASCADE
     : [input.modelId];
 
   for (let index = 0; index < models.length; index += 1) {
