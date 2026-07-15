@@ -59,6 +59,12 @@ npm run dist
 
 The installer is written to `release-build/`.
 
+## Live Supabase Security Tests
+
+`npm run test:security:live` executes real authentication, RPC, and RLS checks against a local Supabase Docker stack. It requires Docker Desktop and the Supabase CLI to be running. Apply [`supabase/schema-install.sql`](supabase/schema-install.sql) to the local project first, then expose the local URL, anon/publishable key, and service-role key reported by `supabase status -o env` as `SUPABASE_LOCAL_URL`, `SUPABASE_LOCAL_ANON_KEY`, and `SUPABASE_LOCAL_SERVICE_ROLE_KEY`.
+
+The test runner rejects every non-loopback Supabase URL to prevent its destructive fixtures from reaching a hosted project.
+
 ## Developer Note: Windows SmartScreen
 
 Public repository builds are unsigned. Windows may show an **Unknown Publisher** or SmartScreen warning when you run a compiled `.exe` installer.

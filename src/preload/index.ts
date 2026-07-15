@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction, TaxonomyId } from '../shared/types';
+import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction, SyncAccountSetup, SyncRuntimeStatus, TaxonomyId, TeamInvitePayload } from '../shared/types';
 
 const api = {
   openQuickCapture: () => ipcRenderer.invoke('window:openQuickCapture'),
@@ -41,16 +41,23 @@ const api = {
   updateAiTriageOptions: (enabled: boolean, modelName: string) => ipcRenderer.invoke('settings:updateAiTriageOptions', enabled, modelName),
   getAiConfig: (): Promise<AiByokConfig> => ipcRenderer.invoke('get-ai-config'),
   saveAiConfig: (input: AiConfigSaveInput): Promise<AiByokConfig> => ipcRenderer.invoke('save-ai-config', input),
-  updateSupabaseSettings: (projectUrl: string, anonKey: string) => ipcRenderer.invoke('settings:updateSupabaseSettings', projectUrl, anonKey),
+  updateSupabaseSettings: (projectUrl: string, anonKey: string, inviteEmail?: string) =>
+    inviteEmail === undefined
+      ? ipcRenderer.invoke('settings:updateSupabaseSettings', projectUrl, anonKey)
+      : ipcRenderer.invoke('settings:updateSupabaseSettings', projectUrl, anonKey, inviteEmail),
   testSupabaseConnection: () => ipcRenderer.invoke('sync:testConnection'),
   authSignIn: (email: string, password: string) => ipcRenderer.invoke('sync:authSignIn', email, password),
-  authSignUp: (email: string, password: string) => ipcRenderer.invoke('sync:authSignUp', email, password),
+  authSignUp: (email: string, password: string, setup: SyncAccountSetup) => ipcRenderer.invoke('sync:authSignUp', email, password, setup),
+  generateInvite: (passphrase: string, targetEmail: string, targetRole: string): Promise<string> => ipcRenderer.invoke('sync:generateInvite', passphrase, targetEmail, targetRole),
+  decodeInvite: (token: string, passphrase: string): Promise<TeamInvitePayload> => ipcRenderer.invoke('sync:decodeInvite', token, passphrase),
   authSignOut: () => ipcRenderer.invoke('sync:authSignOut'),
   getSyncSessionStatus: () => ipcRenderer.invoke('sync:getSessionStatus'),
   listWorkspaces: () => ipcRenderer.invoke('sync:listWorkspaces'),
   updateWorkspaceName: (workspaceId: string, name: string) => ipcRenderer.invoke('sync:updateWorkspaceName', workspaceId, name),
   getWorkspaceRole: (workspaceId: string | null) => ipcRenderer.invoke('sync:getWorkspaceRole', workspaceId),
   getSyncDiagnostics: () => ipcRenderer.invoke('sync:getDiagnostics'),
+  getSyncRuntimeStatus: (): Promise<SyncRuntimeStatus | null> => ipcRenderer.invoke('sync:getRuntimeStatus'),
+  syncNow: (): Promise<SyncRuntimeStatus | null> => ipcRenderer.invoke('sync:retryNow'),
   forceRetrySyncQueue: () => ipcRenderer.invoke('sync:forceRetry'),
   switchWorkspace: (workspaceId: string) => ipcRenderer.invoke('sync:switchWorkspace', workspaceId),
   toggleStartup: (enabled: boolean) => ipcRenderer.invoke('settings:toggleStartup', enabled),
@@ -94,6 +101,13 @@ const api = {
     ipcRenderer.on('update-ready', listener);
     return () => {
       ipcRenderer.removeListener('update-ready', listener);
+    };
+  },
+  onSyncStatus: (callback: (status: SyncRuntimeStatus | null) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: SyncRuntimeStatus | null): void => callback(status);
+    ipcRenderer.on('sync-status', listener);
+    return () => {
+      ipcRenderer.removeListener('sync-status', listener);
     };
   },
   triageBug: (bugData: unknown) => ipcRenderer.invoke('ai:triageBug', bugData),

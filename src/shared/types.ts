@@ -208,8 +208,11 @@ export interface SettingsData {
   ollamaModelName: string;
   supabaseProjectUrl: string | null;
   supabaseAnonKey: string | null;
+  supabaseInviteEmail: string | null;
   currentWorkspaceId: string | null;
   currentWorkspaceRole: WorkspaceRole;
+  currentWorkspaceCanRead: boolean;
+  currentWorkspaceCanWrite: boolean;
   cloudSyncActive: boolean;
   presets: CapturePreset[];
 }
@@ -287,14 +290,45 @@ export interface SyncConnectionResult {
   error?: string;
 }
 
+export interface SyncRuntimeStatus {
+  status: 'error';
+  code: 'PROJECT_PAUSED';
+  message: 'Supabase project is paused';
+}
+
 export interface SyncSessionStatus {
   authenticated: boolean;
   email?: string;
   workspaceId?: string;
   workspaceRole?: WorkspaceRole;
+  workspaceCanRead?: boolean;
+  workspaceCanWrite?: boolean;
 }
 
-export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'developer';
+export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'developer' | (string & {});
+
+export type SyncAccountMode = 'single' | 'team';
+
+export interface SyncRolePermission {
+  role: string;
+  canRead: boolean;
+  canWrite: boolean;
+}
+
+export interface SyncAccountSetup {
+  accountMode: SyncAccountMode;
+  rolePermissions: SyncRolePermission[];
+}
+
+export interface TeamInvitePayload {
+  version: 2;
+  url: string;
+  anonKey: string;
+  teamId: string;
+  targetEmail: string;
+  issuedAt: string;
+  expiresAt: string;
+}
 
 export interface SyncWorkspaceOption {
   workspaceId: string;
@@ -349,6 +383,7 @@ export interface AiIssueProcessPayload {
     user_role?: string;
     device?: string;
     browser?: string;
+    os?: string;
     entry_type?: string;
     severity?: string;
   };
@@ -378,6 +413,7 @@ export interface AiTriageBugPayload {
   environment?: string;
   device?: string;
   browser?: string;
+  os?: string;
   user_role?: string;
   entry_type?: string;
   severity?: string;

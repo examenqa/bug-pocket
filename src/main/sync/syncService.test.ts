@@ -3,6 +3,7 @@ export {};
 const test: typeof import('node:test') = require('node:test');
 const assert: typeof import('node:assert/strict') = require('node:assert/strict');
 const { createHash }: typeof import('node:crypto') = require('node:crypto');
+const { createClient }: typeof import('@supabase/supabase-js') = require('@supabase/supabase-js');
 const {
   existsSync,
   mkdtempSync,
@@ -458,7 +459,7 @@ test('restores the encrypted authenticated session after client reinitialization
       });
     };
 
-    database.updateSupabaseSettings('https://test.supabase.co', 'test-anon-key');
+    database.updateSupabaseSettings('https://test.supabase.co', 'sb_publishable_test_key');
     const initialEngine = new SyncEngine(database, () => {}, createTestAuthStorage(database));
     initialEngine.initialize();
     const initialClient = (initialEngine as unknown as ExposedSyncEngine).client;
@@ -501,6 +502,102 @@ test('restores the encrypted authenticated session after client reinitialization
     restartedEngine.stop();
   } finally {
     globalThis.fetch = originalFetch;
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('translates a Supabase 503 into PROJECT_PAUSED and halts automatic retries', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-paused-project-'));
+  const database = new BugPocketDatabase(dataDir);
+  const capturedErrors: unknown[][] = [];
+  const emittedStatuses: Array<{
+    status: 'error';
+    code: 'PROJECT_PAUSED';
+    message: 'Supabase project is paused';
+  } | null> = [];
+  const originalConsoleError = console.error;
+  let restRequestCount = 0;
+  let serviceRestored = false;
+
+  try {
+    database.updateSupabaseSettings('https://paused-project.supabase.co', 'sb_publishable_test_key');
+    database.connectToWorkspace(workspaceId);
+
+    const fetch503: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url.includes('/rest/v1/')) {
+        restRequestCount += 1;
+        if (serviceRestored) {
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+        return new Response(JSON.stringify({ message: 'Service Unavailable' }), {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      throw new Error(`Unexpected request during paused-project test: ${url}`);
+    };
+
+    const client = createClient('https://paused-project.supabase.co', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: fetch503 }
+    });
+    client.auth.getUser = async () => ({
+      data: {
+        user: {
+          id: '00000000-0000-4000-8000-000000000001'
+        }
+      },
+      error: null
+    }) as Awaited<ReturnType<typeof client.auth.getUser>>;
+
+    const syncEngine = new SyncEngine(
+      database,
+      () => {},
+      createTestAuthStorage(database),
+      (status) => emittedStatuses.push(status)
+    ) as unknown as {
+      client: typeof client;
+      processQueue(): Promise<void>;
+      retrySyncQueueNow(): Promise<void>;
+      getRuntimeStatus(): (typeof emittedStatuses)[number];
+      stop(): void;
+    };
+    syncEngine.client = client;
+    console.error = (...args: unknown[]) => {
+      capturedErrors.push(args);
+    };
+
+    await syncEngine.processQueue();
+
+    const requestsWhenPaused = restRequestCount;
+    assert.ok(requestsWhenPaused > 0, 'the sync engine should reach the paused Supabase project');
+    assert.deepEqual(syncEngine.getRuntimeStatus(), {
+      status: 'error',
+      code: 'PROJECT_PAUSED',
+      message: 'Supabase project is paused'
+    });
+    assert.deepEqual(emittedStatuses, [syncEngine.getRuntimeStatus()]);
+
+    await syncEngine.processQueue();
+    assert.equal(restRequestCount, requestsWhenPaused, 'automatic sync cycles must stop while the project is paused');
+
+    const renderedErrors = capturedErrors.flat().map(String).join(' ');
+    assert.doesNotMatch(renderedErrors, /Background sync cycle failed\. The worker will retry on the next interval\./i);
+
+    serviceRestored = true;
+    await syncEngine.retrySyncQueueNow();
+    assert.equal(syncEngine.getRuntimeStatus(), null, 'manual Sync Now should clear the latch after recovery');
+    assert.ok(restRequestCount > requestsWhenPaused, 'manual Sync Now should resume network activity');
+    assert.equal(emittedStatuses.at(-1), null);
+    syncEngine.stop();
+  } finally {
+    console.error = originalConsoleError;
     database.close();
     rmSync(dataDir, { recursive: true, force: true });
   }

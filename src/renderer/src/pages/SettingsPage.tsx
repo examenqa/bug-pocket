@@ -1,5 +1,4 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
-import { Cloud, Lock } from 'lucide-react';
 import type { SettingsData } from '../../../shared/types';
 import { hasSettingsMutationBridge } from '../components/settings/settingsUtils';
 import { useToast } from '../components/shared/ToastContext';
@@ -44,24 +43,6 @@ function tabFromRoute(route: string): SettingsTab {
   if (segment === 'sync') return 'sync';
   if (segment === 'presets' || segment === 'ai' || segment === 'output' || segment === 'storage' || segment === 'workspace') return segment;
   return oldSegmentToTab[segment] ?? 'workspace';
-}
-
-function CloudSyncComingSoon() {
-  return (
-    <div className="panel sync-placeholder-panel cloud-sync-locked-panel">
-      <div className="cloud-sync-locked-icon" aria-hidden="true">
-        <Cloud size={28} />
-        <Lock size={15} />
-      </div>
-      <div>
-        <h2>Cloud Sync</h2>
-        <p className="settings-helper">Coming soon. Bug Pocket remains fully local-first while workspace sync is being prepared for a stable release.</p>
-      </div>
-      <div className="cloud-sync-locked-note">
-        Captures, screenshots, templates, shortcuts, and backups continue to work locally. Cloud workspace login and background sync controls are intentionally locked in this build.
-      </div>
-    </div>
-  );
 }
 
 export function SettingsPage({
@@ -155,9 +136,7 @@ export function SettingsPage({
           <StorageSettings settings={settings} refresh={refresh} showToast={showSettingsToast} />
         )}
         {activeTab === 'sync' && (
-          import.meta.env.DEV
-            ? <SyncSettings settings={settings} mutationReady={settingsMutationBridgeReady} refresh={refresh} showToast={showSettingsToast} />
-            : <CloudSyncComingSoon />
+          <SyncSettings settings={settings} mutationReady={settingsMutationBridgeReady} refresh={refresh} showToast={showSettingsToast} />
         )}
         </Suspense>
       </div>

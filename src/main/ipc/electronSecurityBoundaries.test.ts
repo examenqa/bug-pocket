@@ -41,6 +41,72 @@ boundaryTest('renderer index.html installs a restrictive production CSP', () => 
   );
 });
 
+boundaryTest('bug and triage validators accept an unselected environment', () => {
+  const validators = createIpcArgumentValidators();
+  const environmentValues = [null, undefined, ''];
+
+  for (const environment of environmentValues) {
+    validators['ai:triageBug']([{ note: 'Fresh installation', environment }]);
+    validators['bugs:createQuick']([{
+      entry_type: 'Bug',
+      application_id: null,
+      module_id: null,
+      environment_id: environment,
+      device_id: environment,
+      browser_id: environment,
+      user_role_id: null,
+      note: 'Fresh installation',
+      attachment_ids: []
+    }]);
+    validators['bugs:update']([42, {
+      entry_type: 'Bug',
+      application_id: null,
+      module_id: null,
+      environment_id: environment,
+      device_id: environment,
+      browser_id: environment,
+      user_role_id: null,
+      title: 'Unselected environment',
+      note: 'Fresh installation',
+      other_details: '',
+      steps_to_reproduce: '',
+      expected_result: '',
+      actual_result: '',
+      status: 'Draft',
+      severity: 'Medium',
+      reported: false,
+      issue_platform: '',
+      issue_id: '',
+      issue_url: '',
+      tags: ''
+    }]);
+  }
+
+  const longDiagnostic = 'x'.repeat(1_001);
+  validators['ai:triageBug']([{
+    note: 'Verbose diagnostics',
+    environment: longDiagnostic,
+    device: longDiagnostic,
+    browser: longDiagnostic,
+    os: longDiagnostic,
+    steps_to_reproduce: longDiagnostic
+  }]);
+  validators['ai:processIssueWithByok']([{
+    rawInput: 'Verbose diagnostics',
+    taxonomy: {
+      environment: longDiagnostic,
+      device: longDiagnostic,
+      browser: longDiagnostic,
+      os: longDiagnostic
+    }
+  }]);
+
+  boundaryAssert.throws(
+    () => validators['ai:triageBug']([{ note: 'Too long', device: 'x'.repeat(5_001) }]),
+    /Invalid IPC payload/i
+  );
+});
+
 boundaryTest('destructive IPC rejects untrusted senders and malformed payloads', async () => {
   let registeredChannel = '';
   let registeredHandler: ((event: unknown, payload: unknown) => unknown) | undefined;

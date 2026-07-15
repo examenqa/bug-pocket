@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { normalizeSupabaseCredentials } from './sync/supabaseCredentials';
 import { app } from 'electron';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
@@ -43,7 +44,7 @@ const defaultScenarioStatuses: CaptureStatus[] = [];
 const defaultSeverities = ['Low', 'Medium', 'High', 'Critical'];
 const defaultIssuePlatforms = ['Linear', 'Jira', 'GitHub', 'Trello', 'Google Sheet', 'Other'];
 const defaultEntryTypes = ['Bug', 'Scenario', 'Question', 'Observation', 'Improvement'];
-const defaultEnvironments = ['Production', 'Staging', 'QA', 'UAT', 'Development', 'Local'];
+const defaultEnvironments = ['Dev', 'QA', 'Staging', 'Production'];
 const defaultDevices = ['Desktop', 'Laptop', 'Tablet', 'Mobile', 'Other'];
 const defaultBrowsers = ['Chrome', 'Edge', 'Firefox', 'Safari', 'Other'];
 const defaultUserRoles = ['Admin', 'Standard User', 'Guest', 'Read-Only'];
@@ -561,6 +562,8 @@ export class BugPocketDatabase {
     this.workspaceDb = this.openDatabase(nextPath, false);
     this.migrateConnection(this.workspaceDb, true);
     this.attachLocalTaxonomyViews(this.workspaceDb);
+    this.cleanupDuplicateWorkspaceEnvironments();
+    this.seedWorkspaceEnvironments();
     this.workspaceDb.pragma('foreign_keys = OFF');
     this.updateCurrentWorkspaceId(cleaned);
     return cleaned;
@@ -1128,6 +1131,7 @@ export class BugPocketDatabase {
       'ollama_model_name',
       'supabase_project_url',
       'supabase_anon_key',
+      'supabase_invite_email',
       'current_workspace_id',
       'byok_ai_provider',
       'byok_ai_base_url',
@@ -1146,6 +1150,7 @@ export class BugPocketDatabase {
       ollama_model_name: 'qwen3-vl:8b',
       supabase_project_url: '',
       supabase_anon_key: '',
+      supabase_invite_email: '',
       current_workspace_id: '',
       byok_ai_provider: 'OpenRouter',
       byok_ai_base_url: 'https://openrouter.ai/api/v1',
@@ -1585,6 +1590,61 @@ export class BugPocketDatabase {
     this.upgradeDefaultTemplatesForUserRole(stamp);
   }
 
+  private seedWorkspaceEnvironments(stamp = now()): void {
+    if (!this.workspaceDb) return;
+
+    const insert = this.workspaceDb.prepare(
+      `INSERT INTO environments (id, name, value, sort_order, is_active, created_at, updated_at)
+       SELECT @id, @name, @value, @sort_order, 1, @created_at, @updated_at
+       WHERE NOT EXISTS (SELECT 1 FROM environments WHERE name = @name)`
+    );
+    defaultEnvironments.forEach((name, index) => {
+      insert.run({
+        id: randomUUID(),
+        name,
+        value: name,
+        sort_order: index,
+        created_at: stamp,
+        updated_at: stamp
+      });
+    });
+  }
+
+  private cleanupDuplicateWorkspaceEnvironments(): void {
+    if (!this.workspaceDb) return;
+
+    const rows = this.workspaceDb
+      .prepare('SELECT id, name, created_at FROM environments ORDER BY name COLLATE NOCASE, created_at ASC, id ASC')
+      .all() as Array<{ id: TaxonomyId; name: string; created_at: string }>;
+    const canonicalIds = new Map<string, TaxonomyId>();
+    const duplicates: Array<{ duplicateId: TaxonomyId; canonicalId: TaxonomyId }> = [];
+
+    for (const row of rows) {
+      const key = row.name.trim().toLocaleLowerCase();
+      const canonicalId = canonicalIds.get(key);
+      if (canonicalId === undefined) {
+        canonicalIds.set(key, row.id);
+      } else {
+        duplicates.push({ duplicateId: row.id, canonicalId });
+      }
+    }
+
+    if (!duplicates.length) return;
+
+    const stamp = now();
+    const cleanup = this.workspaceDb.transaction(() => {
+      const repointBugs = this.workspaceDb!.prepare(
+        'UPDATE bugs SET environment_id = ?, updated_at = ? WHERE environment_id = ?'
+      );
+      const deleteEnvironment = this.workspaceDb!.prepare('DELETE FROM environments WHERE id = ?');
+      for (const { duplicateId, canonicalId } of duplicates) {
+        repointBugs.run(canonicalId, stamp, duplicateId);
+        deleteEnvironment.run(duplicateId);
+      }
+    });
+    cleanup();
+  }
+
   private ensureDefaultGeneralModule(stamp: string): void {
     const generalApplication = this.db.prepare('SELECT id FROM applications WHERE name = ? LIMIT 1').get('General') as { id: number } | undefined;
     if (!generalApplication) return;
@@ -1798,8 +1858,11 @@ Attachments:
       ollamaModelName: this.getOllamaModelName(),
       supabaseProjectUrl: this.getSupabaseProjectUrl(),
       supabaseAnonKey: this.getSupabaseAnonKey(),
+      supabaseInviteEmail: this.getSupabaseInviteEmail(),
       currentWorkspaceId: this.getCurrentWorkspaceId(),
       currentWorkspaceRole: this.getWorkspaceRole(this.getCurrentWorkspaceId()),
+      currentWorkspaceCanRead: this.getWorkspacePermissions(this.getCurrentWorkspaceId()).canRead,
+      currentWorkspaceCanWrite: this.getWorkspacePermissions(this.getCurrentWorkspaceId()).canWrite,
       cloudSyncActive: this.isCloudSyncActive(),
       presets: this.getPresets()
     };
@@ -1931,12 +1994,30 @@ Attachments:
     return value || null;
   }
 
+  getSupabaseInviteEmail(): string | null {
+    const value = this.getSetting('supabase_invite_email').trim().toLowerCase();
+    return value || null;
+  }
+
+  updateSupabaseInviteEmail(email: string | null): string | null {
+    const normalized = (email ?? '').trim().toLowerCase();
+    if (normalized && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized) || normalized.length > 320)) {
+      throw new Error('A valid invitee email address is required.');
+    }
+    this.setSetting('supabase_invite_email', normalized);
+    return normalized || null;
+  }
+
   updateSupabaseSettings(projectUrl: string, anonKey: string): { projectUrl: string | null; anonKey: string | null } {
-    const cleanedUrl = projectUrl.trim();
-    const cleanedKey = anonKey.trim();
-    this.setSetting('supabase_project_url', cleanedUrl);
-    this.setSetting('supabase_anon_key', cleanedKey);
-    return { projectUrl: cleanedUrl || null, anonKey: cleanedKey || null };
+    if (!projectUrl.trim() && !anonKey.trim()) {
+      this.setSetting('supabase_project_url', '');
+      this.setSetting('supabase_anon_key', '');
+      return { projectUrl: null, anonKey: null };
+    }
+    const credentials = normalizeSupabaseCredentials(projectUrl, anonKey);
+    this.setSetting('supabase_project_url', credentials.projectUrl);
+    this.setSetting('supabase_anon_key', credentials.anonKey);
+    return { projectUrl: credentials.projectUrl, anonKey: credentials.anonKey };
   }
 
   getCurrentWorkspaceId(): string | null {
@@ -1954,17 +2035,38 @@ Attachments:
     const cleaned = (workspaceId ?? '').trim();
     if (!cleaned) return 'admin';
     const value = this.getSetting(this.workspaceRoleKey(cleaned)).trim();
-    return value === 'owner' || value === 'admin' || value === 'member' ? value : 'admin';
+    return value || 'member';
   }
 
   updateWorkspaceRole(workspaceId: string, role: string | null | undefined): WorkspaceRole {
     const cleanedWorkspaceId = workspaceId.trim();
-    const normalizedRole: WorkspaceRole =
-      role === 'owner' || role === 'admin' || role === 'member' || role === 'developer'
-        ? role
-        : 'member';
+    const normalizedRole: WorkspaceRole = role?.trim().toLocaleLowerCase() || 'member';
     if (cleanedWorkspaceId) this.setSetting(this.workspaceRoleKey(cleanedWorkspaceId), normalizedRole);
     return normalizedRole;
+  }
+
+  /**
+   * Cloud workspace permissions are cached after the authenticated Supabase
+   * handshake. A missing cache fails closed so a custom read-only role cannot
+   * gain local write access before its policy snapshot has been verified.
+   */
+  getWorkspacePermissions(workspaceId: string | null): { canRead: boolean; canWrite: boolean } {
+    const cleanedWorkspaceId = (workspaceId ?? '').trim();
+    if (!cleanedWorkspaceId) return { canRead: true, canWrite: true };
+
+    const canRead = this.getSetting(this.workspaceCanReadKey(cleanedWorkspaceId)) === 'true';
+    const canWrite = this.getSetting(this.workspaceCanWriteKey(cleanedWorkspaceId)) === 'true';
+    return { canRead, canWrite: canRead && canWrite };
+  }
+
+  updateWorkspacePermissions(workspaceId: string, canRead: boolean, canWrite: boolean): { canRead: boolean; canWrite: boolean } {
+    const cleanedWorkspaceId = workspaceId.trim();
+    const permissions = { canRead: Boolean(canRead), canWrite: Boolean(canRead && canWrite) };
+    if (cleanedWorkspaceId) {
+      this.setSetting(this.workspaceCanReadKey(cleanedWorkspaceId), permissions.canRead ? 'true' : 'false');
+      this.setSetting(this.workspaceCanWriteKey(cleanedWorkspaceId), permissions.canWrite ? 'true' : 'false');
+    }
+    return permissions;
   }
 
   getRemoteSyncCursor(workspaceId: string, entityType: 'bug' | 'attachment'): RemoteSyncCursor {
@@ -2280,6 +2382,14 @@ Attachments:
 
   private workspaceRoleKey(workspaceId: string): string {
     return `workspace_role_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+  }
+
+  private workspaceCanReadKey(workspaceId: string): string {
+    return `workspace_can_read_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+  }
+
+  private workspaceCanWriteKey(workspaceId: string): string {
+    return `workspace_can_write_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
   }
 
   private requireWorkspaceDb(): Database.Database {
