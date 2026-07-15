@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - dev
   pull_request:
     branches:
       - main
@@ -25,10 +26,12 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: npm
 
       - name: Install dependencies
+        env:
+          npm_config_build_from_source: "false"
         run: npm ci
 
       - name: Run unit and integration tests
