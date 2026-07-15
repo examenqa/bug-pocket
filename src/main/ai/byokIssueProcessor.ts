@@ -30,6 +30,8 @@ You MUST generate the output as a strict, valid JSON object using exactly the st
 "actualResult": "What actually happened."
 }`;
 
+const GEMINI_FALLBACK_MODEL = 'gemini-1.5-flash';
+
 type ChatCompletionResponse = {
   choices?: Array<{ message?: { content?: string } }>;
   error?: { message?: string; type?: string; code?: string } | string;
@@ -71,7 +73,7 @@ export async function processIssueWithByokAi(database: BugPocketDatabase, payloa
   const userPrompt = buildIssuePrompt(payload);
 
   try {
-    const output = await callOpenAiCompatibleChat({
+    const output = await callOpenAiCompatibleChatWithFallback({
       apiKey,
       baseUrl,
       modelId,
@@ -97,7 +99,7 @@ export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: 
   const systemPrompt = normalizeSystemPrompt(config.customSystemPrompt);
   const userPrompt = buildTriagePrompt(bugData);
   const imageDataUrl = readBugImageDataUrl(database, bugData);
-  const output = await callOpenAiCompatibleChat({ apiKey, baseUrl, modelId, provider: config.provider, systemPrompt, userPrompt, imageDataUrl });
+  const output = await callOpenAiCompatibleChatWithFallback({ apiKey, baseUrl, modelId, provider: config.provider, systemPrompt, userPrompt, imageDataUrl });
   return extractJsonObjectString(output);
 }
 
@@ -187,6 +189,7 @@ function buildIssuePrompt(payload: AiIssueProcessPayload): string {
     `User role: ${taxonomy.user_role || 'Not specified'}`,
     `Device: ${taxonomy.device || 'Not specified'}`,
     `Browser: ${taxonomy.browser || 'Not specified'}`,
+    `Operating system: ${taxonomy.os || 'Not specified'}`,
     `Entry type: ${taxonomy.entry_type || 'Bug'}`,
     `Severity: ${taxonomy.severity || 'Not specified'}`,
     '',
@@ -266,7 +269,61 @@ async function callOpenAiCompatibleChat(input: {
   if (!output) throw new Error('AI provider returned an empty success response.');
   return output;
 }
+
+export async function callOpenAiCompatibleChatWithFallback(input: {
+  apiKey: string;
+  baseUrl: string;
+  modelId: string;
+  provider: AiProvider;
+  systemPrompt: string;
+  userPrompt: string;
+  imageDataUrl?: string;
+}): Promise<string> {
+  const models = input.provider === 'Gemini' && input.modelId !== GEMINI_FALLBACK_MODEL
+    ? [input.modelId, GEMINI_FALLBACK_MODEL]
+    : [input.modelId];
+
+  for (let index = 0; index < models.length; index += 1) {
+    try {
+      return await callOpenAiCompatibleChat({ ...input, modelId: models[index] });
+    } catch (caught) {
+      const hasFallback = index < models.length - 1;
+      if (!hasFallback || !isRetryableAiProviderError(caught)) throw caught;
+    }
+  }
+
+  throw new Error('AI provider returned no result.');
+}
+
+function isRetryableAiProviderError(error: unknown): boolean {
+  const status = error && typeof error === 'object' && 'status' in error
+    ? Number((error as { status?: unknown }).status)
+    : null;
+  return status === 429 || (status !== null && status >= 500 && status <= 599);
+}
+
+class AiProviderError extends Error {
+  constructor(
+    readonly status: number,
+    statusText: string,
+    data: ChatCompletionResponse,
+    rawBody: string
+  ) {
+    const userMessage = getAiProviderUserMessage(status, statusText, data, rawBody);
+    const rawDetailsBody = rawBody.trim() || JSON.stringify(data);
+    super(JSON.stringify({
+      userMessage,
+      rawDetails: `HTTP ${status}: ${rawDetailsBody || statusText}`
+    }));
+    this.name = 'AiProviderError';
+  }
+}
+
 function createAiProviderError(status: number, statusText: string, data: ChatCompletionResponse, rawBody: string): Error {
+  return new AiProviderError(status, statusText, data, rawBody);
+}
+
+function getAiProviderUserMessage(status: number, statusText: string, data: ChatCompletionResponse, rawBody: string): string {
   let userMessage = 'An unexpected AI provider error occurred.';
   if (status === 401) userMessage = 'Invalid API Key. Please check your AI Settings.';
   else if (status === 402) userMessage = 'API Key lacks sufficient funds or credits.';
@@ -277,13 +334,7 @@ function createAiProviderError(status: number, statusText: string, data: ChatCom
     if (providerMessage) userMessage = providerMessage;
   }
 
-  const rawDetailsBody = rawBody.trim() || JSON.stringify(data);
-  return new Error(
-    JSON.stringify({
-      userMessage,
-      rawDetails: `HTTP ${status}: ${rawDetailsBody || statusText}`
-    })
-  );
+  return userMessage;
 }
 
 

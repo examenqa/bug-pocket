@@ -34,7 +34,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
   const cloudSyncActive = isCloudSyncActive(settings);
-  const developerReadOnly = settings.currentWorkspaceRole === 'developer';
+  const developerReadOnly = !settings.currentWorkspaceCanWrite;
 
   const loadSpotlightPreview = async (attachment: Attachment): Promise<void> => {
     setSpotlight((current) => (current ? { ...current, loading: true, error: '' } : current));
@@ -131,13 +131,13 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
         </div>
         <div className="dashboard-screenshot-actions">
           <div className="dashboard-action">
-            <button className="primary dashboard-screenshot-button" disabled={developerReadOnly} title={developerReadOnly ? 'Developer access is read-only' : 'Start global screenshot snip'} aria-label="Start global screenshot snip" onClick={() => void window.bugPocket.startScreenshotCapture()}>
+            <button className="primary dashboard-screenshot-button" disabled={developerReadOnly} title={developerReadOnly ? 'Your workspace role is read-only' : 'Start global screenshot snip'} aria-label="Start global screenshot snip" onClick={() => void window.bugPocket.startScreenshotCapture()}>
               <Camera size={17} strokeWidth={2.6} /> Global Screenshot
             </button>
             <span className="dashboard-action-shortcut">{globalScreenshotShortcut}</span>
           </div>
           <div className="dashboard-action">
-            <button className="primary dashboard-screenshot-button" disabled={developerReadOnly} title={developerReadOnly ? 'Developer access is read-only' : 'Open Quick Capture panel'} aria-label="Open Quick Capture panel" onClick={() => void window.bugPocket.openQuickCapture()}>
+            <button className="primary dashboard-screenshot-button" disabled={developerReadOnly} title={developerReadOnly ? 'Your workspace role is read-only' : 'Open Quick Capture panel'} aria-label="Open Quick Capture panel" onClick={() => void window.bugPocket.openQuickCapture()}>
               <Plus size={17} strokeWidth={3} /> Quick Panel
             </button>
             <span className="dashboard-action-shortcut">{quickPanelShortcut}</span>

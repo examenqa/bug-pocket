@@ -54,6 +54,25 @@ function optional(validator: ValueValidator): ValueValidator {
   };
 }
 
+const maxDiagnosticLength = 5_000;
+
+function optionalNullableDiagnosticString(value: unknown, path: string): void {
+  if (value === undefined || value === null) return;
+  stringValue(maxDiagnosticLength)(value, path);
+}
+
+function optionalNullableText(value: unknown, path: string): void {
+  if (value === undefined || value === null) return;
+  stringValue(maxTextLength)(value, path);
+}
+
+function optionalNullableShortId(value: unknown, path: string): void {
+  if (value === undefined || value === null) return;
+  if (typeof value === 'string' && value.length === 0) return;
+  if (typeof value === 'string' && value.length > 50) fail(path, 'a short taxonomy identifier');
+  idValue(value, path);
+}
+
 function enumeration(values: readonly string[]): ValueValidator {
   return (value, path) => {
     if (typeof value !== 'string' || !values.includes(value)) fail(path, `one of: ${values.join(', ')}`);
@@ -118,6 +137,15 @@ function optionalSingleArg(validator: ValueValidator): IpcArgumentValidator {
   };
 }
 
+function twoOrThreeArgs(first: ValueValidator, second: ValueValidator, third: ValueValidator): IpcArgumentValidator {
+  return (values) => {
+    if (values.length !== 2 && values.length !== 3) fail('arguments', 'two or three arguments');
+    first(values[0], 'arguments[0]');
+    second(values[1], 'arguments[1]');
+    if (values.length === 3) third(values[2], 'arguments[2]');
+  };
+}
+
 const nullableInteger = nullable(positiveInteger);
 const nullableId = nullable(idValue);
 const internalRoute: ValueValidator = (value, path) => {
@@ -134,6 +162,10 @@ const webUrl: ValueValidator = (value, path) => {
   } catch {
     fail(path, 'a valid HTTP or HTTPS URL');
   }
+};
+const emailAddress: ValueValidator = (value, path) => {
+  nonEmptyString(320)(value, path);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value as string)) fail(path, 'a valid email address');
 };
 const pngDataUrl: ValueValidator = (value, path) => {
   stringValue(maxDataUrlLength)(value, path);
@@ -153,13 +185,13 @@ const quickBugInput = plainObject({
   entry_type: nonEmptyString(100),
   application_id: nullableId,
   module_id: nullableId,
-  environment_id: nullableId,
   user_role_id: nullableId,
   note: stringValue(maxTextLength),
   attachment_ids: arrayOf(positiveInteger, 100)
 }, {
-  device_id: optional(nullableId),
-  browser_id: optional(nullableId),
+  environment_id: optionalNullableShortId,
+  device_id: optionalNullableShortId,
+  browser_id: optionalNullableShortId,
   workspace_id: optional(nullableId),
   created_by: optional(nullableId)
 });
@@ -168,9 +200,8 @@ const bugUpdateInput = plainObject({
   entry_type: nonEmptyString(100),
   application_id: nullableId,
   module_id: nullableId,
-  environment_id: nullableId,
-  device_id: nullableId,
-  browser_id: nullableId,
+  device_id: optionalNullableShortId,
+  browser_id: optionalNullableShortId,
   user_role_id: nullableId,
   title: stringValue(1_000),
   note: stringValue(maxTextLength),
@@ -185,6 +216,8 @@ const bugUpdateInput = plainObject({
   issue_id: stringValue(500),
   issue_url: stringValue(2_048),
   tags: stringValue(10_000)
+}, {
+  environment_id: optionalNullableShortId
 });
 
 const bugFilters = plainObject({}, {
@@ -212,15 +245,27 @@ const aiConfigInput = plainObject({
   ))
 });
 
+const syncRolePermission = plainObject({
+  role: nonEmptyString(80),
+  canRead: booleanValue,
+  canWrite: booleanValue
+});
+
+const syncAccountSetup = plainObject({
+  accountMode: enumeration(['single', 'team']),
+  rolePermissions: arrayOf(syncRolePermission, 20)
+});
+
 const aiIssuePayload = plainObject({
   rawInput: stringValue(maxTextLength),
   taxonomy: plainObject({}, {
     application: optional(stringValue(500)),
     module: optional(stringValue(500)),
-    environment: optional(stringValue(500)),
+    environment: optionalNullableDiagnosticString,
     user_role: optional(stringValue(500)),
-    device: optional(stringValue(500)),
-    browser: optional(stringValue(500)),
+    device: optionalNullableDiagnosticString,
+    browser: optionalNullableDiagnosticString,
+    os: optionalNullableDiagnosticString,
     entry_type: optional(stringValue(500)),
     severity: optional(stringValue(500))
   })
@@ -233,14 +278,15 @@ const aiTriagePayload = plainObject({ note: stringValue(maxTextLength) }, {
   application_context: optional(stringValue(maxTextLength)),
   module: optional(stringValue(500)),
   module_context: optional(stringValue(maxTextLength)),
-  environment: optional(stringValue(500)),
-  device: optional(stringValue(500)),
-  browser: optional(stringValue(500)),
+  environment: optionalNullableDiagnosticString,
+  device: optionalNullableDiagnosticString,
+  browser: optionalNullableDiagnosticString,
+  os: optionalNullableDiagnosticString,
   user_role: optional(stringValue(500)),
   entry_type: optional(stringValue(500)),
   severity: optional(stringValue(500)),
   status: optional(stringValue(100)),
-  steps_to_reproduce: optional(stringValue(maxTextLength)),
+  steps_to_reproduce: optionalNullableText,
   expected_result: optional(stringValue(maxTextLength)),
   actual_result: optional(stringValue(maxTextLength)),
   other_details: optional(stringValue(maxTextLength)),
@@ -267,7 +313,7 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
     'backup:export', 'backup:import', 'backup:chooseDirectory', 'app:clearCurrentWorkspace', 'app:factoryReset',
     'app:installUpdate',
     'sync:testConnection', 'sync:authSignOut', 'sync:getSessionStatus', 'sync:listWorkspaces',
-    'sync:getDiagnostics', 'sync:forceRetry'
+    'sync:getDiagnostics', 'sync:getRuntimeStatus', 'sync:retryNow', 'sync:forceRetry'
   ];
   noArgs.forEach((channel) => { validators[channel] = args(); });
 
@@ -296,7 +342,7 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   validators['settings:updateQuickCaptureAnnotationReview'] = args(booleanValue);
   validators['settings:updateAiTriageOptions'] = args(booleanValue, nonEmptyString(500));
   validators['save-ai-config'] = args(aiConfigInput);
-  validators['settings:updateSupabaseSettings'] = args(stringValue(2_048), stringValue(20_000));
+  validators['settings:updateSupabaseSettings'] = twoOrThreeArgs(stringValue(2_048), stringValue(20_000), emailAddress);
   validators['settings:toggleStartup'] = args(booleanValue);
   validators['settings:mergeReference'] = args(enumeration(['environment', 'device', 'browser', 'user_role']), idValue, idValue);
   validators['settings:createPreset'] = args(capturePresetInput);
@@ -320,7 +366,9 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   validators['screenshot:complete'] = args(pngDataUrl);
   validators['quickScreenshot:attachPending'] = args(pngDataUrl);
   validators['sync:authSignIn'] = args(nonEmptyString(500), nonEmptyString(20_000));
-  validators['sync:authSignUp'] = args(nonEmptyString(500), nonEmptyString(20_000));
+  validators['sync:authSignUp'] = args(nonEmptyString(500), nonEmptyString(20_000), syncAccountSetup);
+  validators['sync:generateInvite'] = args(nonEmptyString(512), emailAddress, nonEmptyString(80));
+  validators['sync:decodeInvite'] = args(nonEmptyString(50_000), nonEmptyString(512));
   validators['sync:updateWorkspaceName'] = args(nonEmptyString(128), nonEmptyString(200));
   validators['sync:getWorkspaceRole'] = args(nullable(nonEmptyString(128)));
   validators['sync:switchWorkspace'] = args(nonEmptyString(128));

@@ -1,4 +1,5 @@
 import type { RemoteSyncCursor } from '../../shared/types';
+import { throwIfSupabaseError } from './supabaseErrors';
 
 export type RemotePullRow = Record<string, unknown> & {
   id: string;
@@ -57,12 +58,12 @@ async function fetchBatch(
     )
     : query.gte('updated_at', cursor.updated_at);
 
-  const { data, error } = await query
+  const result = await query
     .order('updated_at', { ascending: true })
     .order('id', { ascending: true })
     .limit(batchSize);
-  if (error) throw error;
-  return (data ?? []) as RemotePullRow[];
+  throwIfSupabaseError(result, `Unable to pull ${table}`);
+  return (result.data ?? []) as RemotePullRow[];
 }
 
 async function drainTable(

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, ChevronDown, Cloud, CloudOff, Database, FileText, HelpCircle, Home, Keyboard, RefreshCw, Settings as SettingsIcon, SlidersHorizontal } from 'lucide-react';
-import type { ScreenshotResult, SettingsData } from '../../shared/types';
+import { AlertTriangle, Bot, ChevronDown, Cloud, CloudOff, Database, ExternalLink, FileText, HelpCircle, Home, Keyboard, RefreshCw, Settings as SettingsIcon, SlidersHorizontal } from 'lucide-react';
+import type { ScreenshotResult, SettingsData, SyncRuntimeStatus } from '../../shared/types';
 import { QuickCaptureDraft, QuickCaptureForm } from './components/QuickCaptureForm';
 import { useSettings } from './hooks/useSettings';
 import { useHashRoute } from './hooks/useHashRoute';
@@ -125,10 +125,13 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(() => route.startsWith('/settings'));
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [syncRuntimeStatus, setSyncRuntimeStatus] = useState<SyncRuntimeStatus | null>(null);
+  const [retryingSync, setRetryingSync] = useState(false);
   const showingDetails = selectedBugId != null && !route.startsWith('/settings');
   const activeView = route.startsWith('/settings') ? 'settings' : 'dashboard';
   const activeWorkspaceId = settings.currentWorkspaceId?.trim() ?? '';
   const cloudWorkspaceActive = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(activeWorkspaceId);
+  const cloudProjectPaused = syncRuntimeStatus?.code === 'PROJECT_PAUSED';
 
   useEffect(() => {
     if (bugId) setSelectedBugId(bugId);
@@ -140,6 +143,23 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
 
   useEffect(() => window.bugPocket.onUpdateReady(() => setUpdateAvailable(true)), []);
 
+  useEffect(() => {
+    let mounted = true;
+    const unsubscribe = window.bugPocket.onSyncStatus((status) => {
+      if (mounted) setSyncRuntimeStatus(status);
+    });
+    void window.bugPocket.getSyncRuntimeStatus()
+      .then((status) => {
+        if (mounted) setSyncRuntimeStatus(status);
+      })
+      .catch((error) => console.error('Unable to read the cloud sync status.', error));
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
   const installUpdate = async (): Promise<void> => {
     setInstallingUpdate(true);
     try {
@@ -147,6 +167,17 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
     } catch (error) {
       console.error('Unable to install the staged update.', error);
       setInstallingUpdate(false);
+    }
+  };
+
+  const retryPausedSync = async (): Promise<void> => {
+    setRetryingSync(true);
+    try {
+      setSyncRuntimeStatus(await window.bugPocket.syncNow());
+    } catch (error) {
+      console.error('Unable to retry cloud sync.', error);
+    } finally {
+      setRetryingSync(false);
     }
   };
 
@@ -208,9 +239,9 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
           )}
         </div>
         <div className="sidebar-support-area">
-          <div className={cloudWorkspaceActive ? 'workspace-status-badge synced' : 'workspace-status-badge local'} title={cloudWorkspaceActive ? `Workspace ${activeWorkspaceId}` : 'Local-only workspace'}>
-            {cloudWorkspaceActive ? <Cloud size={15} /> : <CloudOff size={15} />}
-            <span>{cloudWorkspaceActive ? 'Cloud Synced' : 'Local Mode'}</span>
+          <div className={cloudProjectPaused ? 'workspace-status-badge paused' : cloudWorkspaceActive ? 'workspace-status-badge synced' : 'workspace-status-badge local'} title={cloudProjectPaused ? 'Supabase project is paused' : cloudWorkspaceActive ? `Workspace ${activeWorkspaceId}` : 'Local-only workspace'}>
+            {cloudWorkspaceActive && !cloudProjectPaused ? <Cloud size={15} /> : <CloudOff size={15} />}
+            <span>{cloudProjectPaused ? 'Cloud Paused' : cloudWorkspaceActive ? 'Cloud Synced' : 'Local Mode'}</span>
           </div>
           <button
             ref={supportButtonRef}
@@ -248,6 +279,23 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
         </div>
       )}
       <main className="content">
+        {cloudProjectPaused && (
+          <div className="sync-paused-banner" role="alert" aria-live="assertive">
+            <AlertTriangle size={20} aria-hidden="true" />
+            <div className="sync-paused-copy">
+              <strong>Cloud database paused</strong>
+              <span>Your cloud database has been paused due to inactivity. Please log in to your Supabase dashboard to restore it.</span>
+            </div>
+            <div className="sync-paused-actions">
+              <button type="button" onClick={() => void window.bugPocket.openExternalUrl('https://supabase.com/dashboard')}>
+                Open Supabase Dashboard <ExternalLink size={15} aria-hidden="true" />
+              </button>
+              <button type="button" onClick={() => void retryPausedSync()} disabled={retryingSync}>
+                <RefreshCw size={15} aria-hidden="true" /> {retryingSync ? 'Checking...' : 'Sync Now'}
+              </button>
+            </div>
+          </div>
+        )}
         {route.startsWith('/settings') ? (
           <SettingsPage settings={settings} refresh={refresh} route={route} />
         ) : (

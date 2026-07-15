@@ -102,8 +102,8 @@ export function QuickCaptureForm({
     [settings.userRoles]
   );
   const presetOptions = useMemo(() => settings.presets.slice(0, 3), [settings.presets]);
-  const developerReadOnly = settings.currentWorkspaceRole === 'developer';
-  const taxonomyReadOnly = developerReadOnly;
+  const workspaceReadOnly = !settings.currentWorkspaceCanWrite;
+  const taxonomyReadOnly = workspaceReadOnly;
 
   useEffect(() => {
     if (applicationId == null && settings.applications[0]) setApplicationId(settings.applications[0].id);
@@ -170,19 +170,19 @@ export function QuickCaptureForm({
   };
 
   const save = async (): Promise<void> => {
-    if (developerReadOnly || !note.trim()) return;
+    if (workspaceReadOnly || !note.trim()) return;
     await onSave({ applicationId, moduleId, environmentId, userRoleId, note });
     setNote('');
   };
 
   const takeScreenshot = (): void => {
-    if (developerReadOnly) return;
+    if (workspaceReadOnly) return;
     screenshotButtonRef.current?.focus();
     void onTakeScreenshot();
   };
 
   const attachReviewedScreenshot = async (dataUrl: string): Promise<void> => {
-    if (developerReadOnly) return;
+    if (workspaceReadOnly) return;
     await window.bugPocket.attachPendingQuickScreenshot(dataUrl);
     setReviewScreenshot('');
     await window.bugPocket.restoreQuickCaptureCompact();
@@ -305,7 +305,7 @@ export function QuickCaptureForm({
             </div>
             <div className="quick-review-actions">
               <button className="quick-review-discard" type="button" onClick={() => void discardReviewedScreenshot()}>Discard</button>
-              <button className="quick-review-attach" type="button" disabled={developerReadOnly} onClick={attachReviewedScreenshotFromHeader}>Attach</button>
+              <button className="quick-review-attach" type="button" disabled={workspaceReadOnly} onClick={attachReviewedScreenshotFromHeader}>Attach</button>
             </div>
           </div>
           <ScreenshotAnnotator
@@ -391,9 +391,9 @@ export function QuickCaptureForm({
           </div>
           <label className="grow">
             <span className="quick-label-row">Bug Note <kbd>{quickPanelShortcuts.note}</kbd></span>
-            <textarea ref={noteRef} value={note} disabled={developerReadOnly} onChange={(event) => setNote(event.target.value)} placeholder="Short note. Clean it up later." />
+            <textarea ref={noteRef} value={note} disabled={workspaceReadOnly} onChange={(event) => setNote(event.target.value)} placeholder="Short note. Clean it up later." />
           </label>
-          {developerReadOnly && <p className="quick-read-only-notice">Developer access is read-only. Captures and taxonomy changes are disabled.</p>}
+          {workspaceReadOnly && <p className="quick-read-only-notice">Your workspace role is read-only. Captures and taxonomy changes are disabled.</p>}
           {attachments.length > 0 && (
             <div className="attachment-strip quick-attachment-status">
               <span>{attachments.length} screenshot{attachments.length === 1 ? '' : 's'} attached</span>
@@ -404,11 +404,11 @@ export function QuickCaptureForm({
           )}
           <div className="quick-actions">
             <div className="quick-action-item">
-              <button className="screenshot-button" ref={screenshotButtonRef} disabled={developerReadOnly} title={developerReadOnly ? 'Developer access is read-only' : 'Take screenshot (Alt+S)'} onClick={takeScreenshot}><Camera size={16} /> Screenshot</button>
+              <button className="screenshot-button" ref={screenshotButtonRef} disabled={workspaceReadOnly} title={workspaceReadOnly ? 'Your workspace role is read-only' : 'Take screenshot (Alt+S)'} onClick={takeScreenshot}><Camera size={16} /> Screenshot</button>
               <span className="button-shortcut"><kbd>{quickPanelShortcuts.screenshot}</kbd></span>
             </div>
             <div className="quick-action-item">
-              <button className="primary" disabled={developerReadOnly || !note.trim() || saving} onClick={save}><Save size={17} /> Save</button>
+              <button className="primary" disabled={workspaceReadOnly || !note.trim() || saving} onClick={save}><Save size={17} /> Save</button>
               <span className="button-shortcut"><kbd>{quickPanelShortcuts.save}</kbd></span>
             </div>
           </div>

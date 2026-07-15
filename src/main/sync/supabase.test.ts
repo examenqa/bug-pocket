@@ -107,6 +107,15 @@ test('schema-install.sql remains repeatable across 100 executions', () => {
     /insert\s+into\s+storage\.buckets[\s\S]*?on\s+conflict\s*\(id\)\s+do\s+nothing;/i,
     'Storage bucket provisioning must ignore existing bucket IDs.'
   );
+  assert.match(sql, /create\s+table\s+if\s+not\s+exists\s+workspace_invites/i, 'The installer must provision pending email invitations.');
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.invite_user_to_workspace/i, 'The installer must provide the admin invitation RPC.');
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.claim_pending_invite/i, 'The installer must provide a verified post-login invitation claim RPC.');
+  assert.match(sql, /revoke\s+insert,\s*update,\s*delete\s+on\s+table\s+public\.workspace_invites\s+from\s+anon,\s*authenticated/i, 'Pending invitations must not accept direct client writes.');
+  const onboardingFunction = sql.match(/create\s+or\s+replace\s+function\s+public\.handle_new_user_onboarding\(\)[\s\S]*?\$\$\s+language\s+plpgsql/i)?.[0] ?? '';
+  assert.doesNotMatch(onboardingFunction, /workspace_invites/i, 'The onboarding trigger must not claim pending invitations.');
+  const claimFunction = sql.match(/create\s+or\s+replace\s+function\s+public\.claim_pending_invite\(\)[\s\S]*?\$\$\s+language\s+plpgsql/i)?.[0] ?? '';
+  assert.match(claimFunction, /email_confirmed_at\s+is\s+null/i, 'Invite claims must require a confirmed email address.');
+  assert.match(claimFunction, /insert\s+into\s+public\.workspace_members/i, 'The post-login claim RPC must create the workspace membership.');
   assert.doesNotThrow(
     () => {
       for (let execution = 0; execution < 100; execution += 1) {

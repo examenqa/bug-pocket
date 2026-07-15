@@ -12,14 +12,17 @@ import { getByokAiConfig, processIssueWithByokAi, saveByokAiConfig, triageBugWit
 import { registerGetByokAiConfigIpc } from './ipc/byokAiConfigIpc';
 import { registerBugDeletionIpc } from './ipc/bugDeletionIpc';
 import { createIpcArgumentValidators, createSecureIpcRegistrar } from './ipc/secureIpc';
-import { assertWorkspaceWriteAccess } from './ipc/workspaceWriteAccess';
+import { assertWorkspaceAdminAccess, assertWorkspaceWriteAccess } from './ipc/workspaceWriteAccess';
 import { resolveVerifiedTriageAttachmentPath } from './ai/triageAttachment';
 import { SyncEngine } from './sync/syncService';
+import { decodeInviteCode, generateInviteCode } from './sync/inviteToken';
+import { normalizeSupabaseCredentials } from './sync/supabaseCredentials';
+import { startSupabaseKeepAlive } from './sync/keepAlive';
 import { createBackupArchive, restoreBackupArchive } from './sync/backupService';
 import { getAssetPath } from './assetPaths';
 import { configureAutoUpdater, registerUpdateInstallIpc, runGracefulShutdown } from './updater';
 import { operationBarrier } from './OperationBarrier';
-import type { AiConfigSaveInput, AiIssueProcessPayload, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting, TaxonomyId } from '../shared/types';
+import type { AiConfigSaveInput, AiIssueProcessPayload, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting, SyncAccountSetup, TaxonomyId } from '../shared/types';
 
 const packagedSmokeUserData = process.env.BUG_POCKET_SMOKE_USER_DATA?.trim();
 const packagedSmokeTest = app.isPackaged && process.env.BUG_POCKET_PACKAGED_SMOKE_TEST === '1' && Boolean(packagedSmokeUserData);
@@ -41,6 +44,7 @@ let quickWindowReady: Promise<void> | null = null;
 let tray: Tray | null = null;
 let db: BugPocketDatabase;
 let syncEngine: SyncEngine;
+let stopSupabaseKeepAlive: (() => void) | null = null;
 let isQuitting = false;
 let shutdownInProgress = false;
 let gracefulShutdownComplete = false;
@@ -60,6 +64,22 @@ const quickCaptureReviewSize = { width: 880, height: 760 };
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 const backgroundStartArg = '--background-start';
 const windowBackgroundColor = '#F8FAFC';
+
+function startSupabaseKeepAliveIfConfigured(): void {
+  stopSupabaseKeepAlive?.();
+  stopSupabaseKeepAlive = null;
+  if (!db?.isOpen() || !db.getSupabaseProjectUrl() || !db.getSupabaseAnonKey()) return;
+  stopSupabaseKeepAlive = startSupabaseKeepAlive(db);
+}
+
+function createSyncEngine(): SyncEngine {
+  return new SyncEngine(
+    db,
+    () => mainWindow?.webContents.send('bugs:changed'),
+    undefined,
+    (status) => mainWindow?.webContents.send('sync-status', status)
+  );
+}
 
 function pauseRendererForShutdown(): void {
   BrowserWindow.getAllWindows().forEach((window) => {
@@ -81,6 +101,8 @@ async function gracefulShutdown(): Promise<void> {
     pauseRenderer: pauseRendererForShutdown,
     drainOperations: () => operationBarrier.drain(),
     stopAndDrain: async () => {
+      stopSupabaseKeepAlive?.();
+      stopSupabaseKeepAlive = null;
       await syncEngine?.stopAndDrain();
     },
     disconnectWorkspace: async () => {
@@ -108,6 +130,7 @@ async function gracefulShutdown(): Promise<void> {
     if (db?.isOpen()) {
       try {
         await syncEngine?.resumeAfterFailedShutdown();
+        startSupabaseKeepAliveIfConfigured();
       } catch (recoveryError) {
         console.error('[shutdown] Failed to restart background sync after shutdown recovery.', recoveryError);
       }
@@ -455,7 +478,7 @@ function mutateSettings<T>(action: () => T): T {
 function assertCurrentWorkspaceWriteAccess(): void {
   const workspaceId = db.getCurrentWorkspaceId();
   if (!workspaceId) return;
-  assertWorkspaceWriteAccess(db.getWorkspaceRole(workspaceId));
+  assertWorkspaceWriteAccess(db.getWorkspacePermissions(workspaceId).canWrite);
 }
 
 function mutateWorkspace<T>(action: () => T): T {
@@ -528,6 +551,8 @@ async function importBackup(): Promise<BackupImportResult> {
     await restoreBackupArchive(backupPath, userDataPath, {
       beforeCommit: async () => {
         restoreLifecycleStarted = true;
+        stopSupabaseKeepAlive?.();
+        stopSupabaseKeepAlive = null;
         await syncEngine?.stopAndWait();
         db.checkpoint();
         db.close();
@@ -553,9 +578,10 @@ async function importBackup(): Promise<BackupImportResult> {
         }
       }
     });
-    syncEngine = new SyncEngine(db, () => mainWindow?.webContents.send('bugs:changed'));
+    syncEngine = createSyncEngine();
     syncEngine.initialize();
     await syncEngine.restorePersistedSession();
+    startSupabaseKeepAliveIfConfigured();
     registerAppShortcuts();
 
     setTimeout(() => {
@@ -571,9 +597,10 @@ async function importBackup(): Promise<BackupImportResult> {
       try {
         if (db.isOpen()) db.close();
         db = new BugPocketDatabase();
-        syncEngine = new SyncEngine(db, () => mainWindow?.webContents.send('bugs:changed'));
+        syncEngine = createSyncEngine();
         syncEngine.initialize();
         await syncEngine.restorePersistedSession();
+        startSupabaseKeepAliveIfConfigured();
         registerAppShortcuts();
       } catch {
         // If reopening fails, surface the original restore error.
@@ -914,12 +941,24 @@ function registerIpc(): void {
   secureIpc.handle('save-ai-config', (_event, input: AiConfigSaveInput) =>
     mutateSettings(() => saveByokAiConfig(db, input))
   );
-  secureIpc.handle('settings:updateSupabaseSettings', (_event, projectUrl: string, anonKey: string) =>
-    mutateSettings(() => {
+  secureIpc.handle('settings:updateSupabaseSettings', async (_event, projectUrl: string, anonKey: string, inviteEmail?: string) =>
+    operationBarrier.acquire((async () => {
+      assertAppAcceptingMutations();
+      // Validate first so an accidental typo cannot disconnect a working project.
+      if (projectUrl.trim() || anonKey.trim()) normalizeSupabaseCredentials(projectUrl, anonKey);
+
+      stopSupabaseKeepAlive?.();
+      stopSupabaseKeepAlive = null;
+      await syncEngine.disconnectWorkspace();
+
       const result = db.updateSupabaseSettings(projectUrl, anonKey);
-      syncEngine?.initialize();
+      db.updateSupabaseInviteEmail(inviteEmail ?? null);
+      syncEngine.initialize();
+      startSupabaseKeepAliveIfConfigured();
+      notifySettingsChanged();
+      mainWindow?.webContents.send('bugs:changed');
       return result;
-    })
+    })())
   );
   secureIpc.handle('settings:toggleStartup', (_event, enabled: boolean) =>
     mutateSettings(() => {
@@ -1025,7 +1064,17 @@ function registerIpc(): void {
   registerUpdateInstallIpc(secureIpc, autoUpdater, gracefulShutdown);
   secureIpc.handle('sync:testConnection', () => syncEngine.testConnection());
   secureIpc.handle('sync:authSignIn', (_event, email: string, password: string) => syncEngine.authSignIn(email, password));
-  secureIpc.handle('sync:authSignUp', (_event, email: string, password: string) => syncEngine.authSignUp(email, password));
+  secureIpc.handle('sync:authSignUp', (_event, email: string, password: string, setup: SyncAccountSetup) => syncEngine.authSignUp(email, password, setup));
+  secureIpc.handle('sync:generateInvite', async (_event, passphrase: string, targetEmail: string, targetRole: string) => {
+    const workspaceId = db.getCurrentWorkspaceId();
+    const projectUrl = db.getSupabaseProjectUrl();
+    const anonKey = db.getSupabaseAnonKey();
+    if (!workspaceId || !projectUrl || !anonKey) throw new Error('Connect a Supabase workspace before creating an invite.');
+    assertWorkspaceAdminAccess(db.getWorkspaceRole(workspaceId));
+    await syncEngine.inviteUserToWorkspace(targetEmail, targetRole);
+    return generateInviteCode(projectUrl, anonKey, workspaceId, passphrase, targetEmail);
+  });
+  secureIpc.handle('sync:decodeInvite', (_event, token: string, passphrase: string) => decodeInviteCode(token, passphrase));
   secureIpc.handle('sync:authSignOut', async () => {
     const result = await syncEngine.authSignOut();
     mainWindow?.webContents.send('bugs:changed');
@@ -1036,6 +1085,11 @@ function registerIpc(): void {
   secureIpc.handle('sync:updateWorkspaceName', (_event, workspaceId: string, name: string) => mutateWorkspace(() => syncEngine.updateWorkspaceName(workspaceId, name)));
   secureIpc.handle('sync:getWorkspaceRole', (_event, workspaceId: string | null) => db.getWorkspaceRole(workspaceId));
   secureIpc.handle('sync:getDiagnostics', () => db.getSyncDiagnostics());
+  secureIpc.handle('sync:getRuntimeStatus', () => syncEngine.getRuntimeStatus());
+  secureIpc.handle('sync:retryNow', async () => {
+    await syncEngine.retrySyncQueueNow();
+    return syncEngine.getRuntimeStatus();
+  });
   secureIpc.handle('sync:forceRetry', async () => {
     assertCurrentWorkspaceWriteAccess();
     db.resetSyncQueueRetries();
@@ -1079,9 +1133,10 @@ if (!gotTheLock) {
       app.exit(0);
       return;
     }
-    syncEngine = new SyncEngine(db, () => mainWindow?.webContents.send('bugs:changed'));
+    syncEngine = createSyncEngine();
     syncEngine.initialize();
     await syncEngine.restorePersistedSession();
+    startSupabaseKeepAliveIfConfigured();
     enforceStartupPreference(db.getRunOnSystemStartup());
     registerIpc();
     configureAutoUpdater(autoUpdater, log, {

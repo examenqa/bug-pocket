@@ -426,6 +426,81 @@ button:disabled {
   background: var(--bug-green-dark);
 }
 
+.sync-paused-banner {
+  position: sticky;
+  top: 12px;
+  z-index: 44;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 26px 0;
+  padding: 13px 15px;
+  border: 1px solid #f59e0b;
+  border-radius: var(--radius-md);
+  background: #fff7ed;
+  color: #7c2d12;
+  box-shadow: 0 8px 24px rgba(124, 45, 18, 0.12);
+}
+
+.sync-paused-banner > svg {
+  flex: 0 0 auto;
+  color: #dc2626;
+}
+
+.sync-paused-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sync-paused-copy strong {
+  color: #7c2d12;
+  font-size: 13px;
+}
+
+.sync-paused-copy span {
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sync-paused-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync-paused-actions button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-color: #fdba74;
+  background: #ffffff;
+  color: #9a3412;
+  font-weight: 800;
+}
+
+.sync-paused-actions button:first-child {
+  border-color: var(--brand-navy);
+  background: var(--brand-navy);
+  color: #ffffff;
+}
+
+.sync-paused-actions button:hover:not(:disabled) {
+  border-color: #c2410c;
+  background: #ffedd5;
+}
+
+.sync-paused-actions button:first-child:hover:not(:disabled) {
+  border-color: #064a8f;
+  background: #064a8f;
+}
+
 .page {
   display: flex;
   flex-direction: column;
@@ -4339,55 +4414,58 @@ figcaption span {
   gap: 10px;
 }
 
-.cloud-sync-locked-panel {
-  align-content: start;
-  justify-items: start;
-  gap: 14px;
-  max-width: 760px;
-}
-
-.cloud-sync-locked-icon {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border: 1px solid rgba(151, 190, 235, 0.58);
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(239, 246, 255, 0.9));
-  color: var(--brand-navy);
-}
-
-.cloud-sync-locked-icon svg:last-child {
-  position: absolute;
-  right: 7px;
-  bottom: 7px;
-  padding: 2px;
-  border-radius: 999px;
-  background: #ffffff;
-  color: var(--text-muted);
-}
-
-.cloud-sync-locked-panel h2 {
-  margin: 0;
-  color: var(--brand-navy);
-  font-size: 20px;
-}
-
-.cloud-sync-locked-note {
-  max-width: 640px;
-  border: 1px solid rgba(120, 186, 2, 0.24);
-  border-radius: 8px;
-  background: rgba(241, 248, 232, 0.68);
-  color: var(--text-main);
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
 .sync-config-panel {
   gap: 14px;
+}
+
+.sync-onboarding-card {
+  display: grid;
+  gap: 12px;
+}
+
+.sync-onboarding-path {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+}
+
+.sync-onboarding-path h3 {
+  margin: 0;
+}
+
+.sync-onboarding-path p {
+  margin-top: 4px;
+}
+
+.sync-join-path {
+  border-color: rgba(120, 186, 2, 0.46);
+  box-shadow: 0 5px 16px rgba(2, 47, 99, 0.06);
+}
+
+.sync-admin-path {
+  background: rgba(248, 250, 252, 0.74);
+}
+
+.sync-admin-path-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sync-admin-setup-fields {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-light);
+}
+
+.sync-onboarding-action-row {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .sync-credential-grid {
@@ -4544,6 +4622,37 @@ figcaption span {
   margin-bottom: 3px;
 }
 
+.sync-invite-details {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.sync-invite-details div {
+  min-width: 0;
+}
+
+.sync-invite-details dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sync-invite-details dd {
+  margin: 3px 0 0;
+  color: var(--text-main);
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.sync-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 .sync-schema-link {
   margin-top: 8px;
 }
@@ -4669,6 +4778,42 @@ figcaption span {
   box-shadow: var(--shadow-sm);
 }
 
+.sync-connected-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid rgba(120, 186, 2, 0.42);
+  border-radius: var(--radius-md);
+  background: rgba(241, 248, 232, 0.78);
+}
+
+.sync-connected-header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.sync-connected-header strong {
+  overflow: hidden;
+  color: var(--brand-navy);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-connected-eyebrow {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sync-connected-header button {
+  flex: 0 0 auto;
+}
+
 .sync-auth-tabs {
   display: inline-flex;
   width: max-content;
@@ -4696,7 +4841,7 @@ figcaption span {
 
 .sync-auth-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;
   gap: 12px;
 }
@@ -4707,6 +4852,171 @@ figcaption span {
   color: var(--pocket-blue-dark);
   font-size: 12px;
   font-weight: 800;
+}
+
+.sync-auth-submit-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sync-join-fields,
+.sync-invite-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sync-join-fields label,
+.sync-invite-panel strong {
+  display: grid;
+  gap: 6px;
+  color: var(--pocket-blue-dark);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sync-invite-panel {
+  padding-top: 14px;
+  border-top: 1px solid rgba(15, 65, 117, 0.12);
+}
+
+.sync-invite-panel > div > p {
+  margin-top: 4px;
+}
+
+.sync-invite-controls,
+.sync-invite-code {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sync-invite-member-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(120px, 0.75fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.sync-invite-member-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--pocket-blue-dark);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sync-invite-member-fields input {
+  min-width: 0;
+}
+
+.sync-invite-controls input,
+.sync-invite-code textarea,
+.sync-join-fields textarea {
+  min-width: 0;
+  flex: 1;
+}
+
+.sync-invite-code textarea,
+.sync-join-fields textarea {
+  resize: vertical;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sync-account-setup {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+}
+
+.sync-account-setup-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.sync-account-setup-heading strong {
+  color: var(--brand-navy);
+  font-size: 13px;
+}
+
+.sync-account-setup-heading p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.sync-account-mode-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.sync-account-mode-toggle button {
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sync-account-mode-toggle button + button {
+  border-left: 1px solid var(--border-light);
+}
+
+.sync-account-mode-toggle button.active {
+  background: var(--brand-navy);
+  color: #fff;
+}
+
+.sync-role-matrix {
+  display: grid;
+  gap: 8px;
+}
+
+.sync-role-matrix-header,
+.sync-role-matrix-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px 58px 34px;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync-role-matrix-header {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sync-role-matrix-header span:not(:first-child) {
+  text-align: center;
+}
+
+.sync-role-permission-toggle {
+  display: grid;
+  place-items: center;
+}
+
+.sync-role-permission-toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.sync-add-role-button {
+  justify-self: start;
 }
 
 .sync-profile-card {
@@ -4853,9 +5163,16 @@ button.danger-soft {
   }
 
   .sync-profile-identity-row,
-  .sync-workspace-switch-row {
+  .sync-workspace-switch-row,
+  .sync-admin-path-heading,
+  .sync-account-setup-heading,
+  .sync-connected-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .sync-auth-submit-row {
+    justify-content: flex-start;
   }
 
   .sync-workspace-name-panel {
@@ -4900,6 +5217,12 @@ button.danger-soft {
   border-color: rgba(142, 156, 174, 0.34);
   background: rgba(245, 248, 252, 0.78);
   color: #64748b;
+}
+
+.workspace-status-badge.paused {
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #c2410c;
 }
 
 .support-nav {

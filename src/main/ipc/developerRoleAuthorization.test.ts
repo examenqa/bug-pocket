@@ -13,7 +13,7 @@ const {
   workspaceReadOnlyError: developerWorkspaceReadOnlyError
 }: typeof import('./workspaceWriteAccess') = require('./workspaceWriteAccess.ts');
 
-authorizationTest('developer session is rejected before destructive bug IPC reaches the database', async () => {
+authorizationTest('a cached read-only workspace permission is rejected before destructive bug IPC reaches the database', async () => {
   let registeredHandler: ((event: unknown, id: unknown) => unknown) | undefined;
   const ipc = {
     handle: (channel: string, handler: (event: unknown, id: unknown) => unknown) => {
@@ -30,7 +30,8 @@ authorizationTest('developer session is rejected before destructive bug IPC reac
     session: {
       authenticated: true,
       workspaceId: '550e8400-e29b-41d4-a716-446655440000',
-      workspaceRole: 'developer' as const
+      workspaceRole: 'auditor' as const,
+      workspaceCanWrite: false
     }
   };
   const deletedBugIds: number[] = [];
@@ -49,7 +50,7 @@ authorizationTest('developer session is rejected before destructive bug IPC reac
   registerDeveloperBugDeletionIpc(secureIpc, {
     authorizeMutation: () => {
       authorizationChecks += 1;
-      assertDeveloperWorkspaceWriteAccess(authenticatedDeveloperEvent.session.workspaceRole);
+      assertDeveloperWorkspaceWriteAccess(authenticatedDeveloperEvent.session.workspaceCanWrite);
     },
     deleteBug: (id) => deletedBugIds.push(id),
     emitBugsChanged: () => { changedEvents += 1; },
@@ -57,7 +58,8 @@ authorizationTest('developer session is rejected before destructive bug IPC reac
   });
 
   authorizationAssert.ok(registeredHandler, 'Expected bugs:delete to register an IPC handler.');
-  authorizationAssert.equal(authenticatedDeveloperEvent.session.workspaceRole, 'developer');
+  authorizationAssert.equal(authenticatedDeveloperEvent.session.workspaceRole, 'auditor');
+  authorizationAssert.equal(authenticatedDeveloperEvent.session.workspaceCanWrite, false);
 
   await authorizationAssert.rejects(
     Promise.resolve().then(() => registeredHandler!(authenticatedDeveloperEvent, 73)),

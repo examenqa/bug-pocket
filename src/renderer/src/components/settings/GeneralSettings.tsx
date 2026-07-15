@@ -30,8 +30,8 @@ export function GeneralSettings({
       if (message.includes('active preset')) showToast('Cannot delete because it is currently used by an active preset. Please update or delete the preset first.', 'error');
     }
   };
-  const taxonomyReadOnly = settings.currentWorkspaceRole === 'developer';
-  const taxonomyReadOnlyMessage = 'Developer access is read-only. Taxonomy is managed by workspace writers.';
+  const taxonomyReadOnly = !settings.currentWorkspaceCanWrite;
+  const taxonomyReadOnlyMessage = 'Your workspace role is read-only. Taxonomy is managed by workspace writers.';
 
   return (
     <div className="settings-tab-stack">

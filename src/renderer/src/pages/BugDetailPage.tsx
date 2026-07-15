@@ -70,7 +70,7 @@ export function BugDetailsView({
   const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
   const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
   const triaging = aiStatus === 'loading';
-  const developerReadOnly = settings.currentWorkspaceRole === 'developer';
+  const developerReadOnly = !settings.currentWorkspaceCanWrite;
   const aiTriageDisabled = developerReadOnly || triaging || !byokAiReady;
 
   useEffect(() => {
@@ -437,7 +437,7 @@ export function BugDetailsView({
           <p>{bug.entry_type || 'Bug'} / {bug.environment || 'No environment'} / {bug.user_role || 'No role'} / {bug.device || 'No device'} / {bug.browser || 'No browser'} / <SyncBadge status={bug.sync_status} cloudSyncActive={cloudSyncActive} /> / Created {formatDate(bug.created_at)} / Updated {formatDate(bug.updated_at)}</p>
         </div>
         <div className="header-actions">
-          {developerReadOnly && <span className="read-only-access-badge">Developer read-only access</span>}
+          {developerReadOnly && <span className="read-only-access-badge">Read-only workspace access</span>}
           {!developerReadOnly && bug.entry_type === 'Scenario' && <button onClick={convertScenarioToBug}>Convert to Bug</button>}
           {!developerReadOnly && (confirmingDelete ? (
             <div className="delete-confirm-actions">

@@ -23,8 +23,11 @@ const emptySettings: SettingsData = {
   ollamaModelName: 'qwen3-vl:8b',
   supabaseProjectUrl: null,
   supabaseAnonKey: null,
+  supabaseInviteEmail: null,
   currentWorkspaceId: null,
   currentWorkspaceRole: 'member',
+  currentWorkspaceCanRead: true,
+  currentWorkspaceCanWrite: true,
   cloudSyncActive: false,
   presets: []
 };

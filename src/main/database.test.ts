@@ -31,7 +31,7 @@ test('logout closes and unmounts the active workspace database', async () => {
     assert.equal(database.getCurrentWorkspaceId(), 'test_A');
     assert.equal(existsSync(join(dataDir, 'ws_test_A.sqlite')), true);
 
-    database.updateSupabaseSettings('https://test.supabase.co', 'test-anon-key');
+    database.updateSupabaseSettings('https://test.supabase.co', 'sb_publishable_test_key');
     const syncEngine = new SyncEngine(database, () => {}, new SafeStorageAdapter(database, {
       isEncryptionAvailable: () => true,
       encryptString: (value) => Buffer.from(value, 'utf8'),
@@ -75,6 +75,154 @@ test('logout closes and unmounts the active workspace database', async () => {
         .run('Written after logout', timestamp, timestamp),
       /database connection is not open/i
     );
+  } finally {
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('project disconnect closes the mounted workspace before credentials are replaced', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-project-disconnect-'));
+  const database = new BugPocketDatabase(dataDir);
+
+  try {
+    database.connectToWorkspace('test_A');
+    database.updateSupabaseSettings('https://test.supabase.co', 'sb_publishable_test_key');
+    const syncEngine = new SyncEngine(database, () => {}, new SafeStorageAdapter(database, {
+      isEncryptionAvailable: () => true,
+      encryptString: (value) => Buffer.from(value, 'utf8'),
+      decryptString: (encrypted) => encrypted.toString('utf8')
+    }));
+    syncEngine.initialize();
+    const initializedClient = (syncEngine as unknown as {
+      client: { auth: { getSession: () => Promise<unknown>; stopAutoRefresh: () => void } } | null;
+    }).client;
+    if (initializedClient) {
+      await initializedClient.auth.getSession();
+      initializedClient.auth.stopAutoRefresh();
+    }
+
+    let signOutCalls = 0;
+    (syncEngine as unknown as ExposedSyncEngine).client = {
+      auth: {
+        signOut: async () => {
+          signOutCalls += 1;
+          return { error: null };
+        },
+        stopAutoRefresh: () => {}
+      }
+    };
+    const mountedWorkspace = (database as unknown as ExposedDatabase).workspaceDb;
+    assert.ok(mountedWorkspace);
+
+    await syncEngine.disconnectWorkspace();
+
+    assert.equal(signOutCalls, 1);
+    assert.equal(database.getCurrentWorkspaceId(), null);
+    assert.equal((database as unknown as ExposedDatabase).workspaceDb, null);
+    assert.throws(() => mountedWorkspace.prepare('SELECT 1').get(), /database connection is not open/i);
+  } finally {
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('Supabase settings accept only trusted project URLs and publishable keys', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-supabase-settings-'));
+  const database = new BugPocketDatabase(dataDir);
+
+  try {
+    assert.throws(
+      () => database.updateSupabaseSettings('https://untrusted.example', 'sb_publishable_valid_key'),
+      /Supabase/i
+    );
+    assert.throws(
+      () => database.updateSupabaseSettings('https://team.supabase.co', 'sb_secret_sensitive_key'),
+      /Secret and service_role keys are not allowed/i
+    );
+
+    const saved = database.updateSupabaseSettings('https://team.supabase.co/', 'sb_publishable_valid_key');
+    assert.deepEqual(saved, {
+      projectUrl: 'https://team.supabase.co',
+      anonKey: 'sb_publishable_valid_key'
+    });
+    assert.equal(database.updateSupabaseInviteEmail(' Invited.User@Example.com '), 'invited.user@example.com');
+    assert.equal(database.getSupabaseInviteEmail(), 'invited.user@example.com');
+    assert.throws(() => database.updateSupabaseInviteEmail('not-an-email'), /valid invitee email/i);
+  } finally {
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('seeds release pipeline environments for local and workspace databases', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-environments-'));
+  const database = new BugPocketDatabase(dataDir);
+
+  try {
+    assert.deepEqual(
+      database.getSettings().environments.map((environment) => environment.name),
+      ['Dev', 'QA', 'Staging', 'Production']
+    );
+
+    database.connectToWorkspace('release-pipeline');
+    database.connectToWorkspace('release-pipeline');
+    const workspaceDb = (database as unknown as ExposedDatabase).workspaceDb;
+    assert.ok(workspaceDb, 'the workspace database should be mounted');
+
+    const environments = workspaceDb
+      .prepare('SELECT id, name, value, created_at, updated_at FROM environments ORDER BY sort_order')
+      .all() as Array<{ id: string; name: string; value: string; created_at: string; updated_at: string }>;
+
+    assert.deepEqual(environments.map((environment) => environment.name), ['Dev', 'QA', 'Staging', 'Production']);
+    const duplicateNames = workspaceDb
+      .prepare('SELECT name, COUNT(*) AS count FROM environments GROUP BY name HAVING COUNT(*) > 1')
+      .all();
+    assert.deepEqual(duplicateNames, []);
+    environments.forEach((environment) => {
+      assert.match(environment.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      assert.equal(environment.value, environment.name);
+      assert.match(environment.created_at, /^\d{4}-\d{2}-\d{2}T/);
+      assert.match(environment.updated_at, /^\d{4}-\d{2}-\d{2}T/);
+    });
+  } finally {
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('deduplicates workspace environments by name before seeding and preserves bug routing', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-environment-dedupe-'));
+  const database = new BugPocketDatabase(dataDir);
+
+  try {
+    database.connectToWorkspace('environment-dedupe');
+    const workspaceDb = (database as unknown as ExposedDatabase).workspaceDb;
+    assert.ok(workspaceDb, 'the workspace database should be mounted');
+
+    const oldestId = '11111111-1111-4111-8111-111111111111';
+    const duplicateId = '22222222-2222-4222-8222-222222222222';
+    workspaceDb.prepare(
+      'INSERT INTO environments (id, name, value, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)'
+    ).run(oldestId, 'Duplicate QA', 'Duplicate QA', 20, '2024-01-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z');
+    workspaceDb.prepare(
+      'INSERT INTO environments (id, name, value, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)'
+    ).run(duplicateId, 'Duplicate QA', 'Duplicate QA', 21, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+    const stamp = '2025-01-01T00:00:00.000Z';
+    const bugId = Number(workspaceDb.prepare(
+      'INSERT INTO bugs (environment_id, title, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+    ).run(duplicateId, 'Duplicate environment fixture', '', stamp, stamp).lastInsertRowid);
+
+    database.connectToWorkspace('environment-dedupe');
+    const reopenedWorkspaceDb = (database as unknown as ExposedDatabase).workspaceDb;
+    assert.ok(reopenedWorkspaceDb, 'the workspace database should reopen');
+
+    const environments = reopenedWorkspaceDb
+      .prepare('SELECT id FROM environments WHERE name = ?')
+      .all('Duplicate QA') as Array<{ id: string }>;
+    assert.deepEqual(environments, [{ id: oldestId }]);
+    const bug = reopenedWorkspaceDb.prepare('SELECT environment_id FROM bugs WHERE id = ?').get(bugId) as { environment_id: string };
+    assert.equal(bug.environment_id, oldestId);
   } finally {
     database.close();
     rmSync(dataDir, { recursive: true, force: true });
@@ -125,6 +273,12 @@ test('taxonomy CRUD routes to the active workspace and falls back locally only w
         const column = columns.find((candidate) => candidate.name === columnName);
         assert.equal(column?.type.toUpperCase(), 'TEXT', `${table}.${columnName} must store numeric IDs and UUIDs`);
       }
+    }
+
+    const bugColumns = localDb.prepare('PRAGMA table_info(bugs)').all() as Array<{ name: string; type: string }>;
+    for (const columnName of ['note', 'other_details', 'steps_to_reproduce', 'expected_result', 'actual_result']) {
+      const column = bugColumns.find((candidate) => candidate.name === columnName);
+      assert.equal(column?.type.toUpperCase(), 'TEXT', `bugs.${columnName} must support diagnostic text blocks`);
     }
 
     database.connectToWorkspace(workspaceId);
@@ -226,7 +380,7 @@ test('factory reset removes every workspace and taxonomy while retaining setting
   const timestamp = new Date().toISOString();
 
   try {
-    database.updateSupabaseSettings('https://retained.supabase.co', 'retained-publishable-key');
+    database.updateSupabaseSettings('https://retained.supabase.co', 'sb_publishable_retained_key');
     exposed.localDb
       .prepare(
         `INSERT INTO presets (
@@ -248,7 +402,7 @@ test('factory reset removes every workspace and taxonomy while retaining setting
     assert.deepEqual(readdirSync(database.screenshotsDir), []);
     assert.equal(database.getCurrentWorkspaceId(), null);
     assert.equal(database.getSupabaseProjectUrl(), 'https://retained.supabase.co');
-    assert.equal(database.getSupabaseAnonKey(), 'retained-publishable-key');
+    assert.equal(database.getSupabaseAnonKey(), 'sb_publishable_retained_key');
 
     const retainedPreset = exposed.localDb
       .prepare('SELECT name, application_id, module_id, environment_id, user_role_id, entry_type_id FROM presets WHERE name = ?')
