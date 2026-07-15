@@ -35,8 +35,9 @@ test('invite token rejects malformed input', () => {
 
 test('invite token rejects expired and untrusted project credentials', () => {
   const originalNow = Date.now;
-  const issuedAt = originalNow();
+  const issuedAt = 1_750_000_000_000;
   try {
+    Date.now = () => issuedAt;
     const token = generateInviteCode(projectUrl, anonKey, workspaceId, passphrase, targetEmail);
     Date.now = () => issuedAt + INVITE_TTL_MS + 1;
     assert.throws(() => decodeInviteCode(token, passphrase), /invite code has expired/i);
