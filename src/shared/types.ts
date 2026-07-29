@@ -1,5 +1,12 @@
 export type OptionType = 'status' | 'scenario_status' | 'severity' | 'issue_platform' | 'entry_type';
 export type CaptureStatus = 'Draft' | 'Reported' | 'Discarded';
+export interface BugStatusCounts {
+  total: number;
+  draft: number;
+  reported: number;
+  discarded: number;
+}
+
 export type SyncStatus = 'Local Only' | 'Sync Pending' | 'Synced' | 'Sync Failed';
 export type AttachmentSourceType = 'snip' | 'screenshot' | 'clipboard' | 'uploaded_image' | 'camera_photo' | 'annotation' | 'other';
 export type ShortcutAction = 'quick_capture' | 'main_panel' | 'global_screenshot';

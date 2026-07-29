@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction, SyncAccountSetup, SyncRuntimeStatus, TaxonomyId, TeamInvitePayload } from '../shared/types';
+import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugStatusCounts, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction, SyncAccountSetup, SyncRuntimeStatus, TaxonomyId, TeamInvitePayload } from '../shared/types';
 
 const api = {
   openQuickCapture: () => ipcRenderer.invoke('window:openQuickCapture'),
@@ -69,6 +69,7 @@ const api = {
   resumeShortcuts: () => ipcRenderer.invoke('shortcuts:resume'),
   listBugs: (filters: BugFilters) => ipcRenderer.invoke('bugs:list', filters),
   getTotalBugCount: () => ipcRenderer.invoke('bugs:count'),
+  getBugStatusCounts: (): Promise<BugStatusCounts> => ipcRenderer.invoke('bugs:statusCounts'),
   getBug: (id: number) => ipcRenderer.invoke('bugs:get', id),
   createQuickBug: (input: QuickBugInput) => ipcRenderer.invoke('bugs:createQuick', input),
   updateBug: (id: number, input: BugUpdateInput) => ipcRenderer.invoke('bugs:update', id, input),

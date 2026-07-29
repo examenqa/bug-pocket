@@ -19,6 +19,7 @@ function cleanStepLine(value: string): string {
   return value
     .trim()
     .replace(/^\s*(?:[-*]|\d+[.)])\s+/, '')
+    .replace(/^step\s+\d+\s*[:.)-]?\s*/i, '')
     .trim();
 }
 

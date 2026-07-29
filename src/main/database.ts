@@ -11,6 +11,7 @@ import type {
   Bug,
   BugDetails,
   BugFilters,
+  BugStatusCounts,
   BugUpdateInput,
   CaptureStatus,
   CapturePreset,
@@ -1875,6 +1876,19 @@ Attachments:
   getTotalBugCount(): number {
     const row = this.workspaceDataDb().prepare("SELECT COUNT(*) AS count FROM bugs WHERE status != 'Discarded'").get() as { count: number };
     return row.count;
+  }
+
+  getBugStatusCounts(): BugStatusCounts {
+    return this.workspaceDataDb()
+      .prepare(
+        `SELECT
+          COALESCE(SUM(CASE WHEN status != 'Discarded' THEN 1 ELSE 0 END), 0) AS total,
+          COALESCE(SUM(CASE WHEN status = 'Draft' THEN 1 ELSE 0 END), 0) AS draft,
+          COALESCE(SUM(CASE WHEN status = 'Reported' THEN 1 ELSE 0 END), 0) AS reported,
+          COALESCE(SUM(CASE WHEN status = 'Discarded' THEN 1 ELSE 0 END), 0) AS discarded
+        FROM bugs`
+      )
+      .get() as BugStatusCounts;
   }
 
   updateShortcut(action: ShortcutAction, accelerator: string, enabled: boolean): ShortcutSetting {

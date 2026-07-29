@@ -980,6 +980,7 @@ function registerIpc(): void {
   secureIpc.handle('shortcuts:resume', () => registerAppShortcuts());
   secureIpc.handle('bugs:list', (_event, filters) => db.listBugs(filters));
   secureIpc.handle('bugs:count', () => db.getTotalBugCount());
+  secureIpc.handle('bugs:statusCounts', () => db.getBugStatusCounts());
   secureIpc.handle('bugs:get', (_event, id: number) => db.getBug(id));
   secureIpc.handle('bugs:createQuick', (_event, input) => {
     const bug = mutateWorkspace(() => db.createQuickBug(input));

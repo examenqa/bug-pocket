@@ -3,7 +3,8 @@ export {};
 const test: typeof import('node:test') = require('node:test');
 const assert: typeof import('node:assert/strict') = require('node:assert/strict');
 const {
-  callOpenAiCompatibleChatWithFallback
+  callOpenAiCompatibleChatWithFallback,
+  extractJsonObjectString
 }: typeof import('./byokIssueProcessor') = require('./byokIssueProcessor.ts');
 
 test('steps through the active Gemini model cascade after retryable failures', async () => {
@@ -85,4 +86,21 @@ test('does not hide a non-retryable Gemini model error behind a fallback', async
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('extracts the first balanced triage object when the model adds trailing noise', () => {
+  const malformedResponse = `Here is the result:
+{
+  "title": "Ad draft fails to display",
+  "bugNote": "The panel shows {no draft} even though the agent says one exists.",
+  "stepsToReproduce": ["Open the panel", "Request a draft"],
+  "expectedResult": "The draft appears.",
+  "actualResult": "The empty state remains."
+}
+}`;
+
+  const extracted = extractJsonObjectString(malformedResponse);
+  const parsed = JSON.parse(extracted) as { title: string; stepsToReproduce: string[] };
+  assert.equal(parsed.title, 'Ad draft fails to display');
+  assert.deepEqual(parsed.stepsToReproduce, ['Open the panel', 'Request a draft']);
 });

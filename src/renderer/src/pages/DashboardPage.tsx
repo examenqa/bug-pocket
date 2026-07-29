@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Attachment } from '../../../shared/types';
 import { Camera, ChevronLeft, ChevronRight, Filter, Gauge, Plus, RefreshCw, Search, X } from 'lucide-react';
-import type { Bug, BugFilters, SettingsData } from '../../../shared/types';
+import type { Bug, BugFilters, BugStatusCounts, SettingsData } from '../../../shared/types';
 import { Badge } from '../components/shared/Badge';
 import { Select } from '../components/shared/Select';
 import { ScreenshotAnnotator } from '../components/ScreenshotAnnotator';
@@ -14,13 +14,18 @@ import { resolveTaxonomyId } from '../utils/taxonomyIds';
 export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSelect: (id: number) => void }) {
   const [bugs, setBugs] = useState<Bug[]>([]);
   const [filters, setFilters] = useState<BugFilters>({ reported: 'all' });
+  const [statusCounts, setStatusCounts] = useState<BugStatusCounts>({ total: 0, draft: 0, reported: 0, discarded: 0 });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [spotlight, setSpotlight] = useState<SpotlightState | null>(null);
 
   useEffect(() => {
     const refresh = async (): Promise<void> => {
-      const nextBugs = await window.bugPocket.listBugs(filters) as Bug[];
+      const [nextBugs, nextStatusCounts] = await Promise.all([
+        window.bugPocket.listBugs(filters) as Promise<Bug[]>,
+        window.bugPocket.getBugStatusCounts()
+      ]);
       setBugs(nextBugs);
+      setStatusCounts(nextStatusCounts);
     };
     void refresh();
     return window.bugPocket.onBugsChanged(() => { void refresh(); });
@@ -147,10 +152,10 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
       <div className="dashboard-controls">
         <nav className="capture-state-filters" aria-label="Capture state filters">
           {[
-            { label: 'Total Captures', value: 'all' },
-            { label: 'Drafts', value: 'Draft' },
-            { label: 'Reported', value: 'Reported' },
-            { label: 'Discarded', value: 'Discarded' }
+            { label: 'Total Captures', value: 'all', count: statusCounts.total },
+            { label: 'Drafts', value: 'Draft', count: statusCounts.draft },
+            { label: 'Reported', value: 'Reported', count: statusCounts.reported },
+            { label: 'Discarded', value: 'Discarded', count: statusCounts.discarded }
           ].map((tab) => (
             <button
               className={(filters.status ?? 'all') === tab.value ? 'state-tab active' : 'state-tab'}
@@ -159,6 +164,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
               onClick={() => setFilters({ ...filters, status: tab.value })}
             >
               {tab.label}
+              <span className="state-tab-count" aria-label={`${tab.count} ${tab.label.toLowerCase()}`}>{tab.count}</span>
             </button>
           ))}
         </nav>

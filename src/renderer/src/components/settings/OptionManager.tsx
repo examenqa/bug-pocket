@@ -23,6 +23,8 @@ interface OptionManagerProps<TId extends TaxonomyId> {
   onDelete: (id: TId, item: SettingsOptionItem<TId>) => Promise<void>;
   onMerge?: (sourceId: TId, targetId: TId, sourceItem: SettingsOptionItem<TId>, targetItem: SettingsOptionItem<TId>) => Promise<void>;
   onToggleSync?: (id: TId, isSynced: boolean, item: SettingsOptionItem<TId>) => Promise<void>;
+  addPlaceholder?: string;
+  addButtonLabel?: string;
   addContextLabel?: string;
   addContextRequired?: boolean;
   readOnly?: boolean;
@@ -41,6 +43,8 @@ export function OptionManager<TId extends TaxonomyId>({
   onDelete,
   onMerge,
   onToggleSync,
+  addPlaceholder,
+  addButtonLabel,
   addContextLabel,
   addContextRequired = false,
   readOnly = false,
@@ -129,9 +133,19 @@ export function OptionManager<TId extends TaxonomyId>({
         <div className="settings-option-body">
           {readOnly && <p className="settings-helper">{readOnlyMessage}</p>}
           {!readOnly && (
-            <div className={addContextLabel ? 'add-row add-row-with-context' : 'add-row'}>
-              <input value={value} onChange={(event) => setValue(event.target.value)} placeholder={`Add ${title.toLowerCase()}`} />
+            <div className={[
+              'add-row',
+              addContextLabel ? 'add-row-with-context' : '',
+              addButtonLabel ? 'add-row-with-text-button' : ''
+            ].filter(Boolean).join(' ')}>
+              <input
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                placeholder={addPlaceholder ?? `Add ${title.toLowerCase()}`}
+              />
               <button
+                className={addButtonLabel ? 'add-option-text-button' : undefined}
+                type="button"
                 title={`Add ${title}`}
                 disabled={addDisabled}
                 onClick={() => run(async () => {
@@ -141,7 +155,7 @@ export function OptionManager<TId extends TaxonomyId>({
                   setAddContext('');
                 })}
               >
-                <Plus size={16} />
+                {addButtonLabel ?? <Plus size={16} />}
               </button>
               {addContextLabel && (
                 <label className="context-description-field add-context-field">

@@ -308,7 +308,7 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   const noArgs = [
     'window:openQuickCapture', 'window:hideQuickCapture', 'window:expandQuickCaptureForReview',
     'window:restoreQuickCaptureCompact', 'settings:get', 'get-ai-config', 'shortcuts:suspend',
-    'shortcuts:resume', 'bugs:count', 'details:flushComplete', 'screenshot:getSource',
+    'shortcuts:resume', 'bugs:count', 'bugs:statusCounts', 'details:flushComplete', 'screenshot:getSource',
     'screenshot:cancel', 'quickScreenshot:getPending', 'quickScreenshot:discardPending',
     'backup:export', 'backup:import', 'backup:chooseDirectory', 'app:clearCurrentWorkspace', 'app:factoryReset',
     'app:installUpdate',

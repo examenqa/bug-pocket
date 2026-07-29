@@ -58,6 +58,8 @@ export function GeneralSettings({
             onToggle={() => toggleSettingsCard('applications')}
             mutationReady={mutationReady}
             items={settings.applications.map((item) => ({ id: item.id, label: item.name, contextDescription: item.context_description ?? '', isSynced: item.is_synced !== 0 }))}
+            addPlaceholder="Application name"
+            addButtonLabel="Add"
             addContextLabel="Application Description"
             addContextRequired={true}
             readOnly={taxonomyReadOnly}

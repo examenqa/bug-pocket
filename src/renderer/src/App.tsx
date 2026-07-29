@@ -134,7 +134,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   const cloudProjectPaused = syncRuntimeStatus?.code === 'PROJECT_PAUSED';
 
   useEffect(() => {
-    if (bugId) setSelectedBugId(bugId);
+    setSelectedBugId(bugId);
   }, [bugId]);
 
   useEffect(() => {
