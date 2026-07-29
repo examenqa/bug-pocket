@@ -336,3 +336,149 @@ test('active workspace backup excludes attachments referenced only by an inactiv
     rmSync(inspectDir, { recursive: true, force: true });
   }
 });
+
+test('restore replaces only manifest-declared attachments and preserves unrelated workspace blobs', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-attachment-restore-scope-'));
+  const sourceDir = mkdtempSync(join(tmpdir(), 'bug-pocket-attachment-restore-source-'));
+  const localPath = join(dataDir, 'local.sqlite');
+  const workspacePath = join(dataDir, 'ws_test.sqlite');
+  const backupPath = join(dataDir, 'scoped-attachments.bugpocket');
+  const attachmentsDir = join(dataDir, 'attachments');
+  const restoredHash = 'a'.repeat(64);
+  const unrelatedHash = 'b'.repeat(64);
+  const restoredName = `${restoredHash}.png`;
+  const unrelatedName = `${unrelatedHash}.png`;
+  const replacementBytes = Buffer.from('restored workspace A attachment', 'utf8');
+  const unrelatedBytes = Buffer.from('workspace B attachment must survive', 'utf8');
+
+  try {
+    createSqliteFixture(localPath, 'old-local');
+    createSqliteFixture(workspacePath, 'old-workspace');
+    const replacementLocal = createSqliteFixture(join(sourceDir, 'local.sqlite'), 'new-local');
+    const replacementWorkspace = createSqliteFixture(join(sourceDir, 'ws_test.sqlite'), 'new-workspace');
+    mkdirSync(attachmentsDir, { recursive: true });
+    writeFileSync(join(attachmentsDir, restoredName), Buffer.from('old workspace A attachment', 'utf8'));
+    writeFileSync(join(attachmentsDir, unrelatedName), unrelatedBytes);
+
+    const manifest = {
+      ...dualDatabaseManifest(),
+      archived_attachments: [
+        { file_name: restoredName, content_hash: restoredHash, file_size: replacementBytes.length }
+      ]
+    };
+    await writeBackupArchive(backupPath, [
+      { name: 'local.sqlite', bytes: replacementLocal },
+      { name: 'ws_test.sqlite', bytes: replacementWorkspace },
+      { name: `attachments/${restoredName}`, bytes: replacementBytes },
+      { name: 'manifest.json', bytes: Buffer.from(JSON.stringify(manifest), 'utf8') }
+    ]);
+
+    await restoreBackupArchive(backupPath, dataDir, { beforeCommit: () => {} });
+
+    assert.deepEqual(readFileSync(join(attachmentsDir, restoredName)), replacementBytes);
+    assert.deepEqual(
+      readFileSync(join(attachmentsDir, unrelatedName)),
+      unrelatedBytes,
+      'restore must not replace the shared attachments directory'
+    );
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+    rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('restore rollback restores touched attachment files and leaves unrelated blobs intact', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-attachment-restore-rollback-'));
+  const sourceDir = mkdtempSync(join(tmpdir(), 'bug-pocket-attachment-restore-rollback-source-'));
+  const localPath = join(dataDir, 'local.sqlite');
+  const workspacePath = join(dataDir, 'ws_test.sqlite');
+  const backupPath = join(dataDir, 'scoped-attachments-rollback.bugpocket');
+  const attachmentsDir = join(dataDir, 'attachments');
+  const restoredHash = 'c'.repeat(64);
+  const unrelatedHash = 'd'.repeat(64);
+  const restoredName = `${restoredHash}.webp`;
+  const unrelatedName = `${unrelatedHash}.jpg`;
+  const originalBytes = Buffer.from('original restored attachment', 'utf8');
+  const replacementBytes = Buffer.from('replacement restored attachment', 'utf8');
+  const unrelatedBytes = Buffer.from('unrelated workspace attachment', 'utf8');
+
+  try {
+    createSqliteFixture(localPath, 'old-local');
+    createSqliteFixture(workspacePath, 'old-workspace');
+    const replacementLocal = createSqliteFixture(join(sourceDir, 'local.sqlite'), 'new-local');
+    const replacementWorkspace = createSqliteFixture(join(sourceDir, 'ws_test.sqlite'), 'new-workspace');
+    mkdirSync(attachmentsDir, { recursive: true });
+    writeFileSync(join(attachmentsDir, restoredName), originalBytes);
+    writeFileSync(join(attachmentsDir, unrelatedName), unrelatedBytes);
+
+    const manifest = {
+      ...dualDatabaseManifest(),
+      archived_attachments: [
+        { file_name: restoredName, content_hash: restoredHash, file_size: replacementBytes.length }
+      ]
+    };
+    await writeBackupArchive(backupPath, [
+      { name: 'local.sqlite', bytes: replacementLocal },
+      { name: 'ws_test.sqlite', bytes: replacementWorkspace },
+      { name: `attachments/${restoredName}`, bytes: replacementBytes },
+      { name: 'manifest.json', bytes: Buffer.from(JSON.stringify(manifest), 'utf8') }
+    ]);
+
+    await assert.rejects(
+      restoreBackupArchive(backupPath, dataDir, {
+        beforeCommit: () => {},
+        afterCommit: () => {
+          throw new Error('simulated reopen failure after attachment swap');
+        }
+      }),
+      /simulated reopen failure/
+    );
+
+    assert.deepEqual(readFileSync(join(attachmentsDir, restoredName)), originalBytes);
+    assert.deepEqual(readFileSync(join(attachmentsDir, unrelatedName)), unrelatedBytes);
+    assert.equal(existsSync(join(dataDir, '.restore_rollback')), false);
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+    rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('restore rejects malformed attachment hashes before touching live files', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-malformed-attachment-manifest-'));
+  const localPath = join(dataDir, 'local.sqlite');
+  const workspacePath = join(dataDir, 'ws_test.sqlite');
+  const backupPath = join(dataDir, 'malformed-attachment.bugpocket');
+  const attachmentBytes = Buffer.from('malformed attachment fixture', 'utf8');
+
+  try {
+    const localBytes = createSqliteFixture(localPath, 'old-local');
+    const workspaceBytes = createSqliteFixture(workspacePath, 'old-workspace');
+    const manifest = {
+      ...dualDatabaseManifest(),
+      archived_attachments: [
+        { file_name: 'not-a-sha256.png', content_hash: 'not-a-sha256', file_size: attachmentBytes.length }
+      ]
+    };
+    await writeBackupArchive(backupPath, [
+      { name: 'local.sqlite', bytes: localBytes },
+      { name: 'ws_test.sqlite', bytes: workspaceBytes },
+      { name: 'attachments/not-a-sha256.png', bytes: attachmentBytes },
+      { name: 'manifest.json', bytes: Buffer.from(JSON.stringify(manifest), 'utf8') }
+    ]);
+
+    let beforeCommitCalled = false;
+    await assert.rejects(
+      restoreBackupArchive(backupPath, dataDir, {
+        beforeCommit: () => {
+          beforeCommitCalled = true;
+        }
+      }),
+      /expected exactly 64 hexadecimal SHA-256 characters/i
+    );
+    assert.equal(beforeCommitCalled, false);
+    assert.equal(readSentinel(localPath), 'old-local');
+    assert.equal(readSentinel(workspacePath), 'old-workspace');
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});

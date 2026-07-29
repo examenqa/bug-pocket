@@ -3369,7 +3369,10 @@ Attachments:
         .prepare(`SELECT COUNT(*) AS count FROM attachments WHERE content_hash = ? AND id NOT IN (${placeholders})`)
         .get(group.contentHash, ...group.ids) as { count: number };
 
-      if (remaining.count === 0) {
+      if (
+        remaining.count === 0
+        && !this.isAttachmentHashReferencedByAnyDatabase(group.contentHash, this.databasePath)
+      ) {
         const filePath = this.resolveAttachmentPath(group.contentHash, group.fileExtension);
         try {
           if (filePath && existsSync(filePath)) unlinkSync(filePath);

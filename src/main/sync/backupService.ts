@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { basename, join, resolve, sep } from 'node:path';
 import type { BackupExportResult } from '../../shared/types';
 import { operationBarrier } from '../OperationBarrier';
+import { validateAttachmentMetadata } from './attachmentPaths';
 
 const manifestNames = ['manifest.json', 'backup-manifest.json'] as const;
 const stagingDirectoryName = '.staging_restore';
@@ -31,13 +32,25 @@ interface BackupManifest {
     files?: Array<{ role: DatabaseRole; path: string; workspace_id?: string | null }>;
   };
   attachment_directory?: string;
+  archived_attachments?: Array<{
+    file_name: string;
+    content_hash: string;
+    file_size: number;
+  }>;
+}
+
+interface ValidatedBackupAttachment {
+  sourcePath: string;
+  fileName: string;
+  contentHash: string;
+  fileSize: number;
 }
 
 interface ValidatedBackup {
   manifestPath: string;
   localDatabasePath: string;
   workspaceDatabasePath: string | null;
-  attachmentDirectoryPath: string;
+  attachmentFiles: ValidatedBackupAttachment[];
 }
 
 export interface RestoreBackupHooks {
@@ -311,14 +324,57 @@ function readAndValidateManifest(stagingPath: string, archiveEntries: Set<string
     }
   }
 
+  const rawAttachments = parsed.archived_attachments ?? [];
+  if (!Array.isArray(rawAttachments)) throw new Error('Backup manifest has an invalid attachment list.');
+  const declaredAttachmentEntries = new Set<string>();
+  const attachmentFiles = rawAttachments.map((attachment, index): ValidatedBackupAttachment => {
+    if (!attachment || typeof attachment !== 'object') {
+      throw new Error(`Backup manifest attachment ${index + 1} is invalid.`);
+    }
+    const fileName = validateManifestFileName(attachment.file_name, `attachment ${index + 1}`);
+    const extensionIndex = fileName.lastIndexOf('.');
+    const metadata = validateAttachmentMetadata(
+      attachment.content_hash,
+      extensionIndex >= 0 ? fileName.slice(extensionIndex) : ''
+    );
+    if (!metadata.contentHash || fileName !== `${metadata.contentHash}${metadata.extension}`) {
+      throw new Error(`Backup manifest attachment '${fileName}' does not match its content hash.`);
+    }
+    if (!Number.isSafeInteger(attachment.file_size) || attachment.file_size < 0) {
+      throw new Error(`Backup manifest attachment '${fileName}' has an invalid file size.`);
+    }
+
+    const archiveEntry = `attachments/${fileName}`;
+    if (declaredAttachmentEntries.has(archiveEntry)) {
+      throw new Error(`Backup manifest declares attachment '${fileName}' more than once.`);
+    }
+    declaredAttachmentEntries.add(archiveEntry);
+    if (!archiveEntries.has(archiveEntry)) {
+      throw new Error(`Backup archive is missing declared attachment '${fileName}'.`);
+    }
+
+    const sourcePath = join(stagingPath, 'attachments', fileName);
+    if (!existsSync(sourcePath) || !statSync(sourcePath).isFile()) {
+      throw new Error(`Backup attachment '${fileName}' is missing.`);
+    }
+    if (statSync(sourcePath).size !== attachment.file_size) {
+      throw new Error(`Backup attachment '${fileName}' does not match its declared size.`);
+    }
+    return {
+      sourcePath,
+      fileName,
+      contentHash: metadata.contentHash,
+      fileSize: attachment.file_size
+    };
+  });
+
   for (const entry of archiveEntries) {
     if (manifestNames.includes(entry as (typeof manifestNames)[number])) continue;
     if (expectedDatabaseNames.has(entry)) continue;
     if (entry === 'attachments') continue;
     if (entry.startsWith('attachments/')) {
-      const fileName = entry.slice('attachments/'.length);
-      if (!fileName || fileName.includes('/') || fileName === '.' || fileName === '..') {
-        throw new Error(`Backup archive contains an invalid attachment path: '${entry}'.`);
+      if (!declaredAttachmentEntries.has(entry)) {
+        throw new Error(`Backup archive contains an undeclared attachment: '${entry}'.`);
       }
       continue;
     }
@@ -329,13 +385,11 @@ function readAndValidateManifest(stagingPath: string, archiveEntries: Set<string
     if (!archiveEntries.has(databaseName)) throw new Error(`Backup archive is missing '${databaseName}'.`);
   }
 
-  const attachmentDirectoryPath = join(stagingPath, 'attachments');
-  mkdirSync(attachmentDirectoryPath, { recursive: true });
   return {
     manifestPath,
     localDatabasePath: join(stagingPath, localDatabaseName),
     workspaceDatabasePath: workspaceDatabaseName ? join(stagingPath, workspaceDatabaseName) : null,
-    attachmentDirectoryPath
+    attachmentFiles
   };
 }
 
@@ -378,36 +432,42 @@ async function commitValidatedBackup(
   rmSync(rollbackPath, { recursive: true, force: true });
   mkdirSync(rollbackPath, { recursive: true });
 
+  const liveAttachmentsPath = join(userDataPath, 'attachments');
+  const rollbackAttachmentsPath = join(rollbackPath, 'attachments');
+  mkdirSync(liveAttachmentsPath, { recursive: true });
+  mkdirSync(rollbackAttachmentsPath, { recursive: true });
+
   const entries: SwapEntry[] = [
     {
       source: validated.localDatabasePath,
       destination: join(userDataPath, 'local.sqlite'),
       rollback: join(rollbackPath, 'local.sqlite'),
       hadLiveEntry: false
-    },
-    {
-      source: validated.attachmentDirectoryPath,
-      destination: join(userDataPath, 'attachments'),
-      rollback: join(rollbackPath, 'attachments'),
-      hadLiveEntry: false
-    },
-    {
-      source: validated.manifestPath,
-      destination: join(userDataPath, 'manifest.json'),
-      rollback: join(rollbackPath, 'manifest.json'),
-      hadLiveEntry: false
     }
   ];
   if (validated.workspaceDatabasePath) {
     const workspaceName = basename(validated.workspaceDatabasePath);
-    entries.splice(1, 0, {
+    entries.push({
       source: validated.workspaceDatabasePath,
       destination: join(userDataPath, workspaceName),
       rollback: join(rollbackPath, workspaceName),
       hadLiveEntry: false
     });
   }
-
+  validated.attachmentFiles.forEach((attachment) => {
+    entries.push({
+      source: attachment.sourcePath,
+      destination: join(liveAttachmentsPath, attachment.fileName),
+      rollback: join(rollbackAttachmentsPath, attachment.fileName),
+      hadLiveEntry: false
+    });
+  });
+  entries.push({
+    source: validated.manifestPath,
+    destination: join(userDataPath, 'manifest.json'),
+    rollback: join(rollbackPath, 'manifest.json'),
+    hadLiveEntry: false
+  });
   await hooks.beforeCommit();
   cleanupSqliteSidecars(userDataPath);
   const movedEntries: SwapEntry[] = [];
