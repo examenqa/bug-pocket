@@ -319,6 +319,7 @@ export interface SyncSessionStatus {
   workspaceRole?: WorkspaceRole;
   workspaceCanRead?: boolean;
   workspaceCanWrite?: boolean;
+  workspaceSelectionRequired?: boolean;
 }
 
 export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'developer' | (string & {});

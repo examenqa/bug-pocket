@@ -12,6 +12,7 @@ import { SnipOverlay } from './pages/SnipOverlay';
 import { SupportModal, type SupportModalMode } from './components/shared/SupportModal';
 import { ToastProvider } from './components/shared/ToastContext';
 import { BrandMark } from './components/shared/BrandMark';
+import { bugDetailsRoute, resolveMainShellRoute } from '../../shared/navigation';
 
 function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: () => Promise<void> }) {
   const [attachments, setAttachments] = useState<ScreenshotResult[]>([]);
@@ -114,9 +115,7 @@ function SupportPopover({ anchorRect, open, onClose, onSelectMode }: { anchorRec
 }
 
 function MainShell({ route, navigate, settings, refresh }: { route: string; navigate: (route: string) => void; settings: SettingsData; refresh: () => Promise<void> }) {
-  const bugMatch = route.match(/^\/bugs\/(\d+)$/);
-  const bugId = bugMatch ? Number(bugMatch[1]) : null;
-  const [selectedBugId, setSelectedBugId] = useState<number | null>(bugId);
+  const shellRoute = resolveMainShellRoute(route);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [supportModalMode, setSupportModalMode] = useState<SupportModalMode>('bug');
   const [isSupportPopoverOpen, setIsSupportPopoverOpen] = useState(false);
@@ -127,15 +126,11 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [syncRuntimeStatus, setSyncRuntimeStatus] = useState<SyncRuntimeStatus | null>(null);
   const [retryingSync, setRetryingSync] = useState(false);
-  const showingDetails = selectedBugId != null && !route.startsWith('/settings');
-  const activeView = route.startsWith('/settings') ? 'settings' : 'dashboard';
+  const activeView = shellRoute.view === 'settings' ? 'settings' : 'dashboard';
   const activeWorkspaceId = settings.currentWorkspaceId?.trim() ?? '';
   const cloudWorkspaceActive = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(activeWorkspaceId);
   const cloudProjectPaused = syncRuntimeStatus?.code === 'PROJECT_PAUSED';
 
-  useEffect(() => {
-    setSelectedBugId(bugId);
-  }, [bugId]);
 
   useEffect(() => {
     if (route.startsWith('/settings')) setIsSettingsExpanded(true);
@@ -182,8 +177,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   };
 
   const closeBugDetails = (): void => {
-    setSelectedBugId(null);
-    if (route.startsWith('/bugs/')) navigate('/dashboard');
+    navigate('/dashboard');
   };
 
   return (
@@ -195,10 +189,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
         </div>
         <button
           className={activeView === 'dashboard' ? 'nav active' : 'nav'}
-          onClick={() => {
-            setSelectedBugId(null);
-            navigate('/dashboard');
-          }}
+          onClick={() => navigate('/dashboard')}
         >
           <Home size={17} /> Dashboard
         </button>
@@ -207,7 +198,6 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
             className={activeView === 'settings' ? 'nav settings-parent active' : 'nav settings-parent'}
             aria-expanded={isSettingsExpanded}
             onClick={() => {
-              setSelectedBugId(null);
               setIsSettingsExpanded((expanded) => !expanded);
               if (!route.startsWith('/settings')) navigate('/settings/workspace');
             }}
@@ -226,10 +216,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
                     key={item.route}
                     className={active ? 'settings-subnav-link active' : 'settings-subnav-link'}
                     type="button"
-                    onClick={() => {
-                      setSelectedBugId(null);
-                      navigate(item.route);
-                    }}
+                    onClick={() => navigate(item.route)}
                   >
                     <Icon size={14} /> {item.label}
                   </button>
@@ -296,16 +283,15 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
             </div>
           </div>
         )}
-        {route.startsWith('/settings') ? (
+        {shellRoute.view === 'settings' ? (
           <SettingsPage settings={settings} refresh={refresh} route={route} />
-        ) : (
-          <>
-            <div className={showingDetails ? 'dashboard-view hidden' : 'dashboard-view'}>
-              <Dashboard settings={settings} onSelect={setSelectedBugId} />
-            </div>
-            {showingDetails && <BugDetailsView bugId={selectedBugId} settings={settings} onBack={closeBugDetails} />}
-          </>
-        )}
+        ) : shellRoute.view === 'dashboard' ? (
+          <div className="dashboard-view">
+            <Dashboard settings={settings} onSelect={(id) => navigate(bugDetailsRoute(id))} />
+          </div>
+        ) : shellRoute.view === 'bug' ? (
+          <BugDetailsView bugId={shellRoute.bugId} settings={settings} onBack={closeBugDetails} />
+        ) : null}
       </main>
     </div>
   );

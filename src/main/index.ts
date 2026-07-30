@@ -23,8 +23,10 @@ import { getAssetPath } from './assetPaths';
 import { configureAutoUpdater, registerUpdateInstallIpc, runGracefulShutdown } from './updater';
 import { checkForUpdatesFromPublicFeed } from './updateFeed';
 import { operationBarrier } from './OperationBarrier';
+import { runDestructiveMaintenance } from './destructiveLifecycle';
 import { sendFeedbackToExamenQa } from './support/feedbackService';
 import type { AiConfigSaveInput, AiIssueProcessPayload, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting, SyncAccountSetup, TaxonomyId } from '../shared/types';
+import { DASHBOARD_ROUTE } from '../shared/navigation';
 
 const packagedSmokeUserData = process.env.BUG_POCKET_SMOKE_USER_DATA?.trim();
 const packagedSmokeTest = app.isPackaged && process.env.BUG_POCKET_PACKAGED_SMOKE_TEST === '1' && Boolean(packagedSmokeUserData);
@@ -217,7 +219,7 @@ function enforceStartupPreference(enabled: boolean): void {
   });
 }
 
-function createMainWindow(route = '/dashboard', showOnReady = true): void {
+function createMainWindow(route = DASHBOARD_ROUTE, showOnReady = true): void {
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 760,
@@ -386,7 +388,7 @@ function restoreQuickCaptureCompactSize(): void {
   quickWindow.setResizable(false);
 }
 
-function openMainWindow(route = '/dashboard'): void {
+function openMainWindow(route = DASHBOARD_ROUTE): void {
   if (!mainWindow) {
     createMainWindow(route);
   } else {
@@ -444,7 +446,7 @@ function shortcutLabel(accelerator: string): string {
 function shortcutHandlers(): Record<ShortcutAction, () => void> {
   return {
     quick_capture: () => { void openQuickCapture(); },
-    main_panel: () => openMainWindow('/dashboard'),
+    main_panel: () => openMainWindow(DASHBOARD_ROUTE),
     global_screenshot: () => { void startScreenshotCapture(); }
   };
 }
@@ -468,6 +470,16 @@ function notifySettingsChanged(): void {
 
 function assertAppAcceptingMutations(): void {
   if (shutdownInProgress) throw new Error('Bug Pocket is shutting down. New changes are temporarily paused.');
+  operationBarrier.assertAcceptingOperations();
+}
+
+async function runDestructiveDatabaseOperation<T>(operation: () => Promise<T>): Promise<T> {
+  return runDestructiveMaintenance({
+    barrier: operationBarrier,
+    stopAndDrain: () => syncEngine.stopAndDrain(),
+    operation,
+    resumeAfterFailure: () => syncEngine.resumeAfterFailedShutdown()
+  });
 }
 
 function mutateSettings<T>(action: () => T): T {
@@ -907,7 +919,7 @@ function registerIpc(): void {
   });
   secureIpc.handle('window:expandQuickCaptureForReview', () => resizeQuickCaptureForReview());
   secureIpc.handle('window:restoreQuickCaptureCompact', () => restoreQuickCaptureCompactSize());
-  secureIpc.handle('window:openMain', (_event, route = '/dashboard') => openMainWindow(route));
+  secureIpc.handle('window:openMain', (_event, route = DASHBOARD_ROUTE) => openMainWindow(route));
   secureIpc.handle('window:openSettings', (_event, section?: string) => openSettings(section));
   secureIpc.handle('settings:get', () => settingsWithShortcutStatus());
   secureIpc.handle('settings:addApplication', (_event, name: string, contextDescription?: string | null) => mutateWorkspaceSettings(() => db.addApplication(name, contextDescription ?? '')));
@@ -944,7 +956,7 @@ function registerIpc(): void {
     mutateSettings(() => saveByokAiConfig(db, input))
   );
   secureIpc.handle('settings:updateSupabaseSettings', async (_event, projectUrl: string, anonKey: string, inviteEmail?: string) =>
-    operationBarrier.acquire((async () => {
+    operationBarrier.acquire(async () => {
       assertAppAcceptingMutations();
       // Validate first so an accidental typo cannot disconnect a working project.
       if (projectUrl.trim() || anonKey.trim()) normalizeSupabaseCredentials(projectUrl, anonKey);
@@ -960,7 +972,7 @@ function registerIpc(): void {
       notifySettingsChanged();
       mainWindow?.webContents.send('bugs:changed');
       return result;
-    })())
+    })
   );
   secureIpc.handle('settings:toggleStartup', (_event, enabled: boolean) =>
     mutateSettings(() => {
@@ -974,6 +986,7 @@ function registerIpc(): void {
   secureIpc.handle('settings:updatePreset', (_event, id: number, input: CapturePresetInput) => mutateSettings(() => db.updatePreset(id, input)));
   secureIpc.handle('settings:deletePreset', (_event, id: number) => mutateSettings(() => db.deletePreset(id)));
   secureIpc.handle('settings:updateShortcut', (_event, action: ShortcutAction, accelerator: string, enabled: boolean) => {
+    assertAppAcceptingMutations();
     db.updateShortcut(action, accelerator, enabled);
     registerAppShortcuts();
     return settingsWithShortcutStatus().shortcuts.find((shortcut: ShortcutSetting) => shortcut.action === action);
@@ -997,7 +1010,10 @@ function registerIpc(): void {
     return updated;
   });
   registerBugDeletionIpc(secureIpc, {
-    authorizeMutation: assertCurrentWorkspaceWriteAccess,
+    authorizeMutation: () => {
+      assertAppAcceptingMutations();
+      assertCurrentWorkspaceWriteAccess();
+    },
     deleteBug: (id) => db.deleteBug(id),
     emitBugsChanged: () => mainWindow?.webContents.send('bugs:changed'),
     emitDeletedToast: () => mainWindow?.webContents.send('app:toast', 'Report deleted.')
@@ -1006,12 +1022,12 @@ function registerIpc(): void {
     mutateWorkspace(() => db.deleteAttachment(id));
     mainWindow?.webContents.send('bugs:changed');
   });
-  secureIpc.handle('attachments:download', async (_event, id: number) => operationBarrier.acquire((async () => {
+  secureIpc.handle('attachments:download', async (_event, id: number) => operationBarrier.acquire(async () => {
     const result = await downloadAttachment(id);
     if (result.success) mainWindow?.webContents.send('app:toast', 'Screenshot downloaded.');
     else if (!result.canceled) mainWindow?.webContents.send('app:toast', result.error || 'Unable to download screenshot.', 'error');
     return result;
-  })()));
+  }));
   secureIpc.handle('attachments:saveAnnotated', (_event, parentId: number, dataUrl: string) => mutateWorkspace(() => saveAnnotatedAttachment(parentId, dataUrl)));
   secureIpc.handle('attachments:previewDataUrl', (_event, id: number) => {
     const attachment = db.getAttachment(id);
@@ -1032,7 +1048,7 @@ function registerIpc(): void {
     if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only web URLs can be opened.');
     return shell.openExternal(parsed.toString());
   });
-  secureIpc.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => operationBarrier.acquire(sendFeedbackToExamenQa(payload)));
+  secureIpc.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => operationBarrier.acquire(() => sendFeedbackToExamenQa(payload)));
 
   secureIpc.handle('details:setDirty', (_event, dirty: boolean) => {
     rendererHasDirtyDetails = !!dirty;
@@ -1051,23 +1067,21 @@ function registerIpc(): void {
   secureIpc.handle('backup:import', () => importBackup());
   secureIpc.handle('backup:chooseDirectory', () => chooseBackupDirectory());
   secureIpc.handle('app:clearCurrentWorkspace', async () => {
-    await syncEngine.pauseWorkspaceSync();
-    const result = await db.clearCurrentWorkspace();
+    const result = await runDestructiveDatabaseOperation(() => db.clearCurrentWorkspace());
     mainWindow?.webContents.send('bugs:changed');
     mainWindow?.webContents.send('settings:changed');
     return { success: true, ...result };
   });
   secureIpc.handle('app:factoryReset', async () => {
-    await syncEngine.stopAndWait();
-    await db.factoryReset();
+    await runDestructiveDatabaseOperation(() => db.factoryReset());
     app.relaunch();
     app.exit(0);
     return { success: true };
   });
   registerUpdateInstallIpc(secureIpc, autoUpdater, gracefulShutdown);
   secureIpc.handle('sync:testConnection', () => syncEngine.testConnection());
-  secureIpc.handle('sync:authSignIn', (_event, email: string, password: string) => syncEngine.authSignIn(email, password));
-  secureIpc.handle('sync:authSignUp', (_event, email: string, password: string, setup: SyncAccountSetup) => syncEngine.authSignUp(email, password, setup));
+  secureIpc.handle('sync:authSignIn', (_event, email: string, password: string) => operationBarrier.acquire(() => syncEngine.authSignIn(email, password)));
+  secureIpc.handle('sync:authSignUp', (_event, email: string, password: string, setup: SyncAccountSetup) => operationBarrier.acquire(() => syncEngine.authSignUp(email, password, setup)));
   secureIpc.handle('sync:generateInvite', async (_event, passphrase: string, targetEmail: string, targetRole: string) => {
     const workspaceId = db.getCurrentWorkspaceId();
     const projectUrl = db.getSupabaseProjectUrl();
@@ -1078,22 +1092,24 @@ function registerIpc(): void {
     return generateInviteCode(projectUrl, anonKey, workspaceId, passphrase, targetEmail);
   });
   secureIpc.handle('sync:decodeInvite', (_event, token: string, passphrase: string) => decodeInviteCode(token, passphrase));
-  secureIpc.handle('sync:authSignOut', async () => {
+  secureIpc.handle('sync:authSignOut', () => operationBarrier.acquire(async () => {
     const result = await syncEngine.authSignOut();
     mainWindow?.webContents.send('bugs:changed');
     return result;
-  });
-  secureIpc.handle('sync:getSessionStatus', () => syncEngine.getSyncSessionStatus());
-  secureIpc.handle('sync:listWorkspaces', () => syncEngine.listWorkspaceMemberships());
+  }));
+  secureIpc.handle('sync:getSessionStatus', () => operationBarrier.acquire(() => syncEngine.getSyncSessionStatus()));
+  secureIpc.handle('sync:listWorkspaces', () => operationBarrier.acquire(() => syncEngine.listWorkspaceMemberships()));
   secureIpc.handle('sync:updateWorkspaceName', (_event, workspaceId: string, name: string) => mutateWorkspace(() => syncEngine.updateWorkspaceName(workspaceId, name)));
   secureIpc.handle('sync:getWorkspaceRole', (_event, workspaceId: string | null) => db.getWorkspaceRole(workspaceId));
   secureIpc.handle('sync:getDiagnostics', () => db.getSyncDiagnostics());
   secureIpc.handle('sync:getRuntimeStatus', () => syncEngine.getRuntimeStatus());
   secureIpc.handle('sync:retryNow', async () => {
+    operationBarrier.assertAcceptingOperations();
     await syncEngine.retrySyncQueueNow();
     return syncEngine.getRuntimeStatus();
   });
   secureIpc.handle('sync:forceRetry', async () => {
+    assertAppAcceptingMutations();
     assertCurrentWorkspaceWriteAccess();
     db.resetSyncQueueRetries();
     await syncEngine.retrySyncQueueNow();
@@ -1104,8 +1120,8 @@ function registerIpc(): void {
     if (result.success) mainWindow?.webContents.send('bugs:changed');
     return result;
   });
-  secureIpc.handle('ai:triageBug', (_event, bugData: unknown) => operationBarrier.acquire(triageBugWithConfiguredAi(bugData)));
-  secureIpc.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => operationBarrier.acquire(processIssueWithByokAi(db, payload)));
+  secureIpc.handle('ai:triageBug', (_event, bugData: unknown) => operationBarrier.acquire(() => triageBugWithConfiguredAi(bugData)));
+  secureIpc.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => operationBarrier.acquire(() => processIssueWithByokAi(db, payload)));
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -1114,7 +1130,7 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    openMainWindow('/dashboard');
+    openMainWindow(DASHBOARD_ROUTE);
   });
 
   app.whenReady().then(async () => {

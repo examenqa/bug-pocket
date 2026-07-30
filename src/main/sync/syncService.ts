@@ -15,6 +15,7 @@ import {
 import { pullWithCompositeCursors, type RemotePullClient, type RemotePullRow } from './compositeCursorPull';
 import { SafeStorageAdapter } from './SafeStorageAdapter';
 import { httpStatusFromError, throwIfSupabaseError } from './supabaseErrors';
+import { resolveWorkspaceMembership, sortWorkspaceOptions } from './workspaceSelection';
 
 export interface SyncStatus {
   enabled: boolean;
@@ -38,6 +39,7 @@ type WorkspaceAccess = {
   role: WorkspaceRole;
   canRead: boolean;
   canWrite: boolean;
+  selectionRequired?: boolean;
 };
 
 type WorkspaceRow = {
@@ -240,15 +242,20 @@ export class SyncEngine {
 
     try {
       const claimedWorkspaceId = await this.claimPendingInvite(client);
-      const membership = await this.captureCurrentWorkspaceMembership(client, claimedWorkspaceId);
+      const preferredWorkspaceId = claimedWorkspaceId ?? this.database.getCurrentWorkspaceId();
+      const membership = await this.captureCurrentWorkspaceMembership(client, preferredWorkspaceId);
       if (!membership.workspaceId) {
         this.database.setCloudSyncSessionActive(false);
         this.stopBackgroundSync();
+        const selectionRequired = membership.selectionRequired === true;
         return {
-          success: false,
+          success: selectionRequired,
           authenticated: true,
           email: data.user?.email ?? email.trim(),
-          message: 'Signed in, but no workspace membership was found for this user. Create or assign a workspace before syncing.'
+          workspaceSelectionRequired: selectionRequired,
+          message: selectionRequired
+            ? 'Signed in. Choose a workspace before cloud sync starts.'
+            : 'Signed in, but no workspace membership was found for this user. Create or assign a workspace before syncing.'
         };
       }
 
@@ -310,21 +317,25 @@ export class SyncEngine {
 
     try {
       const claimedWorkspaceId = await this.claimPendingInvite(client);
-      const membership = await this.captureCurrentWorkspaceMembership(client, claimedWorkspaceId);
+      const preferredWorkspaceId = claimedWorkspaceId ?? this.database.getCurrentWorkspaceId();
+      const membership = await this.captureCurrentWorkspaceMembership(client, preferredWorkspaceId);
       this.database.setCloudSyncSessionActive(Boolean(membership.workspaceId));
       if (membership.workspaceId) this.startBackgroundSync();
       else this.stopBackgroundSync();
       return {
-        success: Boolean(membership.workspaceId),
+        success: Boolean(membership.workspaceId) || membership.selectionRequired === true,
         authenticated: true,
         email: data.user?.email ?? email.trim(),
         workspaceId: membership.workspaceId ?? undefined,
         workspaceRole: membership.role,
         workspaceCanRead: membership.canRead,
         workspaceCanWrite: membership.canWrite,
+        workspaceSelectionRequired: membership.selectionRequired === true,
         message: membership.workspaceId
           ? 'Account created and workspace captured locally.'
-          : 'Account created, but no workspace membership was found yet.'
+          : membership.selectionRequired
+            ? 'Account created. Choose a workspace before cloud sync starts.'
+            : 'Account created, but no workspace membership was found yet.'
       };
     } catch (caught) {
       this.database.setCloudSyncSessionActive(false);
@@ -392,17 +403,15 @@ export class SyncEngine {
     if (error) throw new Error(`Could not restore the saved Supabase session: ${error.message}`);
 
     const authenticated = Boolean(data.session);
-    const workspaceId = this.database.getCurrentWorkspaceId();
-    let hasWorkspaceAccess = false;
-    if (authenticated && workspaceId) {
+    let access: WorkspaceAccess | null = null;
+    if (authenticated) {
       try {
-        const access = await this.refreshWorkspaceAccessForUser(client, workspaceId, data.session?.user.id ?? '');
-        hasWorkspaceAccess = Boolean(access);
+        access = await this.captureCurrentWorkspaceMembership(client, this.database.getCurrentWorkspaceId());
       } catch (caught) {
-        console.warn('[Bug Pocket Sync] Could not refresh workspace permissions while restoring the session.', caught);
-        this.database.updateWorkspacePermissions(workspaceId, false, false);
+        console.warn('[Bug Pocket Sync] Could not restore workspace access for the saved session.', caught);
       }
     }
+    const hasWorkspaceAccess = Boolean(access?.workspaceId);
     this.database.setCloudSyncSessionActive(authenticated && hasWorkspaceAccess);
     if (authenticated && hasWorkspaceAccess) this.startBackgroundSync();
     else this.stopBackgroundSync();
@@ -415,7 +424,7 @@ export class SyncEngine {
   }
 
   async switchWorkspace(newWorkspaceId: string): Promise<SyncAuthResult> {
-    return operationBarrier.acquire(this.switchWorkspaceInternal(newWorkspaceId));
+    return operationBarrier.acquire(() => this.switchWorkspaceInternal(newWorkspaceId));
   }
 
   private async switchWorkspaceInternal(newWorkspaceId: string): Promise<SyncAuthResult> {
@@ -515,11 +524,12 @@ export class SyncEngine {
     const { data: memberships, error: membershipError } = await client
       .from('workspace_members')
       .select('workspace_id, role')
-      .eq('user_id', userData.user.id);
+      .eq('user_id', userData.user.id)
+      .order('workspace_id', { ascending: true });
 
     if (membershipError) throw membershipError;
 
-    const workspaceIds = Array.from(new Set((memberships ?? []).map((row) => String(row.workspace_id)).filter(Boolean)));
+    const workspaceIds = Array.from(new Set((memberships ?? []).map((row) => String(row.workspace_id)).filter(Boolean))).sort();
     if (!workspaceIds.length) return [];
 
     const { data: workspaces, error: workspacesError } = await client
@@ -530,10 +540,10 @@ export class SyncEngine {
     if (workspacesError) throw workspacesError;
 
     const nameById = new Map((workspaces as WorkspaceRow[] | null ?? []).map((workspace) => [workspace.id, workspace.name ?? undefined]));
-    return workspaceIds.map((workspaceId) => ({
+    return sortWorkspaceOptions(workspaceIds.map((workspaceId) => ({
       workspaceId,
       name: nameById.get(workspaceId)
-    }));
+    })));
   }
 
   async inviteUserToWorkspace(targetEmail: string, targetRole: string): Promise<string> {
@@ -624,16 +634,14 @@ export class SyncEngine {
       return { authenticated: false, workspaceId: this.database.getCurrentWorkspaceId() ?? undefined };
     }
 
-    const workspaceId = this.database.getCurrentWorkspaceId();
-    let hasWorkspaceAccess = false;
-    if (workspaceId) {
-      try {
-        hasWorkspaceAccess = Boolean(await this.refreshWorkspaceAccessForUser(this.client, workspaceId, data.user.id));
-      } catch (caught) {
-        console.warn('[Bug Pocket Sync] Could not refresh cached workspace permissions.', caught);
-        this.database.updateWorkspacePermissions(workspaceId, false, false);
-      }
+    let access: WorkspaceAccess | null = null;
+    try {
+      access = await this.captureCurrentWorkspaceMembership(this.client, this.database.getCurrentWorkspaceId());
+    } catch (caught) {
+      console.warn('[Bug Pocket Sync] Could not refresh cached workspace permissions.', caught);
     }
+    const workspaceId = access?.workspaceId ?? null;
+    const hasWorkspaceAccess = Boolean(workspaceId);
     this.database.setCloudSyncSessionActive(hasWorkspaceAccess);
     if (hasWorkspaceAccess) this.startBackgroundSync();
     else this.stopBackgroundSync();
@@ -642,9 +650,10 @@ export class SyncEngine {
       authenticated: true,
       email: data.user.email ?? undefined,
       workspaceId: workspaceId ?? undefined,
-      workspaceRole: this.database.getWorkspaceRole(workspaceId),
-      workspaceCanRead: this.database.getWorkspacePermissions(workspaceId).canRead,
-      workspaceCanWrite: this.database.getWorkspacePermissions(workspaceId).canWrite
+      workspaceRole: access?.role ?? this.database.getWorkspaceRole(workspaceId),
+      workspaceCanRead: access?.canRead ?? false,
+      workspaceCanWrite: access?.canWrite ?? false,
+      workspaceSelectionRequired: access?.selectionRequired === true
     };
   }
 
@@ -1201,18 +1210,35 @@ export class SyncEngine {
   }
 
   private async captureCurrentWorkspaceMembership(client: SupabaseClient, preferredWorkspaceId: string | null = null): Promise<WorkspaceAccess> {
-    let query = client
+    const { data: userData, error: userError } = await client.auth.getUser();
+    if (userError || !userData.user) throw userError ?? new Error('Authenticated user was not found.');
+
+    const { data, error } = await client
       .from('workspace_members')
       .select('workspace_id, role')
-      .limit(1);
-    if (preferredWorkspaceId) query = query.eq('workspace_id', preferredWorkspaceId);
-    const { data, error } = await query.maybeSingle<WorkspaceMembershipRow>();
+      .eq('user_id', userData.user.id)
+      .order('workspace_id', { ascending: true });
 
     if (error) throw error;
-    const workspaceId = data?.workspace_id ?? null;
-    this.database.updateCurrentWorkspaceId(workspaceId);
-    if (!workspaceId) return { workspaceId: null, role: 'admin', canRead: false, canWrite: false };
-    return this.cacheWorkspaceAccess(client, workspaceId, data?.role);
+    const resolution = resolveWorkspaceMembership((data ?? []) as WorkspaceMembershipRow[], preferredWorkspaceId);
+    const membership = resolution.membership;
+    if (!membership) {
+      this.database.disconnectWorkspace();
+      this.database.updateCurrentWorkspaceId(null);
+      return {
+        workspaceId: null,
+        role: 'admin',
+        canRead: false,
+        canWrite: false,
+        selectionRequired: resolution.selectionRequired
+      };
+    }
+
+    const workspaceId = membership.workspace_id;
+    if (this.database.getCurrentWorkspaceId() !== workspaceId) {
+      await this.database.connectToWorkspaceTracked(workspaceId);
+    }
+    return this.cacheWorkspaceAccess(client, workspaceId, membership.role);
   }
 
   private async cacheWorkspaceAccess(client: SupabaseClient, workspaceId: string, rawRole: WorkspaceRole | string | null | undefined): Promise<WorkspaceAccess> {

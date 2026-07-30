@@ -235,7 +235,7 @@ export function createBackupArchive(
   source: BackupArchiveSource,
   tempDirectory: string
 ): Promise<BackupExportResult> {
-  return operationBarrier.acquire(createBackupArchiveInternal(filePath, source, tempDirectory));
+  return operationBarrier.acquire(() => createBackupArchiveInternal(filePath, source, tempDirectory));
 }
 
 function validateArchivePath(rawPath: string, stagingPath: string): string {
@@ -538,5 +538,5 @@ export function restoreBackupArchive(
   userDataPath: string,
   hooks: RestoreBackupHooks
 ): Promise<void> {
-  return operationBarrier.acquire(restoreBackupArchiveInternal(backupPath, userDataPath, hooks));
+  return operationBarrier.acquire(() => restoreBackupArchiveInternal(backupPath, userDataPath, hooks));
 }

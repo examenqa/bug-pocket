@@ -690,16 +690,33 @@ test('restores the encrypted authenticated session after client reinitialization
   };
 
   try {
+    const workspaceId = '10000000-0000-4000-8000-000000000001';
     globalThis.fetch = async (input) => {
       const url = String(input);
-      assert.match(url, /\/auth\/v1\/token\?grant_type=password$/);
-      return new Response(JSON.stringify({
-        access_token: accessToken,
-        token_type: 'bearer',
-        expires_in: 3600,
-        expires_at: nowSeconds + 3600,
-        refresh_token: 'test-refresh-token',
-        user: {
+      if (/\/auth\/v1\/token\?grant_type=password$/.test(url)) {
+        return new Response(JSON.stringify({
+          access_token: accessToken,
+          token_type: 'bearer',
+          expires_in: 3600,
+          expires_at: nowSeconds + 3600,
+          refresh_token: 'test-refresh-token',
+          user: {
+            id: '00000000-0000-4000-8000-000000000001',
+            aud: 'authenticated',
+            role: 'authenticated',
+            email: 'tester@example.com',
+            app_metadata: { provider: 'email', providers: ['email'] },
+            user_metadata: {},
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      if (/\/auth\/v1\/user$/.test(url)) {
+        return new Response(JSON.stringify({
           id: '00000000-0000-4000-8000-000000000001',
           aud: 'authenticated',
           role: 'authenticated',
@@ -708,11 +725,24 @@ test('restores the encrypted authenticated session after client reinitialization
           user_metadata: {},
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        }
-      }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' }
-      });
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      if (/\/rest\/v1\/workspace_members\?/.test(url)) {
+        return new Response(JSON.stringify([{ workspace_id: workspaceId, role: 'owner' }]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      if (/\/rest\/v1\//.test(url)) {
+        return new Response('[]', {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      throw new Error(`Unexpected Supabase test request: ${url}`);
     };
 
     database.updateSupabaseSettings('https://test.supabase.co', 'sb_publishable_test_key');
@@ -753,9 +783,10 @@ test('restores the encrypted authenticated session after client reinitialization
     const restartedClient = (restartedEngine as unknown as ExposedSyncEngine).client;
     assert.ok(restartedClient);
     assert.equal(await restartedEngine.restorePersistedSession(), true);
+    assert.equal(database.getCurrentWorkspaceId(), workspaceId, 'the sole accessible workspace is mounted after restart');
     assert.equal((await restartedClient.auth.getSession()).data.session?.access_token, accessToken);
     restartedClient.auth.stopAutoRefresh();
-    restartedEngine.stop();
+    await restartedEngine.stopAndDrain();
   } finally {
     globalThis.fetch = originalFetch;
     database.close();

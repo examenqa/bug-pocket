@@ -63,7 +63,7 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
         if (cancelled) return;
         const nextStatus = status as SyncSessionStatus;
         setSession(nextStatus);
-        setSelectedWorkspaceId(nextStatus.workspaceId ?? settings.currentWorkspaceId ?? '');
+        setSelectedWorkspaceId(nextStatus.workspaceSelectionRequired ? '' : nextStatus.workspaceId ?? settings.currentWorkspaceId ?? '');
         if (nextStatus.authenticated) {
           const options = (await window.bugPocket.listWorkspaces()) as SyncWorkspaceOption[];
           if (!cancelled) setWorkspaceOptions(options);
@@ -110,7 +110,7 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
   const loadSession = async (): Promise<void> => {
     const status = (await window.bugPocket.getSyncSessionStatus()) as SyncSessionStatus;
     setSession(status);
-    setSelectedWorkspaceId(status.workspaceId ?? settings.currentWorkspaceId ?? '');
+    setSelectedWorkspaceId(status.workspaceSelectionRequired ? '' : status.workspaceId ?? settings.currentWorkspaceId ?? '');
     if (status.authenticated) {
       const options = (await window.bugPocket.listWorkspaces()) as SyncWorkspaceOption[];
       setWorkspaceOptions(options);
@@ -462,7 +462,9 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
     }
   })();
   const activeWorkspaceId = session.workspaceId || settings.currentWorkspaceId || '';
-  const activeWorkspaceName = workspaceOptions.find((workspace) => workspace.workspaceId === activeWorkspaceId)?.name || 'Active Workspace';
+  const workspaceSelectionRequired = session.workspaceSelectionRequired === true || (!activeWorkspaceId && workspaceOptions.length > 1);
+  const activeWorkspaceName = workspaceOptions.find((workspace) => workspace.workspaceId === activeWorkspaceId)?.name
+    || (workspaceSelectionRequired ? 'Choose a Workspace' : 'Active Workspace');
   const shortWorkspaceId = activeWorkspaceId ? `${activeWorkspaceId.slice(0, 8)}...${activeWorkspaceId.slice(-4)}` : 'Not assigned';
   const canSwitchWorkspace = Boolean(selectedWorkspaceId.trim() && selectedWorkspaceId.trim() !== activeWorkspaceId);
   const failedDiagnostics = diagnostics.filter((row) => row.last_error || row.retry_count >= 5);
@@ -622,6 +624,11 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
             </div>
 
             <div className="sync-workspace-switch-section">
+              {workspaceSelectionRequired && (
+                <div className="sync-test-result warning" role="alert">
+                  Choose which workspace to open. Bug Pocket will not mount team data until you make an explicit selection.
+                </div>
+              )}
               <div className="sync-workspace-switch-row">
                 <label>
                   <span>Active Workspace</span>
@@ -630,6 +637,7 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
                     disabled={authBusy || switchingWorkspace || !workspaceOptions.length}
                     onChange={(event) => setSelectedWorkspaceId(event.target.value)}
                   >
+                    {workspaceSelectionRequired && <option value="" disabled>Select a workspace...</option>}
                     {!workspaceOptions.length && <option value={activeWorkspaceId}>{activeWorkspaceId || 'No workspaces found'}</option>}
                     {workspaceOptions.map((workspace) => (
                       <option key={workspace.workspaceId} value={workspace.workspaceId}>
@@ -647,7 +655,9 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
             </div>
 
             <div className="sync-profile-actions">
-              <span className="sync-test-result success"><CheckCircle2 size={15} /> Sync Status: Connected</span>
+              <span className={workspaceSelectionRequired ? 'sync-test-result warning' : 'sync-test-result success'}>
+                <CheckCircle2 size={15} /> Sync Status: {workspaceSelectionRequired ? 'Workspace selection required' : 'Connected'}
+              </span>
               <button type="button" className="secondary danger-soft" disabled={authBusy} onClick={() => void signOut()}>
                 <LogOut size={16} /> Log Out
               </button>
