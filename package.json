@@ -97,7 +97,7 @@
     "electron-log": "5.4.4",
     "electron-updater": "6.8.9",
     "extract-zip": "^2.0.1",
-    "js-yaml": "4.1.0",
+    "js-yaml": "4.3.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -123,5 +123,8 @@
   "buildNotes": {
     "preload": "fix-preload.js bridges an electron-vite@2.3.0 internal path-rewrite behavior. Do not upgrade electron-vite without re-testing the preload loading pipeline."
   },
-  "author": "Examen QA"
+  "author": "Examen QA",
+  "overrides": {
+    "brace-expansion": "5.0.8"
+  }
 }
