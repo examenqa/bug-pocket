@@ -416,7 +416,7 @@ export interface FeedbackPayload {
   message: string;
   user_email?: string;
   image_base64?: string;
-  image_url?: string;
+  image_mime_type?: 'image/png' | 'image/jpeg';
 }
 export interface AiTriageBugPayload {
   id?: number;

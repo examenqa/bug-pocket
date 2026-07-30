@@ -1,2 +1,2 @@
-[functions.submit-feedback]
-verify_jwt = false
+# Bug Pocket customer BYOC project configuration.
+# Product support is delivered by the dedicated Examen QA API, not a customer Edge Function.

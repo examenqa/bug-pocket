@@ -300,7 +300,7 @@ const feedbackPayload = plainObject({
 }, {
   user_email: optional(stringValue(500)),
   image_base64: optional(stringValue(maxDataUrlLength)),
-  image_url: optional(webUrl)
+  image_mime_type: optional(enumeration(['image/png', 'image/jpeg']))
 });
 
 export function createIpcArgumentValidators(): Record<string, IpcArgumentValidator> {

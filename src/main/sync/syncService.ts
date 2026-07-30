@@ -1,10 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createClient, type SupabaseClient, type SupportedStorage, type WebSocketLikeConstructor } from '@supabase/supabase-js';
 import WebSocket from 'ws';
-import type { BugDetails, FeedbackPayload, SyncAccountSetup, SyncAuthResult, SyncConnectionResult, SyncQueueEvent, SyncRolePermission, SyncRuntimeStatus, SyncSessionStatus, SyncWorkspaceOption, WorkspaceRole } from '../../shared/types';
+import type { BugDetails, SyncAccountSetup, SyncAuthResult, SyncConnectionResult, SyncQueueEvent, SyncRolePermission, SyncRuntimeStatus, SyncSessionStatus, SyncWorkspaceOption, WorkspaceRole } from '../../shared/types';
 import type { BugPocketDatabase } from '../database';
 import { operationBarrier } from '../OperationBarrier';
 import {
@@ -648,52 +648,6 @@ export class SyncEngine {
     };
   }
 
-  async sendFeedback(payload: FeedbackPayload): Promise<{ success: boolean; error?: string }> {
-    try {
-      const client = this.requireClient();
-      const message = payload.message.trim();
-      if (!message) return { success: false, error: 'Please enter a message before sending.' };
-
-      const publicImageUrl = payload.image_base64 ? await this.uploadTelemetryImage(client, payload.image_base64) : undefined;
-
-      const feedbackBody = {
-        type: payload.type === 'Feature' ? 'Feature' : 'Bug',
-        message,
-        user_email: payload.user_email?.trim() || undefined,
-        image_url: publicImageUrl
-      };
-
-      const { error } = await client.functions.invoke('submit-feedback', { body: feedbackBody });
-
-      if (error) return { success: false, error: error.message };
-      return { success: true };
-    } catch (caught) {
-      return {
-        success: false,
-        error: caught instanceof Error ? caught.message : 'Unable to send feedback.'
-      };
-    }
-  }
-
-  private async uploadTelemetryImage(client: SupabaseClient, dataUrlOrBase64: string): Promise<string> {
-    const base64 = dataUrlOrBase64.replace(/^data:image\/(png|jpe?g);base64,/i, '').replace(/\s/g, '');
-    if (!base64) throw new Error('Image payload was empty.');
-
-    const bytes = Buffer.from(base64, 'base64');
-    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
-    const fileExtension = isJpeg ? '.jpg' : '.png';
-    const contentType = isJpeg ? 'image/jpeg' : 'image/png';
-    const fileName = `${randomUUID()}${fileExtension}`;
-    const { error } = await client.storage.from('telemetry-assets').upload(fileName, bytes, {
-      contentType,
-      upsert: false
-    });
-    if (error) throw new Error(`Image upload failed: ${error.message}`);
-
-    const { data } = client.storage.from('telemetry-assets').getPublicUrl(fileName);
-    if (!data.publicUrl) throw new Error('Image uploaded, but no public URL was returned.');
-    return data.publicUrl;
-  }
   startBackgroundSync(): void {
     if (this.syncTimer || this.projectPaused) return;
     this.syncSuspended = false;

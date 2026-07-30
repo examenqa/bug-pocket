@@ -22,6 +22,7 @@ import { createBackupArchive, restoreBackupArchive } from './sync/backupService'
 import { getAssetPath } from './assetPaths';
 import { configureAutoUpdater, registerUpdateInstallIpc, runGracefulShutdown } from './updater';
 import { operationBarrier } from './OperationBarrier';
+import { sendFeedbackToExamenQa } from './support/feedbackService';
 import type { AiConfigSaveInput, AiIssueProcessPayload, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting, SyncAccountSetup, TaxonomyId } from '../shared/types';
 
 const packagedSmokeUserData = process.env.BUG_POCKET_SMOKE_USER_DATA?.trim();
@@ -1030,7 +1031,7 @@ function registerIpc(): void {
     if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only web URLs can be opened.');
     return shell.openExternal(parsed.toString());
   });
-  secureIpc.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => operationBarrier.acquire(syncEngine.sendFeedback(payload)));
+  secureIpc.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => operationBarrier.acquire(sendFeedbackToExamenQa(payload)));
 
   secureIpc.handle('details:setDirty', (_event, dirty: boolean) => {
     rendererHasDirtyDetails = !!dirty;
