@@ -96,14 +96,6 @@ const api = {
   chooseBackupDirectory: () => ipcRenderer.invoke('backup:chooseDirectory'),
   clearCurrentWorkspace: () => ipcRenderer.invoke('app:clearCurrentWorkspace'),
   factoryReset: () => ipcRenderer.invoke('app:factoryReset'),
-  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
-  onUpdateReady: (callback: () => void) => {
-    const listener = (): void => callback();
-    ipcRenderer.on('update-ready', listener);
-    return () => {
-      ipcRenderer.removeListener('update-ready', listener);
-    };
-  },
   onSyncStatus: (callback: (status: SyncRuntimeStatus | null) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, status: SyncRuntimeStatus | null): void => callback(status);
     ipcRenderer.on('sync-status', listener);

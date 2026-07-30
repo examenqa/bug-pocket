@@ -311,7 +311,6 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
     'shortcuts:resume', 'bugs:count', 'bugs:statusCounts', 'details:flushComplete', 'screenshot:getSource',
     'screenshot:cancel', 'quickScreenshot:getPending', 'quickScreenshot:discardPending',
     'backup:export', 'backup:import', 'backup:chooseDirectory', 'app:clearCurrentWorkspace', 'app:factoryReset',
-    'app:installUpdate',
     'sync:testConnection', 'sync:authSignOut', 'sync:getSessionStatus', 'sync:listWorkspaces',
     'sync:getDiagnostics', 'sync:getRuntimeStatus', 'sync:retryNow', 'sync:forceRetry'
   ];

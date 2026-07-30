@@ -251,15 +251,7 @@ Deletion commands are distinct:
 
 Do not collapse these into one broad delete operation.
 
-## Lifecycle And Updater
-
-Updater implementation: `src/main/updater.ts` with GitHub Releases configured in `package.json`.
-
-- Update checks are passive.
-- `update-downloaded` sets the staged state and notifies the renderer.
-- The renderer shows an optional restart-to-install action.
-- `app:installUpdate` must reject with `No update downloaded` unless an update is staged.
-- Never call `quitAndInstall()` before graceful shutdown completes.
+## Application Lifecycle
 
 `gracefulShutdown()` must:
 
@@ -267,11 +259,11 @@ Updater implementation: `src/main/updater.ts` with GitHub Releases configured in
 2. Drain `OperationBarrier` tasks.
 3. Stop and drain sync.
 4. Disconnect workspace and close SQLite handles.
-5. Proceed with quit/install.
+5. Proceed with application quit.
 
 Long-running backups, workspace switches, and AI calls must register with `src/main/OperationBarrier.ts`. If shutdown fails, restart background services and global shortcuts where possible.
 
-Closing the main window normally minimizes Bug Pocket to the system tray. Application quit and update installation use the explicit graceful lifecycle.
+Closing the main window normally minimizes Bug Pocket to the system tray. Application quit uses the explicit graceful lifecycle.
 
 ## UI Structure
 

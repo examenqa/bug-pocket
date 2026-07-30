@@ -1,6 +1,5 @@
 import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog, safeStorage } from 'electron';
 import log from 'electron-log/main';
-import { autoUpdater } from 'electron-updater';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -20,8 +19,7 @@ import { normalizeSupabaseCredentials } from './sync/supabaseCredentials';
 import { startSupabaseKeepAlive } from './sync/keepAlive';
 import { createBackupArchive, restoreBackupArchive } from './sync/backupService';
 import { getAssetPath } from './assetPaths';
-import { configureAutoUpdater, registerUpdateInstallIpc, runGracefulShutdown } from './updater';
-import { checkForUpdatesFromPublicFeed } from './updateFeed';
+import { runGracefulShutdown } from './lifecycle';
 import { operationBarrier } from './OperationBarrier';
 import { runDestructiveMaintenance } from './destructiveLifecycle';
 import { sendFeedbackToExamenQa } from './support/feedbackService';
@@ -1078,7 +1076,6 @@ function registerIpc(): void {
     app.exit(0);
     return { success: true };
   });
-  registerUpdateInstallIpc(secureIpc, autoUpdater, gracefulShutdown);
   secureIpc.handle('sync:testConnection', () => syncEngine.testConnection());
   secureIpc.handle('sync:authSignIn', (_event, email: string, password: string) => operationBarrier.acquire(() => syncEngine.authSignIn(email, password)));
   secureIpc.handle('sync:authSignUp', (_event, email: string, password: string, setup: SyncAccountSetup) => operationBarrier.acquire(() => syncEngine.authSignUp(email, password, setup)));
@@ -1158,18 +1155,7 @@ if (!gotTheLock) {
     startSupabaseKeepAliveIfConfigured();
     enforceStartupPreference(db.getRunOnSystemStartup());
     registerIpc();
-    const checkForPublicUpdates = () => checkForUpdatesFromPublicFeed(autoUpdater);
-    configureAutoUpdater(autoUpdater, log, {
-      onUpdateReady: () => mainWindow?.webContents.send('update-ready'),
-      checkForUpdates: checkForPublicUpdates
-    });
     createMainWindow('/dashboard', !process.argv.includes(backgroundStartArg));
-    if (app.isPackaged) {
-      checkForPublicUpdates().catch((error) => {
-        console.log('[auto-updater] Update check failed:', error);
-        log.error('[auto-updater] Update check failed:', error);
-      });
-    }
     createQuickWindow();
     createTray();
     registerAppShortcuts();

@@ -122,8 +122,6 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   const [supportAnchorRect, setSupportAnchorRect] = useState<DOMRect | null>(null);
   const supportButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(() => route.startsWith('/settings'));
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [installingUpdate, setInstallingUpdate] = useState(false);
   const [syncRuntimeStatus, setSyncRuntimeStatus] = useState<SyncRuntimeStatus | null>(null);
   const [retryingSync, setRetryingSync] = useState(false);
   const activeView = shellRoute.view === 'settings' ? 'settings' : 'dashboard';
@@ -135,8 +133,6 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   useEffect(() => {
     if (route.startsWith('/settings')) setIsSettingsExpanded(true);
   }, [route]);
-
-  useEffect(() => window.bugPocket.onUpdateReady(() => setUpdateAvailable(true)), []);
 
   useEffect(() => {
     let mounted = true;
@@ -154,16 +150,6 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
       unsubscribe();
     };
   }, []);
-
-  const installUpdate = async (): Promise<void> => {
-    setInstallingUpdate(true);
-    try {
-      await window.bugPocket.installUpdate();
-    } catch (error) {
-      console.error('Unable to install the staged update.', error);
-      setInstallingUpdate(false);
-    }
-  };
 
   const retryPausedSync = async (): Promise<void> => {
     setRetryingSync(true);
@@ -256,15 +242,6 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
         }}
       />
       <SupportModal mode={supportModalMode} open={isSupportModalOpen} onClose={() => setIsSupportModalOpen(false)} />
-      {updateAvailable && (
-        <div className="update-ready-banner" role="status" aria-live="polite">
-          <RefreshCw size={18} aria-hidden="true" />
-          <span>Update Ready</span>
-          <button type="button" onClick={() => void installUpdate()} disabled={installingUpdate}>
-            {installingUpdate ? 'Restarting...' : 'Restart to Install'}
-          </button>
-        </div>
-      )}
       <main className="content">
         {cloudProjectPaused && (
           <div className="sync-paused-banner" role="alert" aria-live="assertive">
