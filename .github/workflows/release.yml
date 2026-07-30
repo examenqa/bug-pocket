@@ -6,11 +6,16 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  UPDATE_BUCKET: ${{ secrets.BUG_POCKET_UPDATES_BUCKET }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  UPDATE_PREFIX: windows
 
 jobs:
   publish:
-    name: Build and publish NSIS installer
+    name: Build and publish NSIS installer to S3
     runs-on: windows-latest
     timeout-minutes: 45
 
@@ -35,7 +40,62 @@ jobs:
       - name: Build application
         run: npm run build
 
-      - name: Publish GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis --publish always
+      - name: Build release artifacts
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Validate release artifacts
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "release-build/latest.yml")) {
+            throw "electron-builder did not generate release-build/latest.yml."
+          }
+          if (-not (Get-ChildItem "release-build" -Filter "*.exe" -File)) {
+            throw "electron-builder did not generate an NSIS installer."
+          }
+          if (-not (Get-ChildItem "release-build" -Filter "*.blockmap" -File)) {
+            throw "electron-builder did not generate a blockmap."
+          }
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload installer and blockmap
+        shell: pwsh
+        run: |
+          $destination = "s3://$($env:UPDATE_BUCKET)/$($env:UPDATE_PREFIX)/"
+          aws s3 cp "release-build" $destination `
+            --recursive `
+            --exclude "*" `
+            --include "*.exe" `
+            --include "*.blockmap" `
+            --cache-control "public,max-age=31536000,immutable"
+
+      - name: Publish update manifest last
+        shell: pwsh
+        run: |
+          $manifestTarget = "s3://$($env:UPDATE_BUCKET)/$($env:UPDATE_PREFIX)/latest.yml"
+          aws s3 cp "release-build/latest.yml" $manifestTarget `
+            --content-type "application/yaml" `
+            --cache-control "no-cache,no-store,must-revalidate"
+
+      - name: Verify public update feed
+        shell: pwsh
+        run: |
+          $baseUrl = "https://$($env:UPDATE_BUCKET).s3.$($env:AWS_REGION).amazonaws.com/$($env:UPDATE_PREFIX)"
+          $manifestUrl = "$baseUrl/latest.yml?t=$([guid]::NewGuid())"
+          Write-Host "Fetching manifest from: $manifestUrl"
+          $manifest = (Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing -ErrorAction Stop).Content
+          $pathMatch = [regex]::Match($manifest, '(?m)^path:\s*(.+)$')
+          if (-not $pathMatch.Success) {
+            throw "latest.yml does not contain a path entry."
+          }
+          $installerName = $pathMatch.Groups[1].Value.Trim()
+          $installerUrl = "$baseUrl/$([uri]::EscapeDataString($installerName))"
+          $installerResponse = Invoke-WebRequest -Uri $installerUrl -Method Head -UseBasicParsing -ErrorAction Stop
+          if ($installerResponse.StatusCode -ne 200) {
+            throw "Published installer is not publicly readable."
+          }

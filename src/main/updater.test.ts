@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
+import { PUBLIC_UPDATE_FEED_URL } from './updateFeed';
 import { configureAutoUpdater, installDownloadedUpdate, runGracefulShutdown } from './updater';
 
 class MockAutoUpdater extends EventEmitter {
@@ -8,10 +9,20 @@ class MockAutoUpdater extends EventEmitter {
   autoDownload = false;
   autoInstallOnAppQuit = false;
   quitAndInstallCalls = 0;
+  checkForUpdatesCalls = 0;
+  feedOptions: { provider: 'generic'; url: string; channel: 'latest' } | null = null;
   quitAndInstallArguments: Array<[boolean | undefined, boolean | undefined]> = [];
 
   constructor(private readonly onQuitAndInstall: () => void = () => undefined) {
     super();
+  }
+
+  setFeedURL(options: { provider: 'generic'; url: string; channel: 'latest' }): void {
+    this.feedOptions = options;
+  }
+
+  async checkForUpdatesAndNotify(): Promise<void> {
+    this.checkForUpdatesCalls += 1;
   }
 
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void {
@@ -20,6 +31,43 @@ class MockAutoUpdater extends EventEmitter {
     this.onQuitAndInstall();
   }
 }
+
+test('interrupted update downloads schedule a credential-free recovery check', async () => {
+  const updater = new MockAutoUpdater();
+  const scheduled: Array<{ callback: () => void; delayMs: number }> = [];
+  let recoveryChecks = 0;
+
+  configureAutoUpdater(
+    updater,
+    { info: () => undefined, error: () => undefined },
+    {
+      console: { log: () => undefined },
+      onUpdateReady: () => undefined,
+      checkForUpdates: async () => {
+        recoveryChecks += 1;
+      },
+      retryDelayMs: 10,
+      scheduleRetry: (callback, delayMs) => {
+        scheduled.push({ callback, delayMs });
+      }
+    }
+  );
+
+  assert.deepEqual(updater.feedOptions, {
+    provider: 'generic',
+    url: PUBLIC_UPDATE_FEED_URL,
+    channel: 'latest'
+  });
+  updater.emit('error', new Error('ECONNRESET while downloading update'));
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0]?.delayMs, 10);
+
+  scheduled[0]?.callback();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(recoveryChecks, 1);
+  assert.equal(updater.quitAndInstallCalls, 0, 'Recovery must remain passive.');
+});
 
 test('update installation drains sync and disconnects SQLite before terminating', async () => {
   const lifecycle: string[] = [];

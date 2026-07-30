@@ -21,6 +21,7 @@ import { startSupabaseKeepAlive } from './sync/keepAlive';
 import { createBackupArchive, restoreBackupArchive } from './sync/backupService';
 import { getAssetPath } from './assetPaths';
 import { configureAutoUpdater, registerUpdateInstallIpc, runGracefulShutdown } from './updater';
+import { checkForUpdatesFromPublicFeed } from './updateFeed';
 import { operationBarrier } from './OperationBarrier';
 import { sendFeedbackToExamenQa } from './support/feedbackService';
 import type { AiConfigSaveInput, AiIssueProcessPayload, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting, SyncAccountSetup, TaxonomyId } from '../shared/types';
@@ -1141,12 +1142,14 @@ if (!gotTheLock) {
     startSupabaseKeepAliveIfConfigured();
     enforceStartupPreference(db.getRunOnSystemStartup());
     registerIpc();
+    const checkForPublicUpdates = () => checkForUpdatesFromPublicFeed(autoUpdater);
     configureAutoUpdater(autoUpdater, log, {
-      onUpdateReady: () => mainWindow?.webContents.send('update-ready')
+      onUpdateReady: () => mainWindow?.webContents.send('update-ready'),
+      checkForUpdates: checkForPublicUpdates
     });
     createMainWindow('/dashboard', !process.argv.includes(backgroundStartArg));
     if (app.isPackaged) {
-      autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+      checkForPublicUpdates().catch((error) => {
         console.log('[auto-updater] Update check failed:', error);
         log.error('[auto-updater] Update check failed:', error);
       });

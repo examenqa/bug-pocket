@@ -9,12 +9,13 @@
     "build": "tsc --noEmit && electron-vite build && node scripts/fix-preload.js",
     "start": "electron-vite build && node scripts/fix-preload.js && electron .",
     "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder --win nsis",
-    "test": "npm run test:keep-alive && npm run test:invite-token && npm run test:support-feedback && npm run test:updater && npm run test:lifecycle && npm run test:security:supabase-schema-repeatability && npm run test:security:phase1 && npm run test:security:logout-db-handle && npm run test:security:destructive-backup-restore && npm run test:regression:taxonomy-uuid && npm run test:ai-fallback && npm run test:ai-error-ui",
+    "test": "npm run test:keep-alive && npm run test:invite-token && npm run test:support-feedback && npm run test:update-feed && npm run test:updater && npm run test:lifecycle && npm run test:security:supabase-schema-repeatability && npm run test:security:phase1 && npm run test:security:logout-db-handle && npm run test:security:destructive-backup-restore && npm run test:regression:taxonomy-uuid && npm run test:ai-fallback && npm run test:ai-error-ui",
     "test:packaged-smoke": "node scripts/smoke-test.cjs",
     "test:packaged-smoke:build": "npm run build && electron-builder --win --dir && npm run test:packaged-smoke",
     "test:keep-alive": "node --import tsx --test src/main/sync/keepAlive.test.ts",
     "test:invite-token": "node --import tsx --test src/main/sync/inviteToken.test.ts",
     "test:support-feedback": "node --import tsx --test src/main/support/feedbackService.test.ts",
+    "test:update-feed": "node --import tsx --test src/main/updateFeed.test.ts",
     "test:updater": "node --import tsx --test src/main/updater.test.ts",
     "test:lifecycle": "node --import tsx --test src/main/lifecycle.test.ts",
     "test:security:workspace-self-enrollment": "node supabase/tests/workspace-self-enrollment.repro.cjs",
@@ -44,10 +45,9 @@
     "npmRebuild": true,
     "publish": [
       {
-        "provider": "github",
-        "owner": "examenqa",
-        "repo": "bug-pocket",
-        "releaseType": "release"
+        "provider": "generic",
+        "url": "https://bug-pocket-updates-v1.s3.ap-south-1.amazonaws.com/windows",
+        "channel": "latest"
       }
     ],
     "directories": {
@@ -95,6 +95,7 @@
     "electron-log": "5.4.4",
     "electron-updater": "6.8.9",
     "extract-zip": "^2.0.1",
+    "js-yaml": "4.1.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -104,6 +105,7 @@
     "@electron/rebuild": "4.0.4",
     "@types/archiver": "7.0.0",
     "@types/better-sqlite3": "7.6.13",
+    "@types/js-yaml": "4.0.9",
     "@types/node": "22.19.19",
     "@types/react": "18.3.29",
     "@types/react-dom": "18.3.7",
