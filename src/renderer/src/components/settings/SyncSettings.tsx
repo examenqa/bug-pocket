@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, Cloud, ExternalLink, HelpCircle, LogOut, Pencil, Plus, RefreshCw, Trash2, UserCircle2, X } from 'lucide-react';
+import { CheckCircle2, Cloud, HelpCircle, LogOut, Pencil, Plus, RefreshCw, Trash2, UserCircle2 } from 'lucide-react';
 import type { SettingsData, SyncAccountMode, SyncAccountSetup, SyncAuthResult, SyncConnectionResult, SyncDiagnosticsRow, SyncRolePermission, SyncSessionStatus, SyncWorkspaceOption, TeamInvitePayload } from '../../../../shared/types';
+import { InviteConfirmationModal, SupabaseSetupGuideModal, SyncDiagnosticsPanel, TeamInvitePanel } from './SyncSettingsPanels';
 
 interface SyncSettingsProps {
   settings: SettingsData;
@@ -467,8 +468,6 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
     || (workspaceSelectionRequired ? 'Choose a Workspace' : 'Active Workspace');
   const shortWorkspaceId = activeWorkspaceId ? `${activeWorkspaceId.slice(0, 8)}...${activeWorkspaceId.slice(-4)}` : 'Not assigned';
   const canSwitchWorkspace = Boolean(selectedWorkspaceId.trim() && selectedWorkspaceId.trim() !== activeWorkspaceId);
-  const failedDiagnostics = diagnostics.filter((row) => row.last_error || row.retry_count >= 5);
-  const missingBinaryDiagnostics = diagnostics.filter((row) => row.missing_binary);
   const canGenerateInvite = settings.currentWorkspaceRole === 'owner' || settings.currentWorkspaceRole === 'admin';
 
   return (
@@ -662,113 +661,31 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
                 <LogOut size={16} /> Log Out
               </button>
             </div>
-            {canGenerateInvite && (
-              <section className="sync-invite-panel" aria-labelledby="sync-invite-heading">
-                <div>
-                  <strong id="sync-invite-heading">Invite Team Member</strong>
-                  <p>Pre-authorize a Supabase account, then generate an encrypted offline code for this workspace. Share the code and passphrase separately.</p>
-                </div>
-                <div className="sync-invite-member-fields">
-                  <label>
-                    <span>Team Member Email</span>
-                    <input
-                      type="email"
-                      value={inviteEmail}
-                      maxLength={320}
-                      autoComplete="email"
-                      placeholder="teammate@example.com"
-                      disabled={generatingInvite}
-                      onChange={(event) => setInviteEmail(event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>Workspace Role</span>
-                    <input
-                      type="text"
-                      value={inviteRole}
-                      maxLength={80}
-                      placeholder="member"
-                      disabled={generatingInvite}
-                      onChange={(event) => setInviteRole(event.target.value)}
-                    />
-                  </label>
-                </div>
-                <div className="sync-invite-controls">
-                  <input
-                    type="password"
-                    value={invitePassphrase}
-                    minLength={12}
-                    maxLength={512}
-                    autoComplete="new-password"
-                    placeholder="Invite passphrase (12+ characters)"
-                    disabled={generatingInvite}
-                    onChange={(event) => setInvitePassphrase(event.target.value)}
-                    onKeyDown={(event) => { if (event.key === 'Enter') void generateInvite(); }}
-                  />
-                  <button type="button" className="secondary" disabled={generatingInvite || invitePassphrase.trim().length < 12 || !inviteEmail.trim() || !inviteRole.trim()} onClick={() => void generateInvite()}>
-                    {generatingInvite ? <RefreshCw className="spin" size={16} /> : <Cloud size={16} />}
-                    {generatingInvite ? 'Generating...' : 'Generate Invite'}
-                  </button>
-                </div>
-                {generatedInviteCode && (
-                  <div className="sync-invite-code">
-                    <textarea aria-label="Generated encrypted team invite code" value={generatedInviteCode} readOnly rows={3} />
-                    <button type="button" className="secondary compact" onClick={() => void copyInviteCode()}>
-                      Copy Code
-                    </button>
-                  </div>
-                )}
-              </section>
-            )}
-            <div className={diagnosticsOpen ? 'panel settings-option-panel open' : 'panel settings-option-panel'}>
-              <button
-                type="button"
-                className="settings-option-header"
-                aria-expanded={diagnosticsOpen}
-                onClick={() => {
-                  const nextOpen = !diagnosticsOpen;
-                  setDiagnosticsOpen(nextOpen);
-                  if (nextOpen) void loadDiagnostics();
-                }}
-              >
-                <span>
-                  <strong>Sync Diagnostics</strong>
-                  <em>{diagnostics.length} pending item{diagnostics.length === 1 ? '' : 's'} · {missingBinaryDiagnostics.length} missing binaries · {failedDiagnostics.length} failed</em>
-                </span>
-                {diagnosticsOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
-              </button>
-              {diagnosticsOpen && (
-                <div className="settings-option-body">
-                  <div className="sync-action-row">
-                    <button type="button" className="secondary" disabled={retryingSync || !diagnostics.length} onClick={() => void forceRetry()}>
-                      <RefreshCw className={retryingSync ? 'spin' : undefined} size={16} />
-                      {retryingSync ? 'Retrying...' : 'Force Retry'}
-                    </button>
-                    <button type="button" className="secondary" disabled={retryingSync} onClick={() => void loadDiagnostics()}>
-                      <RefreshCw size={16} /> Refresh
-                    </button>
-                  </div>
-                  <div className="option-list">
-                    {diagnostics.map((row) => (
-                      <div className="option-row sync-diagnostics-row" key={`${row.queue_type}-${row.id}`}>
-                        <span className="option-name">
-                          <span className="sync-diagnostics-title-line">
-                            <span>{row.label}</span>
-                            <span className="sync-diagnostics-separator">•</span>
-                            <em>{row.queue_type === 'download' ? 'binary download' : `${row.entity_type} · ${row.operation}`} · retries {row.retry_count}</em>
-                          </span>
-                          {row.missing_binary && !row.last_error && (
-                            <small className="sync-diagnostics-missing">Binary is missing locally and queued for download.</small>
-                          )}
-                          {row.last_error && <small className="settings-error">{row.last_error}</small>}
-                        </span>
-                      </div>
-                    ))}
-                    {!diagnostics.length && <p className="muted">No pending sync payloads.</p>}
-                  </div>
-                </div>
-              )}
-            </div>
+            <TeamInvitePanel
+              visible={canGenerateInvite}
+              inviteEmail={inviteEmail}
+              inviteRole={inviteRole}
+              invitePassphrase={invitePassphrase}
+              generatedInviteCode={generatedInviteCode}
+              generatingInvite={generatingInvite}
+              onInviteEmailChange={setInviteEmail}
+              onInviteRoleChange={setInviteRole}
+              onInvitePassphraseChange={setInvitePassphrase}
+              onGenerate={() => void generateInvite()}
+              onCopy={() => void copyInviteCode()}
+            />
+            <SyncDiagnosticsPanel
+              open={diagnosticsOpen}
+              diagnostics={diagnostics}
+              retrying={retryingSync}
+              onToggle={() => {
+                const nextOpen = !diagnosticsOpen;
+                setDiagnosticsOpen(nextOpen);
+                if (nextOpen) void loadDiagnostics();
+              }}
+              onRetry={() => void forceRetry()}
+              onRefresh={() => void loadDiagnostics()}
+            />
           </div>
         ) : configured ? (
           <div className="sync-auth-card">
@@ -821,80 +738,13 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
           </div>
         ) : null}
       </div>
-      {showCredentialHelp && (
-        <div className="sync-help-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowCredentialHelp(false); }}>
-          <section className="sync-help-modal" role="dialog" aria-modal="true" aria-labelledby="sync-help-title">
-            <header>
-              <div>
-                <h2 id="sync-help-title">Supabase Quick Start</h2>
-                <p>Bring your own Supabase project for Bug Pocket cloud sync.</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="Close Supabase setup help" onClick={() => setShowCredentialHelp(false)}><X size={18} /></button>
-            </header>
-            <ol>
-              <li>
-                <strong>Create a Project</strong>
-                <span>Log in to Supabase and click <b>New Project</b>. Select your organization, set a database password, and wait for the provisioning process to finish.</span>
-                <button
-                  type="button"
-                  className="secondary sync-schema-link"
-                  onClick={() => void window.bugPocket.openExternalUrl('https://database.new')}
-                >
-                  <ExternalLink size={15} /> Open Supabase
-                </button>
-              </li>
-              <li>
-                <strong>Project URL</strong>
-                <span>In Supabase, go to Dashboard -&gt; Organization Dashboard -&gt; Project Dashboard. Copy the Project URL for the project you want Bug Pocket to use.</span>
-              </li>
-              <li>
-                <strong>Publishable API Key</strong>
-                <span>From the Project Dashboard, open API Keys -&gt; Publishable and secret API keys. Copy only the Publishable key. Never use the secret service_role key in Bug Pocket.</span>
-              </li>
-              <li>
-                <strong>Schema Setup</strong>
-                <span>Open Bug Pocket’s installation schema and run it in the Supabase SQL Editor to build the required tables.</span>
-                <button
-                  type="button"
-                  className="secondary sync-schema-link"
-                  onClick={() => void window.bugPocket.openExternalUrl('https://github.com/examenqa/bug-pocket/blob/main/supabase/schema-install.sql')}
-                >
-                  <ExternalLink size={15} /> Open schema-install.sql
-                </button>
-              </li>
-            </ol>
-          </section>
-        </div>
-      )}
-      {pendingInvite && (
-        <div className="sync-help-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !authBusy) setPendingInvite(null); }}>
-          <section className="sync-help-modal sync-invite-confirmation" role="dialog" aria-modal="true" aria-labelledby="sync-invite-confirmation-title">
-            <header>
-              <div>
-                <h2 id="sync-invite-confirmation-title">Confirm Team Connection</h2>
-                <p>Verify the destination before Bug Pocket stores this team connection locally.</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="Cancel team invite import" disabled={authBusy} onClick={() => setPendingInvite(null)}><X size={18} /></button>
-            </header>
-            <dl className="sync-invite-details">
-              <div><dt>Project URL</dt><dd>{pendingInvite.url}</dd></div>
-              <div><dt>Workspace ID</dt><dd>{pendingInvite.teamId}</dd></div>
-              <div><dt>Invitee Email</dt><dd>{pendingInvite.targetEmail}</dd></div>
-              <div><dt>Expires</dt><dd>{new Date(pendingInvite.expiresAt).toLocaleString()}</dd></div>
-            </dl>
-            <p className="settings-helper">Only continue when this project and workspace match the details provided by your team administrator.</p>
-            <div className="sync-confirm-actions">
-              <button type="button" className="secondary" disabled={authBusy} onClick={() => setPendingInvite(null)}>Cancel</button>
-              <button type="button" className="primary" disabled={authBusy} onClick={() => void confirmTeamConnection()}>
-                {authBusy ? <RefreshCw className="spin" size={16} /> : <Cloud size={16} />}
-                {authBusy ? 'Connecting...' : 'Confirm & Connect'}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
+      <SupabaseSetupGuideModal open={showCredentialHelp} onClose={() => setShowCredentialHelp(false)} />
+      <InviteConfirmationModal
+        invite={pendingInvite}
+        busy={authBusy}
+        onCancel={() => setPendingInvite(null)}
+        onConfirm={() => void confirmTeamConnection()}
+      />
     </div>
   );
 }
-
-
