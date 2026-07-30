@@ -3980,6 +3980,12 @@ figcaption span {
   font-weight: 700;
 }
 
+.sync-diagnostics-missing {
+  color: #725800;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .jira-workspace-panel {
   display: grid;
   gap: 10px;

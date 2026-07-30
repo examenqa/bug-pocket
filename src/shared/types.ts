@@ -255,17 +255,26 @@ export interface SyncQueueEvent {
   last_error: string | null;
 }
 
+export interface AttachmentDownloadQueueItem {
+  attachment_id: number;
+  content_hash: string;
+  file_extension: string;
+  retry_count: number;
+  last_error: string | null;
+}
 export interface SyncDiagnosticsRow {
   id: number;
   local_seq: number;
   op_id: string;
   entity_type: SyncQueueEntityType;
   entity_id: number | string;
-  operation: SyncQueueOperation;
+  operation: SyncQueueOperation | 'DOWNLOAD';
   created_at: string;
   retry_count: number;
   last_error: string | null;
   label: string;
+  queue_type: 'upload' | 'download';
+  missing_binary: boolean;
 }
 
 export interface BackupExportResult {

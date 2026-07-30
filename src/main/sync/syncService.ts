@@ -751,7 +751,6 @@ export class SyncEngine {
       if (!workspaceId) return;
       if (this.syncSuspended) return;
       if (this.projectPaused) return;
-      if (Date.now() < this.retryDelayUntil) return;
 
       const client = this.client;
       if (!client) return;
@@ -761,7 +760,11 @@ export class SyncEngine {
 
       await this.pullRemoteTaxonomyFor(client, workspaceId);
       await this.pullRemoteChangesFor(client, workspaceId);
-      if (this.database.getWorkspacePermissions(workspaceId).canWrite) {
+      await this.drainAttachmentDownloadQueue(client, workspaceId);
+      if (
+        Date.now() >= this.retryDelayUntil
+        && this.database.getWorkspacePermissions(workspaceId).canWrite
+      ) {
         await this.drainSyncQueue(client, workspaceId);
       }
     } catch (caught) {
@@ -780,7 +783,9 @@ export class SyncEngine {
     const workspaceId = this.database.getCurrentWorkspaceId();
     if (!client || !workspaceId) return false;
     await this.pullRemoteTaxonomyFor(client, workspaceId);
-    return this.pullRemoteChangesFor(client, workspaceId);
+    const changed = await this.pullRemoteChangesFor(client, workspaceId);
+    await this.drainAttachmentDownloadQueue(client, workspaceId);
+    return changed;
   }
 
   async pullRemoteTaxonomy(): Promise<boolean> {
@@ -827,8 +832,9 @@ export class SyncEngine {
       batchSize: syncBatchSize,
       getCursor: (entityType) => this.database.getRemoteSyncCursor(workspaceId, entityType),
       applyBugBatch: (rows) => this.database.applyRemoteBugBatch(rows),
-      applyAttachmentBatch: async (rows) => {
+      applyAttachmentBatch: (rows) => {
         const validatedRows = rows.map((row) => {
+          if (String(row.deleted_at ?? '').trim()) return row;
           const attachmentMetadata = validateAttachmentMetadata(row.content_hash, row.file_extension);
           return {
             ...row,
@@ -836,16 +842,7 @@ export class SyncEngine {
             file_extension: attachmentMetadata.extension
           };
         });
-        const attachmentChanged = this.database.applyRemoteAttachmentBatch(validatedRows);
-        for (const row of validatedRows) {
-          await this.downloadAttachmentBinary(
-            client,
-            workspaceId,
-            String(row.content_hash),
-            String(row.file_extension)
-          );
-        }
-        return attachmentChanged;
+        return this.database.applyRemoteAttachmentBatch(validatedRows);
       },
       updateCursor: (entityType, cursor) => this.database.updateRemoteSyncCursor(workspaceId, entityType, cursor),
       emitChanged: this.emitBugsChanged
@@ -1075,17 +1072,26 @@ export class SyncEngine {
     }
 
     if (contentHash && storageTarget) {
+      const attachmentStorage = client.storage.from('attachments');
       const filePath = storageTarget.localPath;
       if (!existsSync(filePath)) {
-        // The metadata row can still sync; a future pull may recover the binary from cloud storage.
+        const remoteObject = await attachmentStorage.exists(storageTarget.storageKey);
+        const remoteStatus = httpStatusFromError(remoteObject.error);
+        if (remoteObject.error && remoteStatus !== 400 && remoteStatus !== 404) {
+          throwIfSupabaseError(remoteObject, 'Unable to verify remote attachment');
+        }
+        if (!remoteObject.data) {
+          throw new Error(
+            `Attachment binary is missing locally and does not exist remotely: ${storageTarget.storageKey}. ` +
+            'Remote metadata was not created.'
+          );
+        }
       } else {
         const fileBytes = await readFile(filePath);
-        const uploadResult = await client.storage
-          .from('attachments')
-          .upload(storageTarget.storageKey, fileBytes, {
-            contentType: String(payload.mime_type || 'image/png'),
-            upsert: true
-          });
+        const uploadResult = await attachmentStorage.upload(storageTarget.storageKey, fileBytes, {
+          contentType: String(payload.mime_type || 'image/png'),
+          upsert: true
+        });
         throwIfSupabaseError(uploadResult, 'Unable to upload attachment');
       }
     }
@@ -1110,6 +1116,26 @@ export class SyncEngine {
     throwIfSupabaseError(result, 'Unable to sync reference event');
   }
 
+  private async drainAttachmentDownloadQueue(client: SupabaseClient, workspaceId: string): Promise<void> {
+    const downloads = this.database.getPendingAttachmentDownloads(syncBatchSize, maxSyncAttempts);
+    for (const download of downloads) {
+      try {
+        await this.downloadAttachmentBinary(
+          client,
+          workspaceId,
+          download.content_hash,
+          download.file_extension
+        );
+        this.database.markAttachmentDownloadSucceeded(download.attachment_id);
+      } catch (caught) {
+        if (this.markProjectPaused(caught)) break;
+        this.database.recordAttachmentDownloadFailure(
+          download.attachment_id,
+          this.formatSyncError(caught)
+        );
+      }
+    }
+  }
   private async downloadAttachmentBinary(
     client: SupabaseClient,
     workspaceId: string,

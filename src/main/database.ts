@@ -8,6 +8,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type {
   Application,
   Attachment,
+  AttachmentDownloadQueueItem,
   Bug,
   BugDetails,
   BugFilters,
@@ -410,6 +411,7 @@ export class BugPocketDatabase {
           .run(now());
         for (const table of [
           'sync_queue',
+          'attachment_download_queue',
           'attachments',
           'bugs',
           'modules',
@@ -565,6 +567,7 @@ export class BugPocketDatabase {
     this.attachLocalTaxonomyViews(this.workspaceDb);
     this.cleanupDuplicateWorkspaceEnvironments();
     this.seedWorkspaceEnvironments();
+    this.backfillAttachmentDownloadQueue();
     this.workspaceDb.pragma('foreign_keys = OFF');
     this.updateCurrentWorkspaceId(cleaned);
     return cleaned;
@@ -1007,6 +1010,13 @@ export class BugPocketDatabase {
         retry_count INTEGER NOT NULL DEFAULT 0,
         last_error TEXT NULL DEFAULT NULL
       );
+      CREATE TABLE IF NOT EXISTS attachment_download_queue (
+        attachment_id INTEGER PRIMARY KEY,
+        content_hash TEXT NOT NULL,
+        file_extension TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT NULL DEFAULT NULL
+      );
 
       CREATE TABLE IF NOT EXISTS app_settings (
         key        TEXT PRIMARY KEY NOT NULL,
@@ -1019,6 +1029,7 @@ export class BugPocketDatabase {
       CREATE INDEX IF NOT EXISTS idx_attachments_content_hash ON attachments(content_hash);
       CREATE INDEX IF NOT EXISTS idx_sync_queue_created_at ON sync_queue(created_at);
       CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity_type, entity_id);
+      CREATE INDEX IF NOT EXISTS idx_attachment_download_queue_retry ON attachment_download_queue(retry_count, attachment_id);
       CREATE INDEX IF NOT EXISTS idx_modules_application_id ON modules(application_id);
       CREATE INDEX IF NOT EXISTS idx_presets_application_id ON presets(application_id);
       CREATE INDEX IF NOT EXISTS idx_presets_module_id ON presets(module_id);
@@ -1081,6 +1092,7 @@ export class BugPocketDatabase {
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_local_seq ON sync_queue(local_seq) WHERE local_seq > 0');
     this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_op_id ON sync_queue(op_id) WHERE op_id != ''");
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity_type, entity_id)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_attachment_download_queue_retry ON attachment_download_queue(retry_count, attachment_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_application_id ON presets(application_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_module_id ON presets(module_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_environment_id ON presets(environment_id)');
@@ -2158,6 +2170,10 @@ Attachments:
 
     if (this.remoteString(remoteBug.deleted_at)) {
       if (!existing) return false;
+      db.prepare(`
+        DELETE FROM attachment_download_queue
+        WHERE attachment_id IN (SELECT id FROM attachments WHERE bug_id = ?)
+      `).run(existing.id);
       db.prepare('DELETE FROM attachments WHERE bug_id = ?').run(existing.id);
       db.prepare('DELETE FROM bugs WHERE id = ?').run(existing.id);
       return true;
@@ -2319,10 +2335,6 @@ Attachments:
   }
 
   upsertRemoteAttachment(remoteAttachment: Record<string, unknown>): boolean {
-    const attachmentMetadata = validateAttachmentMetadata(
-      remoteAttachment.content_hash,
-      remoteAttachment.file_extension
-    );
     const db = this.requireWorkspaceDb();
     const remoteId = this.remoteString(remoteAttachment.id);
     if (!remoteId) return false;
@@ -2332,10 +2344,15 @@ Attachments:
 
     if (this.remoteString(remoteAttachment.deleted_at)) {
       if (!existing) return false;
+      db.prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?').run(existing.id);
       db.prepare('DELETE FROM attachments WHERE id = ?').run(existing.id);
       return true;
     }
 
+    const attachmentMetadata = validateAttachmentMetadata(
+      remoteAttachment.content_hash,
+      remoteAttachment.file_extension
+    );
     if (existing && this.isLocalNewer(existing.updated_at, remoteUpdatedAt)) return false;
 
     const remoteBugId = this.remoteString(remoteAttachment.bug_id);
@@ -2356,6 +2373,7 @@ Attachments:
       updated_at: remoteUpdatedAt
     };
 
+    let attachmentId: number;
     if (existing) {
       db.prepare(`
         UPDATE attachments SET
@@ -2370,21 +2388,78 @@ Attachments:
           updated_at = @updated_at
         WHERE id = @id
       `).run({ ...values, id: existing.id });
-      return true;
+      attachmentId = existing.id;
+    } else {
+      const result = db.prepare(`
+        INSERT INTO attachments (
+          remote_id, bug_id, parent_id, content_hash, file_extension, mime_type, source_type,
+          sync_status, last_sync_at, created_at, updated_at
+        ) VALUES (
+          @remote_id, @bug_id, @parent_id, @content_hash, @file_extension, @mime_type, @source_type,
+          @sync_status, @last_sync_at, @created_at, @updated_at
+        )
+      `).run(values);
+      attachmentId = Number(result.lastInsertRowid);
     }
 
-    db.prepare(`
-      INSERT INTO attachments (
-        remote_id, bug_id, parent_id, content_hash, file_extension, mime_type, source_type,
-        sync_status, last_sync_at, created_at, updated_at
-      ) VALUES (
-        @remote_id, @bug_id, @parent_id, @content_hash, @file_extension, @mime_type, @source_type,
-        @sync_status, @last_sync_at, @created_at, @updated_at
-      )
-    `).run(values);
+    this.reconcileAttachmentDownloadIntent(
+      db,
+      attachmentId,
+      attachmentMetadata.contentHash,
+      attachmentMetadata.extension
+    );
     return true;
   }
 
+  private reconcileAttachmentDownloadIntent(
+    db: Database.Database,
+    attachmentId: number,
+    contentHash: string | null,
+    fileExtension: string
+  ): void {
+    if (!contentHash || this.attachmentFileExists(contentHash, fileExtension)) {
+      db.prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?').run(attachmentId);
+      return;
+    }
+
+    db.prepare(`
+      INSERT INTO attachment_download_queue (
+        attachment_id, content_hash, file_extension, retry_count, last_error
+      ) VALUES (?, ?, ?, 0, NULL)
+      ON CONFLICT(attachment_id) DO UPDATE SET
+        retry_count = CASE
+          WHEN content_hash != excluded.content_hash OR file_extension != excluded.file_extension THEN 0
+          ELSE retry_count
+        END,
+        last_error = CASE
+          WHEN content_hash != excluded.content_hash OR file_extension != excluded.file_extension THEN NULL
+          ELSE last_error
+        END,
+        content_hash = excluded.content_hash,
+        file_extension = excluded.file_extension
+    `).run(attachmentId, contentHash, fileExtension);
+  }
+
+  private backfillAttachmentDownloadQueue(): void {
+    const db = this.workspaceDb;
+    if (!db) return;
+    const rows = db.prepare(`
+      SELECT id, content_hash, file_extension
+      FROM attachments
+      WHERE remote_id != '' AND content_hash IS NOT NULL AND content_hash != ''
+    `).all() as Array<{ id: number; content_hash: string; file_extension: string }>;
+    const transaction = db.transaction(() => {
+      for (const row of rows) {
+        try {
+          const metadata = validateAttachmentMetadata(row.content_hash, row.file_extension);
+          this.reconcileAttachmentDownloadIntent(db, row.id, metadata.contentHash, metadata.extension);
+        } catch {
+          // Invalid legacy metadata remains visible in diagnostics only after a fresh remote pull.
+        }
+      }
+    });
+    transaction();
+  }
   private legacyRemoteSyncWatermarkKey(workspaceId: string): string {
     return `last_remote_sync_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
   }
@@ -2497,6 +2572,37 @@ Attachments:
     this.setSetting('byok_ai_custom_system_prompt', customSystemPrompt);
   }
 
+  getPendingAttachmentDownloads(limit = 25, maxRetries = 5): AttachmentDownloadQueueItem[] {
+    return this.workspaceDataDb().prepare(`
+      SELECT attachment_id, content_hash, file_extension, retry_count, last_error
+      FROM attachment_download_queue
+      WHERE retry_count < ?
+      ORDER BY attachment_id
+      LIMIT ?
+    `).all(maxRetries, limit) as AttachmentDownloadQueueItem[];
+  }
+
+  markAttachmentDownloadSucceeded(attachmentId: number): void {
+    this.workspaceDataDb()
+      .prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?')
+      .run(attachmentId);
+  }
+
+  recordAttachmentDownloadFailure(attachmentId: number, errorMessage: string): number {
+    const dataDb = this.workspaceDataDb();
+    const transaction = dataDb.transaction(() => {
+      dataDb.prepare(`
+        UPDATE attachment_download_queue
+        SET retry_count = retry_count + 1, last_error = ?
+        WHERE attachment_id = ?
+      `).run(errorMessage.slice(0, 2000), attachmentId);
+      const row = dataDb
+        .prepare('SELECT retry_count FROM attachment_download_queue WHERE attachment_id = ?')
+        .get(attachmentId) as { retry_count: number } | undefined;
+      return row?.retry_count ?? 0;
+    });
+    return transaction() as number;
+  }
   getPendingSyncQueue(limit = 25, maxRetries = 5): SyncQueueEvent[] {
     const dataDb = this.workspaceDataDb();
     return dataDb
@@ -2568,11 +2674,16 @@ Attachments:
   }
 
   resetSyncQueueRetries(): void {
-    this.workspaceDataDb().prepare('UPDATE sync_queue SET retry_count = 0, last_error = NULL').run();
+    const dataDb = this.workspaceDataDb();
+    const transaction = dataDb.transaction(() => {
+      dataDb.prepare('UPDATE sync_queue SET retry_count = 0, last_error = NULL').run();
+      dataDb.prepare('UPDATE attachment_download_queue SET retry_count = 0, last_error = NULL').run();
+    });
+    transaction();
   }
 
   getSyncDiagnostics(): SyncDiagnosticsRow[] {
-    return this.workspaceDataDb().prepare(`
+    const rows = this.workspaceDataDb().prepare(`
       SELECT
         q.id,
         q.local_seq,
@@ -2589,14 +2700,35 @@ Attachments:
             WHEN q.entity_type = 'attachment' THEN COALESCE(NULLIF(a.content_hash || a.file_extension, ''), 'Attachment #' || q.entity_id)
             ELSE q.entity_type || ' #' || q.entity_id
           END
-        ) AS label
+        ) AS label,
+        'upload' AS queue_type,
+        0 AS missing_binary
       FROM sync_queue q
       LEFT JOIN bugs b ON q.entity_type = 'bug' AND b.id = q.entity_id
       LEFT JOIN attachments a ON q.entity_type = 'attachment' AND a.id = q.entity_id
-      ORDER BY q.local_seq, q.id
-    `).all() as SyncDiagnosticsRow[];
-  }
 
+      UNION ALL
+
+      SELECT
+        d.attachment_id AS id,
+        0 AS local_seq,
+        '' AS op_id,
+        'attachment' AS entity_type,
+        d.attachment_id AS entity_id,
+        'DOWNLOAD' AS operation,
+        COALESCE(a.updated_at, a.created_at, '') AS created_at,
+        d.retry_count,
+        d.last_error,
+        COALESCE(NULLIF(d.content_hash || d.file_extension, ''), 'Attachment #' || d.attachment_id) AS label,
+        'download' AS queue_type,
+        1 AS missing_binary
+      FROM attachment_download_queue d
+      LEFT JOIN attachments a ON a.id = d.attachment_id
+
+      ORDER BY created_at, id
+    `).all() as Array<SyncDiagnosticsRow & { missing_binary: number | boolean }>;
+    return rows.map((row) => ({ ...row, missing_binary: Boolean(row.missing_binary) }));
+  }
   getPresets(): CapturePreset[] {
     return this.db.prepare('SELECT * FROM presets ORDER BY id LIMIT ?').all(MAX_CAPTURE_PRESETS) as CapturePreset[];
   }
@@ -3262,6 +3394,10 @@ Attachments:
     const tx = dataDb.transaction(() => {
       attachmentPayloads.forEach((attachment) => this.enqueueAttachmentSyncEvent(attachment.id, 'DELETE', attachment));
       this.enqueueBugSyncEvent(id, 'DELETE', bugPayload);
+      dataDb.prepare(`
+        DELETE FROM attachment_download_queue
+        WHERE attachment_id IN (SELECT id FROM attachments WHERE bug_id = ?)
+      `).run(id);
       dataDb.prepare('DELETE FROM attachments WHERE bug_id = ?').run(id);
       dataDb.prepare('DELETE FROM bugs WHERE id = ?').run(id);
     });
@@ -3327,6 +3463,7 @@ Attachments:
     const deletedPayload = this.attachmentPayload(attachmentId);
     const tx = dataDb.transaction(() => {
       this.enqueueAttachmentSyncEvent(attachmentId, 'DELETE', deletedPayload);
+      dataDb.prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?').run(attachmentId);
       dataDb.prepare('DELETE FROM attachments WHERE id = ?').run(attachmentId);
       if (attachment.bug_id) {
         dataDb.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(attachment.bug_id), now(), attachment.bug_id);
@@ -3387,8 +3524,10 @@ Attachments:
     const stamp = now();
     const tx = dataDb.transaction((attachmentIds: number[]) => {
       const update = dataDb.prepare('UPDATE attachments SET content_hash = NULL, updated_at = ? WHERE id = ?');
+      const clearDownload = dataDb.prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?');
       attachmentIds.forEach((attachmentId) => {
         update.run(stamp, attachmentId);
+        clearDownload.run(attachmentId);
         this.enqueueAttachmentSyncEvent(attachmentId, 'UPDATE');
       });
     });

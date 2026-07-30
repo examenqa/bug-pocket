@@ -466,6 +466,7 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
   const shortWorkspaceId = activeWorkspaceId ? `${activeWorkspaceId.slice(0, 8)}...${activeWorkspaceId.slice(-4)}` : 'Not assigned';
   const canSwitchWorkspace = Boolean(selectedWorkspaceId.trim() && selectedWorkspaceId.trim() !== activeWorkspaceId);
   const failedDiagnostics = diagnostics.filter((row) => row.last_error || row.retry_count >= 5);
+  const missingBinaryDiagnostics = diagnostics.filter((row) => row.missing_binary);
   const canGenerateInvite = settings.currentWorkspaceRole === 'owner' || settings.currentWorkspaceRole === 'admin';
 
   return (
@@ -722,7 +723,7 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
               >
                 <span>
                   <strong>Sync Diagnostics</strong>
-                  <em>{diagnostics.length} pending item{diagnostics.length === 1 ? '' : 's'} · {failedDiagnostics.length} failed</em>
+                  <em>{diagnostics.length} pending item{diagnostics.length === 1 ? '' : 's'} · {missingBinaryDiagnostics.length} missing binaries · {failedDiagnostics.length} failed</em>
                 </span>
                 {diagnosticsOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
               </button>
@@ -739,13 +740,16 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
                   </div>
                   <div className="option-list">
                     {diagnostics.map((row) => (
-                      <div className="option-row sync-diagnostics-row" key={row.id}>
+                      <div className="option-row sync-diagnostics-row" key={`${row.queue_type}-${row.id}`}>
                         <span className="option-name">
                           <span className="sync-diagnostics-title-line">
                             <span>{row.label}</span>
                             <span className="sync-diagnostics-separator">•</span>
-                            <em>{row.entity_type} · {row.operation} · retries {row.retry_count}</em>
+                            <em>{row.queue_type === 'download' ? 'binary download' : `${row.entity_type} · ${row.operation}`} · retries {row.retry_count}</em>
                           </span>
+                          {row.missing_binary && !row.last_error && (
+                            <small className="sync-diagnostics-missing">Binary is missing locally and queued for download.</small>
+                          )}
                           {row.last_error && <small className="settings-error">{row.last_error}</small>}
                         </span>
                       </div>
