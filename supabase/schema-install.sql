@@ -86,13 +86,11 @@ create table if not exists applications (
   updated_at timestamptz not null default now()
 );
 
+-- Old development installs may retain unused module issue columns. Do not drop
+-- them automatically: their contents are unknown and the application never uses them.
 create table if not exists modules (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references workspaces(id) on delete cascade,
-  issue_key text null,
-  issue_prefix text null,
-  issue_user_code text null,
-  issue_number bigint null,
   application_id uuid null references applications(id) on delete set null,
   name text not null,
   context_description text null,
