@@ -9,6 +9,7 @@ export interface SettingsOptionItem<TId extends TaxonomyId = TaxonomyId> {
   contextDescription?: string;
   applicationId?: TaxonomyId | null;
   isSynced?: boolean;
+  issuePrefix?: string;
 }
 
 interface OptionManagerProps<TId extends TaxonomyId> {
@@ -17,7 +18,7 @@ interface OptionManagerProps<TId extends TaxonomyId> {
   onToggle: () => void;
   mutationReady: boolean;
   items: SettingsOptionItem<TId>[];
-  onAdd: (value: string, contextDescription?: string) => Promise<void>;
+  onAdd: (value: string, contextDescription?: string, issuePrefix?: string) => Promise<void>;
   onUpdate: (id: TId, value: string, item: SettingsOptionItem<TId>) => Promise<void>;
   onUpdateContext?: (id: TId, contextDescription: string, item: SettingsOptionItem<TId>) => Promise<void>;
   onDelete: (id: TId, item: SettingsOptionItem<TId>) => Promise<void>;
@@ -27,6 +28,8 @@ interface OptionManagerProps<TId extends TaxonomyId> {
   addButtonLabel?: string;
   addContextLabel?: string;
   addContextRequired?: boolean;
+  addCodeLabel?: string;
+  addCodeRequired?: boolean;
   readOnly?: boolean;
   readOnlyMessage?: string;
 }
@@ -47,21 +50,28 @@ export function OptionManager<TId extends TaxonomyId>({
   addButtonLabel,
   addContextLabel,
   addContextRequired = false,
+  addCodeLabel,
+  addCodeRequired = false,
   readOnly = false,
   readOnlyMessage = 'Taxonomy is managed by workspace admins.'
 }: OptionManagerProps<TId>) {
   const [value, setValue] = useState('');
   const [addContext, setAddContext] = useState('');
+  const [addCode, setAddCode] = useState('');
+  const [addCodeTouched, setAddCodeTouched] = useState(false);
   const [editingId, setEditingId] = useState<TId | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editContext, setEditContext] = useState('');
+  const [editCode, setEditCode] = useState('');
   const editContextRef = useRef('');
   const [mergingId, setMergingId] = useState<TId | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<TId | null>(null);
   const [error, setError] = useState('');
   const previewItems = getSettingsPreviewItems(items);
   const hiddenCount = Math.max(0, items.length - previewItems.length);
-  const addDisabled = !value.trim() || (addContextRequired && !addContext.trim());
+  const addDisabled = !value.trim()
+    || (addContextRequired && !addContext.trim())
+    || (addCodeRequired && !addCode.trim());
 
   const run = async (action: () => Promise<void>): Promise<void> => {
     setError('');
@@ -80,6 +90,7 @@ export function OptionManager<TId extends TaxonomyId>({
     setEditValue(item.label);
     editContextRef.current = item.contextDescription ?? '';
     setEditContext(editContextRef.current);
+    setEditCode(item.issuePrefix ?? '');
     setError('');
   };
 
@@ -89,7 +100,11 @@ export function OptionManager<TId extends TaxonomyId>({
   };
 
   const saveEditedItem = async (item: SettingsOptionItem<TId>): Promise<void> => {
-    await onUpdate(item.id, editValue, { ...item, contextDescription: editContextRef.current });
+    await onUpdate(item.id, editValue, {
+      ...item,
+      contextDescription: editContextRef.current,
+      issuePrefix: editCode
+    });
     setEditingId(null);
   };
 
@@ -136,13 +151,35 @@ export function OptionManager<TId extends TaxonomyId>({
             <div className={[
               'add-row',
               addContextLabel ? 'add-row-with-context' : '',
-              addButtonLabel ? 'add-row-with-text-button' : ''
+              addButtonLabel ? 'add-row-with-text-button' : '',
+              addCodeLabel ? 'add-row-with-code' : ''
             ].filter(Boolean).join(' ')}>
               <input
                 value={value}
-                onChange={(event) => setValue(event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setValue(nextValue);
+                  if (addCodeLabel && !addCodeTouched) {
+                    const normalized = nextValue.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
+                    setAddCode((normalized || 'APP').padEnd(3, 'X'));
+                  }
+                }}
                 placeholder={addPlaceholder ?? `Add ${title.toLowerCase()}`}
               />
+              {addCodeLabel && (
+                <label className="option-code-field">
+                  <span>{addCodeLabel}{addCodeRequired ? ' *' : ''}</span>
+                  <input
+                    value={addCode}
+                    maxLength={8}
+                    onChange={(event) => {
+                      setAddCodeTouched(true);
+                      setAddCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+                    }}
+                    placeholder="APP"
+                  />
+                </label>
+              )}
               <button
                 className={addButtonLabel ? 'add-option-text-button' : undefined}
                 type="button"
@@ -150,9 +187,11 @@ export function OptionManager<TId extends TaxonomyId>({
                 disabled={addDisabled}
                 onClick={() => run(async () => {
                   if (addDisabled) return;
-                  await onAdd(value, addContext);
+                  await onAdd(value, addContext, addCode);
                   setValue('');
                   setAddContext('');
+                  setAddCode('');
+                  setAddCodeTouched(false);
                 })}
               >
                 {addButtonLabel ?? <Plus size={16} />}
@@ -170,7 +209,7 @@ export function OptionManager<TId extends TaxonomyId>({
               <div className={[onMerge ? 'has-merge' : '', onToggleSync ? 'has-sync-toggle' : '', 'option-row'].filter(Boolean).join(' ')} key={item.id}>
                 {editingId === item.id ? (
                   <div className="option-edit-stack">
-                    <div className="option-edit-row">
+                    <div className={item.issuePrefix !== undefined ? 'option-edit-row has-code' : 'option-edit-row'}>
                       <input
                         className="option-edit-input"
                         value={editValue}
@@ -180,6 +219,16 @@ export function OptionManager<TId extends TaxonomyId>({
                           if (event.key === 'Escape') setEditingId(null);
                         }}
                       />
+                      {item.issuePrefix !== undefined && (
+                        <label className="option-code-field edit-code-field">
+                          <span>Prefix</span>
+                          <input
+                            value={editCode}
+                            maxLength={8}
+                            onChange={(event) => setEditCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                          />
+                        </label>
+                      )}
                       <button className="icon-button" title="Save option" onClick={() => run(async () => saveEditedItem(item))}><Check size={15} /></button>
                       <button className="icon-button" title="Cancel edit" onClick={() => setEditingId(null)}><X size={15} /></button>
                     </div>
@@ -220,6 +269,7 @@ export function OptionManager<TId extends TaxonomyId>({
                 ) : (
                   <>
                     <span className="option-name">{item.label}</span>
+                    {item.issuePrefix && <span className="chip option-prefix-chip">{item.issuePrefix}</span>}
                     {onToggleSync && !readOnly && (
                       <label className="option-sync-toggle" title="Allow this application's records to enter the future sync queue">
                         <input

@@ -3,6 +3,7 @@ import type { SyncWorkspaceOption, WorkspaceRole } from '../../shared/types';
 export interface WorkspaceMembershipCandidate {
   workspace_id: string;
   role?: WorkspaceRole | string | null;
+  user_code?: string | null;
 }
 
 export interface WorkspaceMembershipResolution {

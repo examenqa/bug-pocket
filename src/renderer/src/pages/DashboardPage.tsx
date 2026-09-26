@@ -238,6 +238,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
               return (
                 <tr key={bug.id} onClick={() => onSelect(bug.id)}>
                   <td className="entry-cell">
+                    <span className="issue-key">{bug.issue_key || `BUG-${bug.id}`}</span>
                     <div className="entry-heading">
                       <strong>{entryDisplay.title}</strong>
                       <Badge>{bug.entry_type || 'Bug'}</Badge>

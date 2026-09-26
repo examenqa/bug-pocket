@@ -26,6 +26,7 @@ const emptySettings: SettingsData = {
   supabaseInviteEmail: null,
   currentWorkspaceId: null,
   currentWorkspaceRole: 'member',
+  currentWorkspaceUserCode: null,
   currentWorkspaceCanRead: true,
   currentWorkspaceCanWrite: true,
   cloudSyncActive: false,

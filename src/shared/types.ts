@@ -23,6 +23,7 @@ export interface RemoteSyncCursor {
 export interface Application {
   id: TaxonomyId;
   name: string;
+  issue_prefix: string;
   context_description: string | null;
   is_active: number;
   is_synced: number;
@@ -79,6 +80,10 @@ export interface AttachmentLineage {
 
 export interface Bug {
   id: number;
+  issue_key: string;
+  issue_prefix: string;
+  issue_user_code: string | null;
+  issue_number: number | null;
   application_id: TaxonomyId | null;
   module_id: TaxonomyId | null;
   environment_id: TaxonomyId | null;
@@ -218,6 +223,7 @@ export interface SettingsData {
   supabaseInviteEmail: string | null;
   currentWorkspaceId: string | null;
   currentWorkspaceRole: WorkspaceRole;
+  currentWorkspaceUserCode: string | null;
   currentWorkspaceCanRead: boolean;
   currentWorkspaceCanWrite: boolean;
   cloudSyncActive: boolean;
@@ -317,6 +323,7 @@ export interface SyncSessionStatus {
   email?: string;
   workspaceId?: string;
   workspaceRole?: WorkspaceRole;
+  workspaceUserCode?: string;
   workspaceCanRead?: boolean;
   workspaceCanWrite?: boolean;
   workspaceSelectionRequired?: boolean;

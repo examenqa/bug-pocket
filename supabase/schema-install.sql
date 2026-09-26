@@ -19,6 +19,7 @@ create table if not exists workspace_members (
   workspace_id uuid not null references workspaces(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   role text not null default 'member',
+  user_code text null,
   created_at timestamptz not null default now(),
   unique (workspace_id, user_id),
   constraint workspace_members_role_check check (char_length(trim(role)) between 1 and 80)
@@ -41,11 +42,18 @@ create table if not exists workspace_invites (
   constraint workspace_invites_role_check check (char_length(trim(role)) between 1 and 80)
 );
 
+alter table public.workspace_members add column if not exists user_code text null;
+
 alter table public.workspace_members
   drop constraint if exists workspace_members_role_check;
 alter table public.workspace_members
   add constraint workspace_members_role_check
   check (char_length(trim(role)) between 1 and 80);
+alter table public.workspace_members
+  drop constraint if exists workspace_members_user_code_check;
+alter table public.workspace_members
+  add constraint workspace_members_user_code_check
+  check (user_code is null or user_code ~ '^[A-Z0-9]{3}$');
 
 -- Workspace-scoped roles make permissions data rather than hardcoded policy
 -- branches. Owner and admin remain built-in control-plane roles; all other
@@ -70,6 +78,7 @@ create table if not exists applications (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references workspaces(id) on delete cascade,
   name text not null,
+  issue_prefix text not null,
   context_description text null,
   is_active boolean not null default true,
   is_synced boolean not null default true,
@@ -80,6 +89,10 @@ create table if not exists applications (
 create table if not exists modules (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references workspaces(id) on delete cascade,
+  issue_key text null,
+  issue_prefix text null,
+  issue_user_code text null,
+  issue_number bigint null,
   application_id uuid null references applications(id) on delete set null,
   name text not null,
   context_description text null,
@@ -165,6 +178,56 @@ create table if not exists attachments (
 alter table bugs add column if not exists deleted_at timestamptz null;
 alter table attachments add column if not exists updated_at timestamptz not null default now();
 alter table attachments add column if not exists deleted_at timestamptz null;
+alter table applications add column if not exists issue_prefix text null;
+alter table bugs add column if not exists issue_key text null;
+alter table bugs add column if not exists issue_prefix text null;
+alter table bugs add column if not exists issue_user_code text null;
+alter table bugs add column if not exists issue_number bigint null;
+
+with normalized as (
+  select
+    id,
+    workspace_id,
+    coalesce(
+      rpad(nullif(left(regexp_replace(upper(name), '[^A-Z0-9]', '', 'g'), 3), ''), 3, 'X'),
+      'APP'
+    ) as base_prefix
+  from public.applications
+  where issue_prefix is null or issue_prefix !~ '^[A-Z0-9]{2,8}$'
+), ranked as (
+  select
+    id,
+    base_prefix,
+    row_number() over (partition by workspace_id, base_prefix order by id) as prefix_rank
+  from normalized
+)
+update public.applications application
+set issue_prefix = case
+  when ranked.prefix_rank = 1 then ranked.base_prefix
+  else ranked.base_prefix || ranked.prefix_rank::text
+end
+from ranked
+where application.id = ranked.id;
+
+alter table public.applications alter column issue_prefix set not null;
+alter table public.applications
+  drop constraint if exists applications_issue_prefix_check;
+alter table public.applications
+  add constraint applications_issue_prefix_check
+  check (issue_prefix ~ '^[A-Z0-9]{2,8}$');
+alter table public.bugs
+  drop constraint if exists bugs_issue_identity_check;
+alter table public.bugs
+  add constraint bugs_issue_identity_check
+  check (
+    (issue_key is null and issue_prefix is null and issue_user_code is null and issue_number is null)
+    or (
+      issue_key is not null
+      and issue_prefix ~ '^[A-Z0-9]{2,8}$'
+      and issue_user_code ~ '^[A-Z0-9]{3}$'
+      and issue_number > 0
+    )
+  );
 
 create table if not exists config_options (
   id uuid primary key default gen_random_uuid(),
@@ -182,6 +245,15 @@ create table if not exists report_templates (
   template_text text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table if not exists bug_issue_counters (
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  issue_prefix text not null check (issue_prefix ~ '^[A-Z0-9]{2,8}$'),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  last_number bigint not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, issue_prefix, user_id)
 );
 
 create table if not exists sync_events (
@@ -203,6 +275,12 @@ create index if not exists idx_workspace_members_user on workspace_members(user_
 create index if not exists idx_workspace_invites_workspace_email on workspace_invites(workspace_id, email);
 create index if not exists idx_roles_permissions_workspace on roles_permissions(workspace_id);
 create index if not exists idx_applications_workspace on applications(workspace_id);
+create unique index if not exists idx_workspace_members_workspace_user_code
+  on workspace_members(workspace_id, user_code) where user_code is not null;
+create unique index if not exists idx_applications_workspace_issue_prefix
+  on applications(workspace_id, issue_prefix);
+create unique index if not exists idx_bugs_workspace_issue_key
+  on bugs(workspace_id, issue_key) where issue_key is not null;
 create index if not exists idx_modules_workspace_app on modules(workspace_id, application_id);
 create index if not exists idx_environments_workspace on environments(workspace_id);
 create index if not exists idx_reference_options_workspace_type on reference_options(workspace_id, type);
@@ -224,6 +302,7 @@ alter table attachments enable row level security;
 alter table config_options enable row level security;
 alter table report_templates enable row level security;
 alter table sync_events enable row level security;
+alter table bug_issue_counters enable row level security;
 
 -- 4. Performance-Optimized RLS Helper Function
 -- SECURITY DEFINER avoids recursive RLS checks on workspace_members.
@@ -393,6 +472,126 @@ begin
   return claimed_workspace_id;
 end;
 $$ language plpgsql security definer set search_path = public, auth;
+
+-- A user code belongs to a workspace membership, never to a device. The
+-- first successful claim is permanent and subsequent devices restore it from
+-- workspace_members during the normal authentication handshake.
+create or replace function public.claim_workspace_user_code(
+  target_workspace_id uuid,
+  requested_code text
+)
+returns text as $$
+declare
+  normalized_code text := upper(trim(requested_code));
+  existing_code text;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication is required to choose an issue user code.' using errcode = '42501';
+  end if;
+  if normalized_code !~ '^[A-Z0-9]{3}$' then
+    raise exception 'User code must be exactly 3 letters or numbers.' using errcode = '22023';
+  end if;
+
+  select user_code into existing_code
+  from public.workspace_members
+  where workspace_id = target_workspace_id and user_id = auth.uid()
+  for update;
+
+  if not found then
+    raise exception 'The current user is not a member of this workspace.' using errcode = '42501';
+  end if;
+  if existing_code is not null and existing_code <> normalized_code then
+    raise exception 'This account already has a permanent user code.' using errcode = '23505';
+  end if;
+
+  update public.workspace_members
+  set user_code = normalized_code
+  where workspace_id = target_workspace_id and user_id = auth.uid();
+
+  return normalized_code;
+exception
+  when unique_violation then
+    raise exception 'That user code is already in use in this workspace.' using errcode = '23505';
+end;
+$$ language plpgsql security definer set search_path = public, auth;
+
+-- Cloud issue numbers are allocated atomically per application and user. Local
+-- keys are provisional; the INSERT trigger is the sole authority for canonical
+-- APP-USR-N keys and therefore prevents duplicate IDs across devices.
+create or replace function public.assign_bug_issue_key()
+returns trigger as $$
+declare
+  actor_id uuid;
+  canonical_prefix text;
+  canonical_user_code text;
+  canonical_number bigint;
+  existing_bug public.bugs%rowtype;
+begin
+  if tg_op = 'UPDATE' and old.issue_key is not null then
+    new.issue_key := old.issue_key;
+    new.issue_prefix := old.issue_prefix;
+    new.issue_user_code := old.issue_user_code;
+    new.issue_number := old.issue_number;
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    select * into existing_bug
+    from public.bugs
+    where id = new.id;
+    if found and existing_bug.issue_key is not null then
+      new.issue_key := existing_bug.issue_key;
+      new.issue_prefix := existing_bug.issue_prefix;
+      new.issue_user_code := existing_bug.issue_user_code;
+      new.issue_number := existing_bug.issue_number;
+      return new;
+    end if;
+  end if;
+
+  actor_id := coalesce(new.created_by, auth.uid());
+  if actor_id is null then
+    raise exception 'An authenticated workspace member is required to allocate an issue key.' using errcode = '42501';
+  end if;
+  if new.application_id is null then
+    canonical_prefix := 'BUG';
+  else
+    select application.issue_prefix into canonical_prefix
+    from public.applications application
+    where application.id = new.application_id
+      and application.workspace_id = new.workspace_id;
+    if canonical_prefix is null then
+      raise exception 'The selected application has no valid issue prefix.' using errcode = '23503';
+    end if;
+  end if;
+
+  select member.user_code into canonical_user_code
+  from public.workspace_members member
+  where member.workspace_id = new.workspace_id
+    and member.user_id = actor_id;
+  if canonical_user_code is null then
+    raise exception 'Choose a permanent 3-character user code before syncing issues.' using errcode = '23502';
+  end if;
+
+  insert into public.bug_issue_counters (workspace_id, issue_prefix, user_id, last_number)
+  values (new.workspace_id, canonical_prefix, actor_id, 1)
+  on conflict (workspace_id, issue_prefix, user_id) do update
+    set last_number = public.bug_issue_counters.last_number + 1,
+        updated_at = now()
+  returning last_number into canonical_number;
+
+  new.issue_prefix := canonical_prefix;
+  new.issue_user_code := canonical_user_code;
+  new.issue_number := canonical_number;
+  new.issue_key := canonical_prefix || '-' || canonical_user_code || '-' || canonical_number;
+  new.created_by := actor_id;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public, auth;
+
+drop trigger if exists assign_bug_issue_key on public.bugs;
+create trigger assign_bug_issue_key
+  before insert or update on public.bugs
+  for each row execute function public.assign_bug_issue_key();
 
 -- 5. RLS Policies
 -- PostgreSQL has no CREATE POLICY IF NOT EXISTS. Install missing policies from a
@@ -576,6 +775,9 @@ grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to anon, authenticated;
 alter default privileges in schema public grant select, insert, update, delete on tables to anon, authenticated;
 
+-- The counter is internal trigger state, not a client-facing table.
+revoke all on table public.bug_issue_counters from public, anon, authenticated;
+
 -- Defense in depth: workspace membership is an authorization boundary. Do not
 -- rely on a missing RLS policy alone; deny PostgREST roles table mutations so a
 -- future permissive policy cannot accidentally restore self-enrollment.
@@ -585,6 +787,9 @@ revoke execute on function public.invite_user_to_workspace(uuid, text, text) fro
 grant execute on function public.invite_user_to_workspace(uuid, text, text) to authenticated;
 revoke execute on function public.claim_pending_invite() from public, anon;
 grant execute on function public.claim_pending_invite() to authenticated;
+revoke execute on function public.claim_workspace_user_code(uuid, text) from public, anon;
+grant execute on function public.claim_workspace_user_code(uuid, text) to authenticated;
+revoke execute on function public.assign_bug_issue_key() from public, anon, authenticated;
 
 -- 8. Auth Onboarding Workflow
 -- Automatically provisions a personal workspace for every new signup. Pending
