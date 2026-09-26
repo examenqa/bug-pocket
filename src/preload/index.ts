@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction, SyncAccountSetup, SyncRuntimeStatus, TaxonomyId, TeamInvitePayload } from '../shared/types';
+import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugStatusCounts, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction, SyncAccountSetup, SyncRuntimeStatus, TaxonomyId, TeamInvitePayload } from '../shared/types';
 
 const api = {
   openQuickCapture: () => ipcRenderer.invoke('window:openQuickCapture'),
+  getPendingCaptures: (): Promise<import('../shared/types').ScreenshotResult[]> => ipcRenderer.invoke('capture:listPending'),
+  discardPendingCaptures: (): Promise<void> => ipcRenderer.invoke('capture:discardPending'),
   hideQuickCapture: () => ipcRenderer.invoke('window:hideQuickCapture'),
   openMainWindow: (route?: string) => ipcRenderer.invoke('window:openMain', route),
   openSettings: (section?: string) => ipcRenderer.invoke('window:openSettings', section),
@@ -69,6 +71,7 @@ const api = {
   resumeShortcuts: () => ipcRenderer.invoke('shortcuts:resume'),
   listBugs: (filters: BugFilters) => ipcRenderer.invoke('bugs:list', filters),
   getTotalBugCount: () => ipcRenderer.invoke('bugs:count'),
+  getBugStatusCounts: (): Promise<BugStatusCounts> => ipcRenderer.invoke('bugs:statusCounts'),
   getBug: (id: number) => ipcRenderer.invoke('bugs:get', id),
   createQuickBug: (input: QuickBugInput) => ipcRenderer.invoke('bugs:createQuick', input),
   updateBug: (id: number, input: BugUpdateInput) => ipcRenderer.invoke('bugs:update', id, input),
@@ -82,7 +85,7 @@ const api = {
   openExternalUrl: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
   sendFeedback: (payload: FeedbackPayload) => ipcRenderer.invoke('support:sendFeedback', payload),
   setDetailsDirty: (dirty: boolean) => ipcRenderer.invoke('details:setDirty', dirty),
-  detailsFlushComplete: () => ipcRenderer.invoke('details:flushComplete'),
+  detailsFlushComplete: (requestId: string, success: boolean) => ipcRenderer.invoke('details:flushComplete', requestId, success),
   startScreenshotCapture: (bugId?: number) => ipcRenderer.invoke('screenshot:start', bugId),
   getScreenshotSource: (): Promise<Uint8Array | null> => ipcRenderer.invoke('screenshot:getSource'),
   completeScreenshotCapture: (dataUrl: string) => ipcRenderer.invoke('screenshot:complete', dataUrl),
@@ -95,14 +98,6 @@ const api = {
   chooseBackupDirectory: () => ipcRenderer.invoke('backup:chooseDirectory'),
   clearCurrentWorkspace: () => ipcRenderer.invoke('app:clearCurrentWorkspace'),
   factoryReset: () => ipcRenderer.invoke('app:factoryReset'),
-  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
-  onUpdateReady: (callback: () => void) => {
-    const listener = (): void => callback();
-    ipcRenderer.on('update-ready', listener);
-    return () => {
-      ipcRenderer.removeListener('update-ready', listener);
-    };
-  },
   onSyncStatus: (callback: (status: SyncRuntimeStatus | null) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, status: SyncRuntimeStatus | null): void => callback(status);
     ipcRenderer.on('sync-status', listener);
@@ -175,8 +170,13 @@ const api = {
       ipcRenderer.removeListener('app:toast', listener);
     };
   },
-  onDetailsFlushRequest: (callback: () => void) => {
+  onDetailsResume: (callback: () => void) => {
     const listener = (): void => callback();
+    ipcRenderer.on('details:resume', listener);
+    return () => { ipcRenderer.removeListener('details:resume', listener); };
+  },
+  onDetailsFlushRequest: (callback: (requestId: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, requestId: string): void => callback(requestId);
     ipcRenderer.on('details:flush-save-request', listener);
     return () => {
       ipcRenderer.removeListener('details:flush-save-request', listener);

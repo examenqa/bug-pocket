@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { FeedbackPayload } from '../../../../shared/types';
+import type { SupportImageMimeType } from '../../../../shared/supportFeedback';
+import {
+  submitSupportFeedback,
+  validateSupportImageFile
+} from '../../utils/supportFeedback';
 
 export type SupportModalMode = 'bug' | 'feature';
 
@@ -27,6 +32,7 @@ export function SupportModal({ mode, open, onClose }: SupportModalProps) {
   const [message, setMessage] = useState('');
   const [email, setEmail] = useState('');
   const [imageBase64, setImageBase64] = useState('');
+  const [imageMimeType, setImageMimeType] = useState<SupportImageMimeType | ''>('');
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
@@ -37,6 +43,7 @@ export function SupportModal({ mode, open, onClose }: SupportModalProps) {
     setMessage('');
     setEmail('');
     setImageBase64('');
+    setImageMimeType('');
     setImagePreviewUrl('');
     setIsSubmitting(false);
     setSent(false);
@@ -56,16 +63,22 @@ export function SupportModal({ mode, open, onClose }: SupportModalProps) {
 
   const attachFile = (file: File | null): void => {
     if (!file) return;
-    if (!['image/png', 'image/jpeg'].includes(file.type)) {
-      setError('Please attach a PNG or JPEG image.');
+    const validationError = validateSupportImageFile(file);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!dataUrl) {
+        setError('Could not read the selected image.');
+        return;
+      }
       setImagePreviewUrl(dataUrl);
       setImageBase64(stripImageDataUrlPrefix(dataUrl));
+      setImageMimeType(file.type as SupportImageMimeType);
       setError('');
     };
     reader.onerror = () => setError('Could not read the selected image.');
@@ -74,6 +87,7 @@ export function SupportModal({ mode, open, onClose }: SupportModalProps) {
 
   const removeImage = (): void => {
     setImageBase64('');
+    setImageMimeType('');
     setImagePreviewUrl('');
   };
 
@@ -85,15 +99,16 @@ export function SupportModal({ mode, open, onClose }: SupportModalProps) {
     }
     setIsSubmitting(true);
     setError('');
-    const result = await window.bugPocket.sendFeedback({
+    const result = await submitSupportFeedback(window.bugPocket.sendFeedback, {
       type: supportTypeForMode(mode),
       message: cleanedMessage,
       user_email: email.trim() || undefined,
-      image_base64: imageBase64 || undefined
+      image_base64: imageBase64 || undefined,
+      image_mime_type: imageBase64 && imageMimeType ? imageMimeType : undefined
     });
     setIsSubmitting(false);
     if (!result.success) {
-      setError(result.error || 'Could not send feedback.');
+      setError(result.error || 'Could not send feedback right now. Please try again.');
       return;
     }
     setSent(true);
@@ -118,19 +133,27 @@ export function SupportModal({ mode, open, onClose }: SupportModalProps) {
 
         <label>
           <span>Email <em>optional</em></span>
-          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" disabled={isSubmitting || sent} />
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" disabled={isSubmitting || sent} />
         </label>
 
         <div className="support-screenshot-row">
           <div>
             <strong>Image</strong>
-            <p>{imageBase64 ? 'Image attached for support context.' : 'Optional. Attach a PNG or JPEG.'}</p>
+            <p>{imageBase64 ? 'Image attached for support context.' : 'Optional. Attach a PNG or JPEG up to 5 MB.'}</p>
           </div>
           <div className="support-screenshot-actions">
             {imageBase64 && <button type="button" disabled={isSubmitting || sent} onClick={removeImage}>Remove</button>}
             <label className="support-file-button">
               Attach Image
-              <input type="file" accept="image/png,image/jpeg" disabled={isSubmitting || sent} onChange={(event) => attachFile(event.target.files?.[0] ?? null)} />
+              <input
+                type="file"
+                accept="image/png,image/jpeg"
+                disabled={isSubmitting || sent}
+                onChange={(event) => {
+                  attachFile(event.target.files?.[0] ?? null);
+                  event.currentTarget.value = '';
+                }}
+              />
             </label>
           </div>
         </div>

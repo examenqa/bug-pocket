@@ -1,5 +1,12 @@
 export type OptionType = 'status' | 'scenario_status' | 'severity' | 'issue_platform' | 'entry_type';
 export type CaptureStatus = 'Draft' | 'Reported' | 'Discarded';
+export interface BugStatusCounts {
+  total: number;
+  draft: number;
+  reported: number;
+  discarded: number;
+}
+
 export type SyncStatus = 'Local Only' | 'Sync Pending' | 'Synced' | 'Sync Failed';
 export type AttachmentSourceType = 'snip' | 'screenshot' | 'clipboard' | 'uploaded_image' | 'camera_photo' | 'annotation' | 'other';
 export type ShortcutAction = 'quick_capture' | 'main_panel' | 'global_screenshot';
@@ -248,17 +255,26 @@ export interface SyncQueueEvent {
   last_error: string | null;
 }
 
+export interface AttachmentDownloadQueueItem {
+  attachment_id: number;
+  content_hash: string;
+  file_extension: string;
+  retry_count: number;
+  last_error: string | null;
+}
 export interface SyncDiagnosticsRow {
   id: number;
   local_seq: number;
   op_id: string;
   entity_type: SyncQueueEntityType;
   entity_id: number | string;
-  operation: SyncQueueOperation;
+  operation: SyncQueueOperation | 'DOWNLOAD';
   created_at: string;
   retry_count: number;
   last_error: string | null;
   label: string;
+  queue_type: 'upload' | 'download';
+  missing_binary: boolean;
 }
 
 export interface BackupExportResult {
@@ -303,6 +319,7 @@ export interface SyncSessionStatus {
   workspaceRole?: WorkspaceRole;
   workspaceCanRead?: boolean;
   workspaceCanWrite?: boolean;
+  workspaceSelectionRequired?: boolean;
 }
 
 export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'developer' | (string & {});
@@ -400,7 +417,7 @@ export interface FeedbackPayload {
   message: string;
   user_email?: string;
   image_base64?: string;
-  image_url?: string;
+  image_mime_type?: 'image/png' | 'image/jpeg';
 }
 export interface AiTriageBugPayload {
   id?: number;

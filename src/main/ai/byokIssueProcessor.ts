@@ -22,9 +22,9 @@ You MUST generate the output as a strict, valid JSON object using exactly the st
 "title": "A strict limit of 75 characters maximum (7-10 words). Do not include error codes or lengthy descriptions.",
 "bugNote": "A highly detailed description of the failure and visual UI state.",
 "stepsToReproduce": [
-"Step 1: Infer the necessary preceding actions based on standard UI/UX patterns leading to this state.",
-"Step 2: Explicitly list the interactions.",
-"Step 3: State the final action that triggers the issue."
+"Infer the necessary preceding actions based on standard UI/UX patterns leading to this state.",
+"Explicitly list the interactions.",
+"State the final action that triggers the issue."
 ],
 "expectedResult": "What should have happened.",
 "actualResult": "What actually happened."
@@ -121,9 +121,33 @@ function normalizeSystemPrompt(value: string): string {
   return !prompt || legacyDefaultSystemPrompts.includes(prompt) ? defaultSystemPrompt : prompt;
 }
 
-function extractJsonObjectString(value: string): string {
-  const match = value.match(/\{[\s\S]*\}/);
-  return (match ? match[0] : value).trim();
+export function extractJsonObjectString(value: string): string {
+  const trimmed = value.trim();
+  const start = trimmed.indexOf('{');
+  if (start < 0) return trimmed;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < trimmed.length; index += 1) {
+    const character = trimmed[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+
+    if (character === '"') inString = true;
+    else if (character === '{') depth += 1;
+    else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) return trimmed.slice(start, index + 1);
+    }
+  }
+
+  return trimmed;
 }
 
 function readBugImageDataUrl(database: BugPocketDatabase, bugData: unknown): string | undefined {
@@ -176,7 +200,7 @@ function buildTriagePrompt(bugData: unknown): string {
     'Bug data to triage:',
     JSON.stringify(sanitizeBugDataForPrompt(bugData), null, 2),
     '',
-    'Task: Return only a valid JSON object with exactly these keys: title, bugNote, stepsToReproduce, expectedResult, actualResult. Keep title under 75 characters. stepsToReproduce must be an array of three or more explicit step strings. Use the screenshot when provided, but do not explain what the application does.'
+    'Task: Return only a valid JSON object with exactly these keys: title, bugNote, stepsToReproduce, expectedResult, actualResult. Keep title under 75 characters. stepsToReproduce must be an array of three or more explicit action strings without numbers or Step X prefixes. Use the screenshot when provided, but do not explain what the application does.'
   ].join('\n');
 }
 

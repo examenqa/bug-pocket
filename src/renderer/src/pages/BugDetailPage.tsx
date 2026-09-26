@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Camera, Check, ChevronLeft, ChevronRight, Clipboard, Download, Gauge, Save, Trash2, X } from 'lucide-react';
-import type { AiByokConfig, AiIssueProcessResult, Attachment, AttachmentDownloadResult, BugDetails, CaptureStatus, SettingsData, TaxonomyId } from '../../../shared/types';
+import type { AiByokConfig, AiIssueProcessResult, AttachmentDownloadResult, BugDetails, CaptureStatus, SettingsData, TaxonomyId } from '../../../shared/types';
 import { Badge, SyncBadge } from '../components/shared/Badge';
 import { PillDropdown } from '../components/shared/PillDropdown';
 import { useToast } from '../components/shared/ToastContext';
@@ -18,21 +18,10 @@ import {
 import { getModulesForApplication } from '../utils/filters';
 import { resolveTaxonomyId } from '../utils/taxonomyIds';
 import { formatStepsAsNumberedList } from '../utils/formatSteps';
-import { parseErrorForUI } from '../utils/errors';
-import { buildBugUpdateInput, AiTriageStatus } from '../utils/bugUpdate';
-import { loadAttachmentLineage, SpotlightState } from '../utils/spotlight';
+import { buildBugUpdateInput } from '../utils/bugUpdate';
 import { useAutoSave } from '../hooks/useAutoSave';
-
-function aiTextField(value: unknown): string {
-  if (typeof value === 'string') return value.trim();
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter(Boolean)
-      .join('\n');
-  }
-  return '';
-}
+import { useAiTriage } from '../hooks/useAiTriage';
+import { useAttachmentSpotlight } from '../hooks/useAttachmentSpotlight';
 
 
 export function BugDetailsView({
@@ -45,20 +34,13 @@ export function BugDetailsView({
   onBack: () => void;
 }) {
   const [bug, setBug] = useState<BugDetails | null>(null);
-  const [attachmentPreviews, setAttachmentPreviews] = useState<Record<number, string>>({});
   const [copied, setCopied] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [spotlight, setSpotlight] = useState<SpotlightState | null>(null);
-  const [aiStatus, setAiStatus] = useState<AiTriageStatus>('idle');
-  const [byokAiReady, setByokAiReady] = useState(false);
-  const [showAiRefinement, setShowAiRefinement] = useState(false);
-  const [aiRefinementNote, setAiRefinementNote] = useState('');
   const [lastEditedField, setLastEditedField] = useState<keyof BugDetails | null>(null);
   const showDetailsToast = useToast();
   const saveBugCallback = useCallback((bugToSave: BugDetails) => window.bugPocket.updateBug(bugToSave.id, buildBugUpdateInput(bugToSave)) as Promise<BugDetails>, []);
   const {
-    triggerSave,
     flushSync,
     bugRef,
     saveState,
@@ -67,27 +49,36 @@ export function BugDetailsView({
     resetSavedBaseline
   } = useAutoSave({ bug, setBug, saveCallback: saveBugCallback, showToast: showDetailsToast });
 
-  const currentSpotlightAttachment = spotlight?.attachments[spotlight.index] ?? null;
-  const currentSpotlightPreview = currentSpotlightAttachment ? spotlight?.previews[currentSpotlightAttachment.id] ?? '' : '';
-  const triaging = aiStatus === 'loading';
   const developerReadOnly = !settings.currentWorkspaceCanWrite;
-  const aiTriageDisabled = developerReadOnly || triaging || !byokAiReady;
-
-  useEffect(() => {
-    let cancelled = false;
-    const checkAiStatus = async (): Promise<void> => {
-      try {
-        const config = (await window.bugPocket.getAiConfig()) as AiByokConfig;
-        if (!cancelled) setByokAiReady(Boolean(config?.hasApiKey));
-      } catch {
-        if (!cancelled) setByokAiReady(false);
-      }
-    };
-    void checkAiStatus();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const {
+    attachmentPreviews,
+    closeSpotlight,
+    currentSpotlightAttachment,
+    currentSpotlightPreview,
+    openAttachmentSpotlight,
+    saveSpotlightAnnotation,
+    selectSpotlightVersion,
+    showSpotlightIndex,
+    spotlight
+  } = useAttachmentSpotlight({ bugId, bug, setBug });
+  const {
+    aiStatus,
+    aiRefinementNote,
+    aiTriageDisabled,
+    setAiRefinementNote,
+    setShowAiRefinement,
+    showAiRefinement,
+    triageWithLocalAi,
+    triaging
+  } = useAiTriage({
+    bug,
+    bugRef,
+    settings,
+    developerReadOnly,
+    setBug,
+    markDirty,
+    showToast: showDetailsToast
+  });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -102,8 +93,13 @@ export function BugDetailsView({
     const unsubscribeScreenshot = window.bugPocket.onScreenshotCaptured(() => {
       window.bugPocket.getBug(bugId).then((loadedBug) => {
         if (cancelled) return;
-        setBug(loadedBug);
-        bugRef.current = loadedBug;
+        if (!loadedBug) return;
+        setBug(current => {
+          if (!current || current.id !== loadedBug.id) return current;
+          const merged = { ...current, attachments: loadedBug.attachments };
+          bugRef.current = merged;
+          return merged;
+        });
       });
     });
     window.bugPocket.getBug(bugId).then((loadedBug) => {
@@ -117,106 +113,6 @@ export function BugDetailsView({
       unsubscribeScreenshot();
     };
   }, [bugId, resetSavedBaseline]);
-
-  const attachmentKey = bug?.attachments.map((attachment) => attachment.id).join(',') ?? '';
-  useEffect(() => {
-    if (!bug) { setAttachmentPreviews({}); return; }
-    let cancelled = false;
-    Promise.all(
-      bug.attachments.map(async (attachment) => {
-        const dataUrl = (await window.bugPocket.getAttachmentPreview(attachment.id)) as string;
-        return [attachment.id, dataUrl] as const;
-      })
-    ).then((entries) => {
-      if (cancelled) return;
-      setAttachmentPreviews(Object.fromEntries(entries.filter(([, dataUrl]) => dataUrl)));
-    });
-    return () => { cancelled = true; };
-  }, [bugId, attachmentKey]);
-
-  const loadSpotlightPreview = async (attachment: Attachment): Promise<void> => {
-    setSpotlight((current) => (current ? { ...current, loading: true, error: '' } : current));
-    const [dataUrl, lineageData] = await Promise.all([
-      window.bugPocket.getAttachmentPreview(attachment.id) as Promise<string>,
-      loadAttachmentLineage(attachment.id)
-    ]);
-    setSpotlight((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        previews: { ...current.previews, [attachment.id]: dataUrl },
-        lineage: lineageData.lineage,
-        lineagePreviews: { ...current.lineagePreviews, ...lineageData.lineagePreviews },
-        loading: false,
-        error: dataUrl ? '' : 'Preview unavailable.'
-      };
-    });
-  };
-
-  const openAttachmentSpotlight = async (index: number): Promise<void> => {
-    if (!bug?.attachments.length) return;
-    const boundedIndex = Math.max(0, Math.min(index, bug.attachments.length - 1));
-    const previews = { ...attachmentPreviews };
-    const attachment = bug.attachments[boundedIndex];
-    setSpotlight({ bugId: bug.id, bugTitle: getEntryDisplay(bug).title, attachments: bug.attachments, index: boundedIndex, previews, lineage: [], lineagePreviews: {}, loading: !previews[attachment.id], error: '' });
-    await loadSpotlightPreview(attachment);
-  };
-
-  const showSpotlightIndex = (nextIndex: number): void => {
-    if (!spotlight?.attachments.length) return;
-    const boundedIndex = Math.max(0, Math.min(nextIndex, spotlight.attachments.length - 1));
-    const attachment = spotlight.attachments[boundedIndex];
-    setSpotlight((current) => (current ? { ...current, index: boundedIndex, loading: !current.previews[attachment.id], error: '' } : current));
-    void loadSpotlightPreview(attachment);
-  };
-
-  const saveSpotlightAnnotation = async (dataUrl: string): Promise<void> => {
-    if (!bug || !spotlight || !currentSpotlightAttachment) return;
-    const created = (await window.bugPocket.saveAnnotatedAttachment(currentSpotlightAttachment.id, dataUrl)) as Attachment;
-    const updatedBug = await window.bugPocket.getBug(bug.id);
-    const lineageData = await loadAttachmentLineage(created.id);
-    if (updatedBug) setBug(updatedBug);
-    setAttachmentPreviews((current) => ({ ...current, [created.id]: dataUrl }));
-    setSpotlight((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        attachments: [created, ...current.attachments.filter((attachment) => attachment.id !== currentSpotlightAttachment.id)],
-        index: 0,
-        previews: { ...current.previews, [created.id]: dataUrl },
-        lineage: lineageData.lineage,
-        lineagePreviews: { ...current.lineagePreviews, ...lineageData.lineagePreviews, [created.id]: dataUrl },
-        loading: false,
-        error: ''
-      };
-    });
-  };
-
-  const selectSpotlightVersion = async (attachment: Attachment): Promise<void> => {
-    if (!spotlight) return;
-    const nextIndex = spotlight.attachments.findIndex((item) => item.id === attachment.id);
-    if (nextIndex >= 0) { showSpotlightIndex(nextIndex); return; }
-    setSpotlight((current) => current ? {
-      ...current,
-      attachments: [attachment, ...current.attachments],
-      index: 0,
-      previews: { ...current.previews, ...current.lineagePreviews },
-      loading: !current.lineagePreviews[attachment.id],
-      error: ''
-    } : current);
-    if (!spotlight.lineagePreviews[attachment.id]) await loadSpotlightPreview(attachment);
-  };
-
-  useEffect(() => {
-    if (!spotlight) return;
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') { event.preventDefault(); setSpotlight(null); }
-      if (event.key === 'ArrowLeft') showSpotlightIndex(spotlight.index - 1);
-      if (event.key === 'ArrowRight') showSpotlightIndex(spotlight.index + 1);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [spotlight]);
 
   const updateField = (key: keyof BugDetails, value: string | number | boolean | null, options: { trackStatus?: boolean; autoSave?: boolean } = {}): void => {
     if (developerReadOnly) return;
@@ -243,9 +139,9 @@ export function BugDetailsView({
 
   const save = async (): Promise<void> => {
     if (developerReadOnly) return;
-    await triggerSave({ showToast: true });
+    try { await flushSync(); showDetailsToast('Details saved successfully.'); } catch { /* Save owner reports the failure. */ }
   };
-  const backToDashboard = async (): Promise<void> => { await flushSync(); onBack(); };
+  const backToDashboard = (): void => { onBack(); };
   const fieldSaveStatus = (key: keyof BugDetails): React.ReactNode => {
     if (lastEditedField !== key || (saveState !== 'saving' && saveState !== 'saved')) return null;
     return (
@@ -301,87 +197,6 @@ export function BugDetailsView({
     if (!url) return;
     await window.bugPocket.openExternalUrl(url);
   };
-  const triageWithLocalAi = async (refinementNote = ''): Promise<void> => {
-    if (developerReadOnly || triaging) return;
-    const currentBug = bugRef.current ?? bug;
-    if (!currentBug) return;
-    const currentEntryDisplay = getEntryDisplay(currentBug);
-    const currentApplication = settings.applications.find((application) => application.id === currentBug.application_id);
-    const currentModule = settings.modules.find((module) => module.id === currentBug.module_id);
-    let aiConfig: AiByokConfig;
-    try {
-      aiConfig = await window.bugPocket.getAiConfig() as AiByokConfig;
-    } catch (caught) {
-      showDetailsToast(parseErrorForUI(caught), 'error');
-      return;
-    }
-    const apiKeyReady = Boolean(aiConfig?.hasApiKey);
-    setByokAiReady(apiKeyReady);
-    if (!apiKeyReady) {
-      setAiStatus('idle');
-      showDetailsToast('Please configure your AI API key in Settings.', 'error');
-      return;
-    }
-    setAiStatus('loading');
-    try {
-      const triageText = String(await window.bugPocket.triageBug({
-        id: currentBug.id,
-        title: currentEntryDisplay.title,
-        note: currentBug.note,
-        other_details: currentBug.other_details,
-        steps_to_reproduce: currentBug.steps_to_reproduce,
-        expected_result: currentBug.expected_result,
-        actual_result: currentBug.actual_result,
-        application: currentBug.application_name || '',
-        application_context: currentApplication?.context_description ?? '',
-        module: currentBug.module_name || '',
-        module_context: currentModule?.context_description ?? '',
-        environment: currentBug.environment,
-        device: currentBug.device,
-        browser: currentBug.browser,
-        user_role: currentBug.user_role,
-        entry_type: currentBug.entry_type,
-        severity: currentBug.severity,
-        status: currentBug.status,
-        attachment_id: currentBug.attachments[0] ? String(currentBug.attachments[0].id) : undefined,
-        refinement_note: refinementNote.trim() || undefined
-      })).trim();
-      if (!triageText) throw new Error('AI triage returned an empty response.');
-      const cleanJsonString = triageText.match(/\{[\s\S]*\}/)?.[0] || triageText;
-      let aiAppliedBug: BugDetails = currentBug;
-      try {
-        const triageData = JSON.parse(cleanJsonString) as Partial<Record<'title' | 'bugNote' | 'stepsToReproduce' | 'expectedResult' | 'actualResult', unknown>>;
-        const title = aiTextField(triageData.title);
-        const bugNote = aiTextField(triageData.bugNote);
-        const stepsToReproduce = aiTextField(triageData.stepsToReproduce);
-        const expectedResult = aiTextField(triageData.expectedResult);
-        const actualResult = aiTextField(triageData.actualResult);
-        aiAppliedBug = {
-          ...currentBug,
-          ...(title ? { title } : {}),
-          ...(bugNote ? { note: bugNote } : {}),
-          ...(stepsToReproduce ? { steps_to_reproduce: formatStepsAsNumberedList(stepsToReproduce) } : {}),
-          ...(expectedResult ? { expected_result: expectedResult } : {}),
-          ...(actualResult ? { actual_result: actualResult } : {})
-        };
-      } catch (error) {
-        console.error('AI returned malformed JSON', error);
-        const fallbackNote = [currentBug.note.trim(), cleanJsonString].filter(Boolean).join('\n\n');
-        aiAppliedBug = { ...currentBug, note: fallbackNote };
-      }
-
-      setBug(aiAppliedBug);
-      bugRef.current = aiAppliedBug;
-      markDirty();
-      setAiStatus('completed');
-      setShowAiRefinement(false);
-      setAiRefinementNote('');
-      showDetailsToast('AI Triage applied. Review the generated fields before saving.');
-    } catch (caught) {
-      setAiStatus('idle');
-      showDetailsToast(parseErrorForUI(caught), 'error');
-    }
-  };
   const addScreenshot = async (): Promise<void> => {
     if (developerReadOnly) return;
     await window.bugPocket.startScreenshotCapture(bug.id);
@@ -391,16 +206,21 @@ export function BugDetailsView({
     await window.bugPocket.deleteAttachment(attachmentId);
     const updated = await window.bugPocket.getBug(bug.id);
     if (updated) {
-      setBug(updated);
-      bugRef.current = updated;
+      setBug(current => {
+        if (!current || current.id !== updated.id) return current;
+        const merged = { ...current, attachments: updated.attachments };
+        bugRef.current = merged;
+        return merged;
+      });
     }
-    setSpotlight(null);
+    closeSpotlight();
   };
   const downloadAttachment = async (attachmentId: number): Promise<void> => { await window.bugPocket.downloadAttachment(attachmentId) as AttachmentDownloadResult; };
   const deleteReport = async (): Promise<void> => {
     if (developerReadOnly) return;
     setDeleting(true);
-    try { await window.bugPocket.deleteBug(bug.id); onBack(); }
+    try { await flushSync(); await window.bugPocket.deleteBug(bug.id); resetSavedBaseline(null); onBack(); }
+    catch (error) { showDetailsToast(String(error), 'error'); }
     finally { setDeleting(false); }
   };
   const convertScenarioToBug = async (): Promise<void> => {
@@ -588,14 +408,14 @@ export function BugDetailsView({
         </aside>
       </div>
       {spotlight && (
-        <div className="spotlight-backdrop" role="dialog" aria-modal="true" aria-label="Screenshot preview" onClick={() => setSpotlight(null)}>
+        <div className="spotlight-backdrop" role="dialog" aria-modal="true" aria-label="Screenshot preview" onClick={() => closeSpotlight()}>
           <div className="spotlight-panel" onClick={(event) => event.stopPropagation()}>
             <header className="spotlight-header">
               <div>
                 <h2>{spotlight.bugTitle}</h2>
                 <p>{currentSpotlightAttachment ? `${currentSpotlightAttachment.file_name} (${spotlight.index + 1} of ${spotlight.attachments.length})` : 'Attachment preview'}</p>
               </div>
-              <button className="icon-button" aria-label="Close preview" onClick={() => setSpotlight(null)}><X size={18} /></button>
+              <button className="icon-button" aria-label="Close preview" onClick={() => closeSpotlight()}><X size={18} /></button>
             </header>
             <div className="spotlight-stage">
               {spotlight.loading && <div className="spotlight-message">Loading preview...</div>}
@@ -626,11 +446,3 @@ export function BugDetailsView({
     </section>
   );
 }
-
-
-
-
-
-
-
-

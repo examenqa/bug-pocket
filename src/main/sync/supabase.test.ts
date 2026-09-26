@@ -232,7 +232,7 @@ test('Supabase keeps developer access read-only while preserving workspace bound
         { workspace_id: workspaceA.id, user_id: userA.id, role: 'owner' },
         { workspace_id: workspaceB.id, user_id: userB.id, role: 'owner' },
         { workspace_id: workspaceA.id, user_id: userB.id, role: 'developer' }
-      ]),
+      ]).select('workspace_id'),
       'Create owner and developer memberships'
     );
 

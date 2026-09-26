@@ -149,3 +149,10 @@ release-build/
 latest.yml
 builder-debug.yml
 builder-effective-config.yaml
+
+# Supabase CLI local workspace state and SQL editor scratch files
+supabase/.branches/
+supabase/snippets/
+
+# Incomplete local workflow drafts
+.github/workflows/build.yml

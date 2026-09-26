@@ -1,10 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createClient, type SupabaseClient, type SupportedStorage, type WebSocketLikeConstructor } from '@supabase/supabase-js';
 import WebSocket from 'ws';
-import type { BugDetails, FeedbackPayload, SyncAccountSetup, SyncAuthResult, SyncConnectionResult, SyncQueueEvent, SyncRolePermission, SyncRuntimeStatus, SyncSessionStatus, SyncWorkspaceOption, WorkspaceRole } from '../../shared/types';
+import type { BugDetails, SyncAccountSetup, SyncAuthResult, SyncConnectionResult, SyncQueueEvent, SyncRolePermission, SyncRuntimeStatus, SyncSessionStatus, SyncWorkspaceOption, WorkspaceRole } from '../../shared/types';
 import type { BugPocketDatabase } from '../database';
 import { operationBarrier } from '../OperationBarrier';
 import {
@@ -15,6 +15,7 @@ import {
 import { pullWithCompositeCursors, type RemotePullClient, type RemotePullRow } from './compositeCursorPull';
 import { SafeStorageAdapter } from './SafeStorageAdapter';
 import { httpStatusFromError, throwIfSupabaseError } from './supabaseErrors';
+import { resolveWorkspaceMembership, sortWorkspaceOptions } from './workspaceSelection';
 
 export interface SyncStatus {
   enabled: boolean;
@@ -38,6 +39,7 @@ type WorkspaceAccess = {
   role: WorkspaceRole;
   canRead: boolean;
   canWrite: boolean;
+  selectionRequired?: boolean;
 };
 
 type WorkspaceRow = {
@@ -240,15 +242,20 @@ export class SyncEngine {
 
     try {
       const claimedWorkspaceId = await this.claimPendingInvite(client);
-      const membership = await this.captureCurrentWorkspaceMembership(client, claimedWorkspaceId);
+      const preferredWorkspaceId = claimedWorkspaceId ?? this.database.getCurrentWorkspaceId();
+      const membership = await this.captureCurrentWorkspaceMembership(client, preferredWorkspaceId);
       if (!membership.workspaceId) {
         this.database.setCloudSyncSessionActive(false);
         this.stopBackgroundSync();
+        const selectionRequired = membership.selectionRequired === true;
         return {
-          success: false,
+          success: selectionRequired,
           authenticated: true,
           email: data.user?.email ?? email.trim(),
-          message: 'Signed in, but no workspace membership was found for this user. Create or assign a workspace before syncing.'
+          workspaceSelectionRequired: selectionRequired,
+          message: selectionRequired
+            ? 'Signed in. Choose a workspace before cloud sync starts.'
+            : 'Signed in, but no workspace membership was found for this user. Create or assign a workspace before syncing.'
         };
       }
 
@@ -310,21 +317,25 @@ export class SyncEngine {
 
     try {
       const claimedWorkspaceId = await this.claimPendingInvite(client);
-      const membership = await this.captureCurrentWorkspaceMembership(client, claimedWorkspaceId);
+      const preferredWorkspaceId = claimedWorkspaceId ?? this.database.getCurrentWorkspaceId();
+      const membership = await this.captureCurrentWorkspaceMembership(client, preferredWorkspaceId);
       this.database.setCloudSyncSessionActive(Boolean(membership.workspaceId));
       if (membership.workspaceId) this.startBackgroundSync();
       else this.stopBackgroundSync();
       return {
-        success: Boolean(membership.workspaceId),
+        success: Boolean(membership.workspaceId) || membership.selectionRequired === true,
         authenticated: true,
         email: data.user?.email ?? email.trim(),
         workspaceId: membership.workspaceId ?? undefined,
         workspaceRole: membership.role,
         workspaceCanRead: membership.canRead,
         workspaceCanWrite: membership.canWrite,
+        workspaceSelectionRequired: membership.selectionRequired === true,
         message: membership.workspaceId
           ? 'Account created and workspace captured locally.'
-          : 'Account created, but no workspace membership was found yet.'
+          : membership.selectionRequired
+            ? 'Account created. Choose a workspace before cloud sync starts.'
+            : 'Account created, but no workspace membership was found yet.'
       };
     } catch (caught) {
       this.database.setCloudSyncSessionActive(false);
@@ -392,17 +403,15 @@ export class SyncEngine {
     if (error) throw new Error(`Could not restore the saved Supabase session: ${error.message}`);
 
     const authenticated = Boolean(data.session);
-    const workspaceId = this.database.getCurrentWorkspaceId();
-    let hasWorkspaceAccess = false;
-    if (authenticated && workspaceId) {
+    let access: WorkspaceAccess | null = null;
+    if (authenticated) {
       try {
-        const access = await this.refreshWorkspaceAccessForUser(client, workspaceId, data.session?.user.id ?? '');
-        hasWorkspaceAccess = Boolean(access);
+        access = await this.captureCurrentWorkspaceMembership(client, this.database.getCurrentWorkspaceId());
       } catch (caught) {
-        console.warn('[Bug Pocket Sync] Could not refresh workspace permissions while restoring the session.', caught);
-        this.database.updateWorkspacePermissions(workspaceId, false, false);
+        console.warn('[Bug Pocket Sync] Could not restore workspace access for the saved session.', caught);
       }
     }
+    const hasWorkspaceAccess = Boolean(access?.workspaceId);
     this.database.setCloudSyncSessionActive(authenticated && hasWorkspaceAccess);
     if (authenticated && hasWorkspaceAccess) this.startBackgroundSync();
     else this.stopBackgroundSync();
@@ -415,7 +424,7 @@ export class SyncEngine {
   }
 
   async switchWorkspace(newWorkspaceId: string): Promise<SyncAuthResult> {
-    return operationBarrier.acquire(this.switchWorkspaceInternal(newWorkspaceId));
+    return operationBarrier.acquire(() => this.switchWorkspaceInternal(newWorkspaceId));
   }
 
   private async switchWorkspaceInternal(newWorkspaceId: string): Promise<SyncAuthResult> {
@@ -515,11 +524,12 @@ export class SyncEngine {
     const { data: memberships, error: membershipError } = await client
       .from('workspace_members')
       .select('workspace_id, role')
-      .eq('user_id', userData.user.id);
+      .eq('user_id', userData.user.id)
+      .order('workspace_id', { ascending: true });
 
     if (membershipError) throw membershipError;
 
-    const workspaceIds = Array.from(new Set((memberships ?? []).map((row) => String(row.workspace_id)).filter(Boolean)));
+    const workspaceIds = Array.from(new Set((memberships ?? []).map((row) => String(row.workspace_id)).filter(Boolean))).sort();
     if (!workspaceIds.length) return [];
 
     const { data: workspaces, error: workspacesError } = await client
@@ -530,10 +540,10 @@ export class SyncEngine {
     if (workspacesError) throw workspacesError;
 
     const nameById = new Map((workspaces as WorkspaceRow[] | null ?? []).map((workspace) => [workspace.id, workspace.name ?? undefined]));
-    return workspaceIds.map((workspaceId) => ({
+    return sortWorkspaceOptions(workspaceIds.map((workspaceId) => ({
       workspaceId,
       name: nameById.get(workspaceId)
-    }));
+    })));
   }
 
   async inviteUserToWorkspace(targetEmail: string, targetRole: string): Promise<string> {
@@ -624,16 +634,14 @@ export class SyncEngine {
       return { authenticated: false, workspaceId: this.database.getCurrentWorkspaceId() ?? undefined };
     }
 
-    const workspaceId = this.database.getCurrentWorkspaceId();
-    let hasWorkspaceAccess = false;
-    if (workspaceId) {
-      try {
-        hasWorkspaceAccess = Boolean(await this.refreshWorkspaceAccessForUser(this.client, workspaceId, data.user.id));
-      } catch (caught) {
-        console.warn('[Bug Pocket Sync] Could not refresh cached workspace permissions.', caught);
-        this.database.updateWorkspacePermissions(workspaceId, false, false);
-      }
+    let access: WorkspaceAccess | null = null;
+    try {
+      access = await this.captureCurrentWorkspaceMembership(this.client, this.database.getCurrentWorkspaceId());
+    } catch (caught) {
+      console.warn('[Bug Pocket Sync] Could not refresh cached workspace permissions.', caught);
     }
+    const workspaceId = access?.workspaceId ?? null;
+    const hasWorkspaceAccess = Boolean(workspaceId);
     this.database.setCloudSyncSessionActive(hasWorkspaceAccess);
     if (hasWorkspaceAccess) this.startBackgroundSync();
     else this.stopBackgroundSync();
@@ -642,58 +650,13 @@ export class SyncEngine {
       authenticated: true,
       email: data.user.email ?? undefined,
       workspaceId: workspaceId ?? undefined,
-      workspaceRole: this.database.getWorkspaceRole(workspaceId),
-      workspaceCanRead: this.database.getWorkspacePermissions(workspaceId).canRead,
-      workspaceCanWrite: this.database.getWorkspacePermissions(workspaceId).canWrite
+      workspaceRole: access?.role ?? this.database.getWorkspaceRole(workspaceId),
+      workspaceCanRead: access?.canRead ?? false,
+      workspaceCanWrite: access?.canWrite ?? false,
+      workspaceSelectionRequired: access?.selectionRequired === true
     };
   }
 
-  async sendFeedback(payload: FeedbackPayload): Promise<{ success: boolean; error?: string }> {
-    try {
-      const client = this.requireClient();
-      const message = payload.message.trim();
-      if (!message) return { success: false, error: 'Please enter a message before sending.' };
-
-      const publicImageUrl = payload.image_base64 ? await this.uploadTelemetryImage(client, payload.image_base64) : undefined;
-
-      const feedbackBody = {
-        type: payload.type === 'Feature' ? 'Feature' : 'Bug',
-        message,
-        user_email: payload.user_email?.trim() || undefined,
-        image_url: publicImageUrl
-      };
-
-      const { error } = await client.functions.invoke('submit-feedback', { body: feedbackBody });
-
-      if (error) return { success: false, error: error.message };
-      return { success: true };
-    } catch (caught) {
-      return {
-        success: false,
-        error: caught instanceof Error ? caught.message : 'Unable to send feedback.'
-      };
-    }
-  }
-
-  private async uploadTelemetryImage(client: SupabaseClient, dataUrlOrBase64: string): Promise<string> {
-    const base64 = dataUrlOrBase64.replace(/^data:image\/(png|jpe?g);base64,/i, '').replace(/\s/g, '');
-    if (!base64) throw new Error('Image payload was empty.');
-
-    const bytes = Buffer.from(base64, 'base64');
-    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
-    const fileExtension = isJpeg ? '.jpg' : '.png';
-    const contentType = isJpeg ? 'image/jpeg' : 'image/png';
-    const fileName = `${randomUUID()}${fileExtension}`;
-    const { error } = await client.storage.from('telemetry-assets').upload(fileName, bytes, {
-      contentType,
-      upsert: false
-    });
-    if (error) throw new Error(`Image upload failed: ${error.message}`);
-
-    const { data } = client.storage.from('telemetry-assets').getPublicUrl(fileName);
-    if (!data.publicUrl) throw new Error('Image uploaded, but no public URL was returned.');
-    return data.publicUrl;
-  }
   startBackgroundSync(): void {
     if (this.syncTimer || this.projectPaused) return;
     this.syncSuspended = false;
@@ -751,7 +714,6 @@ export class SyncEngine {
       if (!workspaceId) return;
       if (this.syncSuspended) return;
       if (this.projectPaused) return;
-      if (Date.now() < this.retryDelayUntil) return;
 
       const client = this.client;
       if (!client) return;
@@ -761,7 +723,11 @@ export class SyncEngine {
 
       await this.pullRemoteTaxonomyFor(client, workspaceId);
       await this.pullRemoteChangesFor(client, workspaceId);
-      if (this.database.getWorkspacePermissions(workspaceId).canWrite) {
+      await this.drainAttachmentDownloadQueue(client, workspaceId);
+      if (
+        Date.now() >= this.retryDelayUntil
+        && this.database.getWorkspacePermissions(workspaceId).canWrite
+      ) {
         await this.drainSyncQueue(client, workspaceId);
       }
     } catch (caught) {
@@ -780,7 +746,9 @@ export class SyncEngine {
     const workspaceId = this.database.getCurrentWorkspaceId();
     if (!client || !workspaceId) return false;
     await this.pullRemoteTaxonomyFor(client, workspaceId);
-    return this.pullRemoteChangesFor(client, workspaceId);
+    const changed = await this.pullRemoteChangesFor(client, workspaceId);
+    await this.drainAttachmentDownloadQueue(client, workspaceId);
+    return changed;
   }
 
   async pullRemoteTaxonomy(): Promise<boolean> {
@@ -827,8 +795,9 @@ export class SyncEngine {
       batchSize: syncBatchSize,
       getCursor: (entityType) => this.database.getRemoteSyncCursor(workspaceId, entityType),
       applyBugBatch: (rows) => this.database.applyRemoteBugBatch(rows),
-      applyAttachmentBatch: async (rows) => {
+      applyAttachmentBatch: (rows) => {
         const validatedRows = rows.map((row) => {
+          if (String(row.deleted_at ?? '').trim()) return row;
           const attachmentMetadata = validateAttachmentMetadata(row.content_hash, row.file_extension);
           return {
             ...row,
@@ -836,16 +805,7 @@ export class SyncEngine {
             file_extension: attachmentMetadata.extension
           };
         });
-        const attachmentChanged = this.database.applyRemoteAttachmentBatch(validatedRows);
-        for (const row of validatedRows) {
-          await this.downloadAttachmentBinary(
-            client,
-            workspaceId,
-            String(row.content_hash),
-            String(row.file_extension)
-          );
-        }
-        return attachmentChanged;
+        return this.database.applyRemoteAttachmentBatch(validatedRows);
       },
       updateCursor: (entityType, cursor) => this.database.updateRemoteSyncCursor(workspaceId, entityType, cursor),
       emitChanged: this.emitBugsChanged
@@ -1075,17 +1035,26 @@ export class SyncEngine {
     }
 
     if (contentHash && storageTarget) {
+      const attachmentStorage = client.storage.from('attachments');
       const filePath = storageTarget.localPath;
       if (!existsSync(filePath)) {
-        // The metadata row can still sync; a future pull may recover the binary from cloud storage.
+        const remoteObject = await attachmentStorage.exists(storageTarget.storageKey);
+        const remoteStatus = httpStatusFromError(remoteObject.error);
+        if (remoteObject.error && remoteStatus !== 400 && remoteStatus !== 404) {
+          throwIfSupabaseError(remoteObject, 'Unable to verify remote attachment');
+        }
+        if (!remoteObject.data) {
+          throw new Error(
+            `Attachment binary is missing locally and does not exist remotely: ${storageTarget.storageKey}. ` +
+            'Remote metadata was not created.'
+          );
+        }
       } else {
         const fileBytes = await readFile(filePath);
-        const uploadResult = await client.storage
-          .from('attachments')
-          .upload(storageTarget.storageKey, fileBytes, {
-            contentType: String(payload.mime_type || 'image/png'),
-            upsert: true
-          });
+        const uploadResult = await attachmentStorage.upload(storageTarget.storageKey, fileBytes, {
+          contentType: String(payload.mime_type || 'image/png'),
+          upsert: true
+        });
         throwIfSupabaseError(uploadResult, 'Unable to upload attachment');
       }
     }
@@ -1110,6 +1079,26 @@ export class SyncEngine {
     throwIfSupabaseError(result, 'Unable to sync reference event');
   }
 
+  private async drainAttachmentDownloadQueue(client: SupabaseClient, workspaceId: string): Promise<void> {
+    const downloads = this.database.getPendingAttachmentDownloads(syncBatchSize, maxSyncAttempts);
+    for (const download of downloads) {
+      try {
+        await this.downloadAttachmentBinary(
+          client,
+          workspaceId,
+          download.content_hash,
+          download.file_extension
+        );
+        this.database.markAttachmentDownloadSucceeded(download.attachment_id);
+      } catch (caught) {
+        if (this.markProjectPaused(caught)) break;
+        this.database.recordAttachmentDownloadFailure(
+          download.attachment_id,
+          this.formatSyncError(caught)
+        );
+      }
+    }
+  }
   private async downloadAttachmentBinary(
     client: SupabaseClient,
     workspaceId: string,
@@ -1221,18 +1210,35 @@ export class SyncEngine {
   }
 
   private async captureCurrentWorkspaceMembership(client: SupabaseClient, preferredWorkspaceId: string | null = null): Promise<WorkspaceAccess> {
-    let query = client
+    const { data: userData, error: userError } = await client.auth.getUser();
+    if (userError || !userData.user) throw userError ?? new Error('Authenticated user was not found.');
+
+    const { data, error } = await client
       .from('workspace_members')
       .select('workspace_id, role')
-      .limit(1);
-    if (preferredWorkspaceId) query = query.eq('workspace_id', preferredWorkspaceId);
-    const { data, error } = await query.maybeSingle<WorkspaceMembershipRow>();
+      .eq('user_id', userData.user.id)
+      .order('workspace_id', { ascending: true });
 
     if (error) throw error;
-    const workspaceId = data?.workspace_id ?? null;
-    this.database.updateCurrentWorkspaceId(workspaceId);
-    if (!workspaceId) return { workspaceId: null, role: 'admin', canRead: false, canWrite: false };
-    return this.cacheWorkspaceAccess(client, workspaceId, data?.role);
+    const resolution = resolveWorkspaceMembership((data ?? []) as WorkspaceMembershipRow[], preferredWorkspaceId);
+    const membership = resolution.membership;
+    if (!membership) {
+      this.database.disconnectWorkspace();
+      this.database.updateCurrentWorkspaceId(null);
+      return {
+        workspaceId: null,
+        role: 'admin',
+        canRead: false,
+        canWrite: false,
+        selectionRequired: resolution.selectionRequired
+      };
+    }
+
+    const workspaceId = membership.workspace_id;
+    if (this.database.getCurrentWorkspaceId() !== workspaceId) {
+      await this.database.connectToWorkspaceTracked(workspaceId);
+    }
+    return this.cacheWorkspaceAccess(client, workspaceId, membership.role);
   }
 
   private async cacheWorkspaceAccess(client: SupabaseClient, workspaceId: string, rawRole: WorkspaceRole | string | null | undefined): Promise<WorkspaceAccess> {

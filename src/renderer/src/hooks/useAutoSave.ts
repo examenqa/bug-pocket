@@ -1,6 +1,7 @@
 import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BugDetails } from '../../../shared/types';
 import { buildBugUpdateInput, DetailsSaveState, serializeBugUpdateInput } from '../utils/bugUpdate';
+import { drainDraft, registerDraftFlush } from '../utils/draftLifecycle';
 import { useDebounce } from './useDebounce';
 
 interface UseAutoSaveOptions {
@@ -27,14 +28,13 @@ export function useAutoSave({ bug, setBug, saveCallback, showToast }: UseAutoSav
   useEffect(() => { bugRef.current = bug; }, [bug]);
 
   useEffect(() => {
-    isDirtyRef.current = isDirty;
+    document.body.dataset.detailsDirty = String(isDirty);
     void window.bugPocket.setDetailsDirty(isDirty);
   }, [isDirty]);
 
   useEffect(() => {
     return () => {
       if (saveStateTimerRef.current) window.clearTimeout(saveStateTimerRef.current);
-      void window.bugPocket.setDetailsDirty(false);
     };
   }, []);
 
@@ -51,6 +51,7 @@ export function useAutoSave({ bug, setBug, saveCallback, showToast }: UseAutoSav
     isDirtyRef.current = true;
     setIsDirty(true);
     setSaveState('dirty');
+    document.body.dataset.detailsDirty = 'true';
     void window.bugPocket.setDetailsDirty(true);
   }, []);
 
@@ -60,11 +61,13 @@ export function useAutoSave({ bug, setBug, saveCallback, showToast }: UseAutoSav
     isDirtyRef.current = false;
     setIsDirty(false);
     setSaveState(state);
+    document.body.dataset.detailsDirty = 'false';
     void window.bugPocket.setDetailsDirty(false);
   }, []);
 
   const triggerSave = useCallback(async ({ showToast: showSuccessToast = false, bugOverride = null }: TriggerSaveOptions = {}): Promise<BugDetails | null> => {
-    if (saveInFlightRef.current) await saveInFlightRef.current;
+    if (bugOverride) { bugRef.current = bugOverride; isDirtyRef.current = true; }
+    if (saveInFlightRef.current) return saveInFlightRef.current;
     const currentBug = bugOverride ?? bugRef.current;
     if (!currentBug) return null;
     if (bugOverride) bugRef.current = bugOverride;
@@ -74,49 +77,54 @@ export function useAutoSave({ bug, setBug, saveCallback, showToast }: UseAutoSav
     if (payloadKey === lastSavedPayloadRef.current) {
       isDirtyRef.current = false;
       setIsDirty(false);
+      document.body.dataset.detailsDirty = 'false';
       void window.bugPocket.setDetailsDirty(false);
       if (showSuccessToast) showToast?.('Details already saved.');
       return currentBug;
     }
 
     setSaveState('saving');
-    const savePromise = saveCallback(currentBug) as Promise<BugDetails>;
-    saveInFlightRef.current = savePromise;
-    try {
-      const updated = await savePromise;
-      const latestBug = bugRef.current;
-      const latestPayloadKey = latestBug ? serializeBugUpdateInput(buildBugUpdateInput(latestBug)) : payloadKey;
-      lastSavedPayloadRef.current = serializeBugUpdateInput(buildBugUpdateInput(updated));
+    const savePromise = (async (): Promise<BugDetails | null> => {
+      try {
+        const updated = await Promise.resolve().then(() => saveCallback(currentBug));
+        const latestBug = bugRef.current;
+        const latestPayloadKey = latestBug ? serializeBugUpdateInput(buildBugUpdateInput(latestBug)) : payloadKey;
+        lastSavedPayloadRef.current = serializeBugUpdateInput(buildBugUpdateInput(updated));
 
-      if (latestPayloadKey !== payloadKey) {
-        isDirtyRef.current = true;
-        setIsDirty(true);
-        setSaveState('dirty');
-        void window.bugPocket.setDetailsDirty(true);
-        return latestBug;
+        if (latestPayloadKey !== payloadKey) {
+          isDirtyRef.current = true;
+          setIsDirty(true);
+          setSaveState('dirty');
+          document.body.dataset.detailsDirty = 'true';
+          void window.bugPocket.setDetailsDirty(true);
+          return latestBug;
+        }
+
+        setBug(updated);
+        bugRef.current = updated;
+        isDirtyRef.current = false;
+        setIsDirty(false);
+        document.body.dataset.detailsDirty = 'false';
+        void window.bugPocket.setDetailsDirty(false);
+        markSavedSoon();
+        if (showSuccessToast) showToast?.('Details saved successfully.');
+        return updated;
+      } catch (caught) {
+        setSaveState('error');
+        const message = caught instanceof Error ? caught.message : 'Unable to save details.';
+        showToast?.(message, 'error');
+        throw caught;
+      } finally {
+        saveInFlightRef.current = null;
       }
-
-      setBug(updated);
-      bugRef.current = updated;
-      isDirtyRef.current = false;
-      setIsDirty(false);
-      void window.bugPocket.setDetailsDirty(false);
-      markSavedSoon();
-      if (showSuccessToast) showToast?.('Details saved successfully.');
-      return updated;
-    } catch (caught) {
-      setSaveState('error');
-      const message = caught instanceof Error ? caught.message : 'Unable to save details.';
-      showToast?.(message, 'error');
-      throw caught;
-    } finally {
-      saveInFlightRef.current = null;
-    }
+    })();
+    saveInFlightRef.current = savePromise;
+    return savePromise;
   }, [markSavedSoon, saveCallback, setBug, showToast]);
 
   const flushSync = useCallback(async (): Promise<BugDetails | null> => {
-    if (!isDirtyRef.current) return bugRef.current;
-    return triggerSave();
+    await drainDraft(() => saveInFlightRef.current, () => isDirtyRef.current, () => triggerSave());
+    return bugRef.current;
   }, [triggerSave]);
 
   useEffect(() => {
@@ -125,23 +133,14 @@ export function useAutoSave({ bug, setBug, saveCallback, showToast }: UseAutoSav
     if (debouncedFormPayloadKey === lastSavedPayloadRef.current) {
       isDirtyRef.current = false;
       setIsDirty(false);
+      document.body.dataset.detailsDirty = 'false';
       void window.bugPocket.setDetailsDirty(false);
       return;
     }
-    void triggerSave();
+    void triggerSave().catch(() => { /* The retained draft and toast expose the error. */ });
   }, [debouncedFormPayloadKey, formPayloadKey, triggerSave]);
 
-  useEffect(() => {
-    return window.bugPocket.onDetailsFlushRequest(() => {
-      void (async () => {
-        try {
-          await flushSync();
-        } finally {
-          await window.bugPocket.detailsFlushComplete();
-        }
-      })();
-    });
-  }, [flushSync]);
+  useEffect(() => registerDraftFlush(flushSync), [flushSync]);
 
   return {
     triggerSave,

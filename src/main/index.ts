@@ -1,6 +1,6 @@
+import { DetailsFlushGate } from './detailsFlush';
 import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog, safeStorage } from 'electron';
 import log from 'electron-log/main';
-import { autoUpdater } from 'electron-updater';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -20,9 +20,12 @@ import { normalizeSupabaseCredentials } from './sync/supabaseCredentials';
 import { startSupabaseKeepAlive } from './sync/keepAlive';
 import { createBackupArchive, restoreBackupArchive } from './sync/backupService';
 import { getAssetPath } from './assetPaths';
-import { configureAutoUpdater, registerUpdateInstallIpc, runGracefulShutdown } from './updater';
+import { runGracefulShutdown } from './lifecycle';
 import { operationBarrier } from './OperationBarrier';
+import { runDestructiveMaintenance } from './destructiveLifecycle';
+import { sendFeedbackToExamenQa } from './support/feedbackService';
 import type { AiConfigSaveInput, AiIssueProcessPayload, AiTriageBugPayload, AiTriageResult, AttachmentDownloadResult, BackupExportResult, BackupImportResult, CapturePresetInput, FeedbackPayload, ReferenceTable, SettingsData, ShortcutAction, ShortcutSetting, SyncAccountSetup, TaxonomyId } from '../shared/types';
+import { DASHBOARD_ROUTE } from '../shared/navigation';
 
 const packagedSmokeUserData = process.env.BUG_POCKET_SMOKE_USER_DATA?.trim();
 const packagedSmokeTest = app.isPackaged && process.env.BUG_POCKET_PACKAGED_SMOKE_TEST === '1' && Boolean(packagedSmokeUserData);
@@ -55,8 +58,8 @@ let screenshotBugId: number | null = null;
 let mainWasVisibleBeforeSnip = false;
 let shortcutRegistrationErrors: Partial<Record<ShortcutAction, string>> = {};
 let rendererHasDirtyDetails = false;
-let pendingMainCloseAfterFlush = false;
-let pendingMainCloseTimer: NodeJS.Timeout | null = null;
+const detailsFlushGate = new DetailsFlushGate();
+let detailsTransitionInProgress = false;
 let quickTopmostPulseTimer: NodeJS.Timeout | null = null;
 const quickCaptureCompactSize = { width: 460, height: 505 };
 const quickCaptureReviewSize = { width: 880, height: 760 };
@@ -99,6 +102,7 @@ async function gracefulShutdown(): Promise<void> {
 
   gracefulShutdownPromise = runGracefulShutdown({
     pauseRenderer: pauseRendererForShutdown,
+    collectDrafts: flushMainDetails,
     drainOperations: () => operationBarrier.drain(),
     stopAndDrain: async () => {
       stopSupabaseKeepAlive?.();
@@ -122,6 +126,7 @@ async function gracefulShutdown(): Promise<void> {
     console.error('[shutdown] Graceful shutdown failed. Attempting to restore background services.', error);
     gracefulShutdownPromise = null;
     shutdownInProgress = false;
+    mainWindow?.webContents.send('details:resume');
     isQuitting = false;
     BrowserWindow.getAllWindows().forEach((window) => {
       window.setIgnoreMouseEvents(false);
@@ -215,7 +220,7 @@ function enforceStartupPreference(enabled: boolean): void {
   });
 }
 
-function createMainWindow(route = '/dashboard', showOnReady = true): void {
+function createMainWindow(route = DASHBOARD_ROUTE, showOnReady = true): void {
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 760,
@@ -252,36 +257,53 @@ function createMainWindow(route = '/dashboard', showOnReady = true): void {
     if (showOnReady) mainWindow?.show();
   });
   mainWindow.on('close', (event) => {
-    if (isQuitting) return;
+    if (gracefulShutdownComplete) return;
     event.preventDefault();
-    if (rendererHasDirtyDetails && !pendingMainCloseAfterFlush) {
-      pendingMainCloseAfterFlush = true;
-      mainWindow?.webContents.send('details:flush-save-request');
-      pendingMainCloseTimer = setTimeout(() => {
-        pendingMainCloseAfterFlush = false;
-        pendingMainCloseTimer = null;
-        mainWindow?.hide();
-      }, 5000);
-      return;
-    }
-    mainWindow?.hide();
+    if (isQuitting) return;
+    if (detailsTransitionInProgress) return;
+    void withFlushedDetails(() => mainWindow?.hide()).catch(error => {
+      mainWindow?.webContents.send('app:toast', String(error.message ?? error), 'error');
+    });
+  });
+  mainWindow.on('query-session-end', (event) => {
+    if (gracefulShutdownComplete) return;
+    event.preventDefault();
+    app.quit(); // before-quit performs the same save/drain contract as an explicit quit.
   });
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
 
-function finishPendingMainClose(): void {
-  rendererHasDirtyDetails = false;
-  if (!pendingMainCloseAfterFlush) return;
-  pendingMainCloseAfterFlush = false;
-  if (pendingMainCloseTimer) {
-    clearTimeout(pendingMainCloseTimer);
-    pendingMainCloseTimer = null;
+async function flushMainDetails(): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    if (rendererHasDirtyDetails) throw new Error('The edited report is unavailable. Quit was cancelled.');
+    return;
   }
-  const windowToClose = mainWindow;
-  mainWindow = null;
-  windowToClose?.destroy();
+  if (mainWindow.webContents.isLoadingMainFrame()) {
+    if (rendererHasDirtyDetails) throw new Error('The report is still loading; retry after it is ready.');
+    return;
+  }
+  await detailsFlushGate.request(id => mainWindow!.webContents.send('details:flush-save-request', id));
+}
+
+async function withFlushedDetails<T>(action: () => T | Promise<T>): Promise<T> {
+  if (shutdownInProgress) throw new Error('Bug Pocket is shutting down.');
+  if (detailsTransitionInProgress) throw new Error('A report transition is already in progress.');
+  detailsTransitionInProgress = true;
+  try {
+    await flushMainDetails();
+    return await action();
+  } finally {
+    detailsTransitionInProgress = false;
+    mainWindow?.webContents.send('details:resume');
+  }
+}
+
+function discardQuickCaptures(): void {
+  db.discardPendingCaptures();
+  pendingQuickScreenshotDataUrl = '';
+  restoreQuickCaptureCompactSize();
 }
 
 function createQuickWindow(): void {
@@ -319,9 +341,8 @@ function createQuickWindow(): void {
   quickWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
-      pendingQuickScreenshotDataUrl = '';
-      restoreQuickCaptureCompactSize();
-      quickWindow?.hide();
+      try { discardQuickCaptures(); quickWindow?.hide(); }
+      catch (error) { dialog.showErrorBox('Unable to discard capture', String(error)); }
     }
   });
 }
@@ -384,7 +405,7 @@ function restoreQuickCaptureCompactSize(): void {
   quickWindow.setResizable(false);
 }
 
-function openMainWindow(route = '/dashboard'): void {
+function openMainWindow(route = DASHBOARD_ROUTE): void {
   if (!mainWindow) {
     createMainWindow(route);
   } else {
@@ -442,7 +463,7 @@ function shortcutLabel(accelerator: string): string {
 function shortcutHandlers(): Record<ShortcutAction, () => void> {
   return {
     quick_capture: () => { void openQuickCapture(); },
-    main_panel: () => openMainWindow('/dashboard'),
+    main_panel: () => openMainWindow(DASHBOARD_ROUTE),
     global_screenshot: () => { void startScreenshotCapture(); }
   };
 }
@@ -466,6 +487,16 @@ function notifySettingsChanged(): void {
 
 function assertAppAcceptingMutations(): void {
   if (shutdownInProgress) throw new Error('Bug Pocket is shutting down. New changes are temporarily paused.');
+  operationBarrier.assertAcceptingOperations();
+}
+
+async function runDestructiveDatabaseOperation<T>(operation: () => Promise<T>): Promise<T> {
+  return withFlushedDetails(() => runDestructiveMaintenance({
+    barrier: operationBarrier,
+    stopAndDrain: () => syncEngine.stopAndDrain(),
+    operation,
+    resumeAfterFailure: () => syncEngine.resumeAfterFailedShutdown()
+  }));
 }
 
 function mutateSettings<T>(action: () => T): T {
@@ -559,7 +590,7 @@ async function importBackup(): Promise<BackupImportResult> {
       },
       afterCommit: () => {
         try {
-          db = new BugPocketDatabase();
+          db = new BugPocketDatabase(undefined, { restoring: true });
           db.applyAfterRestorePatch();
         } catch (error) {
           try {
@@ -773,7 +804,7 @@ function persistScreenshotDataUrl(dataUrl: string): { id: number; fileName: stri
   const fileName = `${contentHash}${fileExtension}`;
   const filePath = db.resolveAttachmentPath(contentHash, fileExtension);
   if (!existsSync(filePath)) writeFileSync(filePath, bytes);
-  const id = db.createAttachment(contentHash, fileExtension, 'image/png', 'snip');
+  const id = db.createAttachment(contentHash, fileExtension, 'image/png', 'snip', true);
   return { id, fileName, contentHash };
 }
 
@@ -898,14 +929,19 @@ function registerIpc(): void {
     (event) => Boolean(event.senderFrame && !event.senderFrame.parent && isTrustedRendererUrl(event.senderFrame.url))
   );
   secureIpc.handle('window:openQuickCapture', () => openQuickCapture());
+  secureIpc.handle('capture:listPending', () => {
+    if (!shutdownInProgress && !operationBarrier.isInMaintenance) db.cleanupExpiredCaptures();
+    return db.listPendingCaptures();
+  });
+  secureIpc.handle('capture:discardPending', () => { assertAppAcceptingMutations(); discardQuickCaptures(); });
   secureIpc.handle('window:hideQuickCapture', () => {
-    pendingQuickScreenshotDataUrl = '';
-    restoreQuickCaptureCompactSize();
+    assertAppAcceptingMutations();
+    discardQuickCaptures();
     quickWindow?.hide();
   });
   secureIpc.handle('window:expandQuickCaptureForReview', () => resizeQuickCaptureForReview());
   secureIpc.handle('window:restoreQuickCaptureCompact', () => restoreQuickCaptureCompactSize());
-  secureIpc.handle('window:openMain', (_event, route = '/dashboard') => openMainWindow(route));
+  secureIpc.handle('window:openMain', (_event, route = DASHBOARD_ROUTE) => openMainWindow(route));
   secureIpc.handle('window:openSettings', (_event, section?: string) => openSettings(section));
   secureIpc.handle('settings:get', () => settingsWithShortcutStatus());
   secureIpc.handle('settings:addApplication', (_event, name: string, contextDescription?: string | null) => mutateWorkspaceSettings(() => db.addApplication(name, contextDescription ?? '')));
@@ -942,7 +978,7 @@ function registerIpc(): void {
     mutateSettings(() => saveByokAiConfig(db, input))
   );
   secureIpc.handle('settings:updateSupabaseSettings', async (_event, projectUrl: string, anonKey: string, inviteEmail?: string) =>
-    operationBarrier.acquire((async () => {
+    withFlushedDetails(() => operationBarrier.acquire(async () => {
       assertAppAcceptingMutations();
       // Validate first so an accidental typo cannot disconnect a working project.
       if (projectUrl.trim() || anonKey.trim()) normalizeSupabaseCredentials(projectUrl, anonKey);
@@ -958,7 +994,7 @@ function registerIpc(): void {
       notifySettingsChanged();
       mainWindow?.webContents.send('bugs:changed');
       return result;
-    })())
+    }))
   );
   secureIpc.handle('settings:toggleStartup', (_event, enabled: boolean) =>
     mutateSettings(() => {
@@ -972,6 +1008,7 @@ function registerIpc(): void {
   secureIpc.handle('settings:updatePreset', (_event, id: number, input: CapturePresetInput) => mutateSettings(() => db.updatePreset(id, input)));
   secureIpc.handle('settings:deletePreset', (_event, id: number) => mutateSettings(() => db.deletePreset(id)));
   secureIpc.handle('settings:updateShortcut', (_event, action: ShortcutAction, accelerator: string, enabled: boolean) => {
+    assertAppAcceptingMutations();
     db.updateShortcut(action, accelerator, enabled);
     registerAppShortcuts();
     return settingsWithShortcutStatus().shortcuts.find((shortcut: ShortcutSetting) => shortcut.action === action);
@@ -980,6 +1017,7 @@ function registerIpc(): void {
   secureIpc.handle('shortcuts:resume', () => registerAppShortcuts());
   secureIpc.handle('bugs:list', (_event, filters) => db.listBugs(filters));
   secureIpc.handle('bugs:count', () => db.getTotalBugCount());
+  secureIpc.handle('bugs:statusCounts', () => db.getBugStatusCounts());
   secureIpc.handle('bugs:get', (_event, id: number) => db.getBug(id));
   secureIpc.handle('bugs:createQuick', (_event, input) => {
     const bug = mutateWorkspace(() => db.createQuickBug(input));
@@ -988,13 +1026,19 @@ function registerIpc(): void {
     notifySaved('Capture saved locally.');
     return bug;
   });
-  secureIpc.handle('bugs:update', (_event, id: number, input) => {
-    const updated = mutateWorkspace(() => db.updateBug(id, input));
+  secureIpc.handle('bugs:update', (event, id: number, input) => {
+    operationBarrier.assertAcceptingOperations();
+    if (!detailsFlushGate.active || event.sender !== mainWindow?.webContents) assertAppAcceptingMutations();
+    assertCurrentWorkspaceWriteAccess();
+    const updated = db.updateBug(id, input);
     mainWindow?.webContents.send('bugs:changed');
     return updated;
   });
   registerBugDeletionIpc(secureIpc, {
-    authorizeMutation: assertCurrentWorkspaceWriteAccess,
+    authorizeMutation: () => {
+      assertAppAcceptingMutations();
+      assertCurrentWorkspaceWriteAccess();
+    },
     deleteBug: (id) => db.deleteBug(id),
     emitBugsChanged: () => mainWindow?.webContents.send('bugs:changed'),
     emitDeletedToast: () => mainWindow?.webContents.send('app:toast', 'Report deleted.')
@@ -1003,12 +1047,12 @@ function registerIpc(): void {
     mutateWorkspace(() => db.deleteAttachment(id));
     mainWindow?.webContents.send('bugs:changed');
   });
-  secureIpc.handle('attachments:download', async (_event, id: number) => operationBarrier.acquire((async () => {
+  secureIpc.handle('attachments:download', async (_event, id: number) => operationBarrier.acquire(async () => {
     const result = await downloadAttachment(id);
     if (result.success) mainWindow?.webContents.send('app:toast', 'Screenshot downloaded.');
     else if (!result.canceled) mainWindow?.webContents.send('app:toast', result.error || 'Unable to download screenshot.', 'error');
     return result;
-  })()));
+  }));
   secureIpc.handle('attachments:saveAnnotated', (_event, parentId: number, dataUrl: string) => mutateWorkspace(() => saveAnnotatedAttachment(parentId, dataUrl)));
   secureIpc.handle('attachments:previewDataUrl', (_event, id: number) => {
     const attachment = db.getAttachment(id);
@@ -1029,13 +1073,13 @@ function registerIpc(): void {
     if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only web URLs can be opened.');
     return shell.openExternal(parsed.toString());
   });
-  secureIpc.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => operationBarrier.acquire(syncEngine.sendFeedback(payload)));
+  secureIpc.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => operationBarrier.acquire(() => sendFeedbackToExamenQa(payload)));
 
-  secureIpc.handle('details:setDirty', (_event, dirty: boolean) => {
-    rendererHasDirtyDetails = !!dirty;
+  secureIpc.handle('details:setDirty', (event, dirty: boolean) => {
+    if (event.sender === mainWindow?.webContents) rendererHasDirtyDetails = dirty;
   });
-  secureIpc.handle('details:flushComplete', () => {
-    finishPendingMainClose();
+  secureIpc.handle('details:flushComplete', (event, requestId: string, success: boolean) => {
+    if (event.sender === mainWindow?.webContents) detailsFlushGate.complete(requestId, success);
   });
   secureIpc.handle('screenshot:start', (_event, bugId?: number) => mutateWorkspace(() => startScreenshotCapture(bugId)));
   secureIpc.handle('screenshot:getSource', () => currentScreenshotSource);
@@ -1045,26 +1089,23 @@ function registerIpc(): void {
   secureIpc.handle('quickScreenshot:attachPending', (_event, dataUrl: string) => mutateWorkspace(() => attachPendingQuickScreenshot(dataUrl)));
   secureIpc.handle('quickScreenshot:discardPending', () => discardPendingQuickScreenshot());
   secureIpc.handle('backup:export', () => exportBackup());
-  secureIpc.handle('backup:import', () => importBackup());
+  secureIpc.handle('backup:import', () => withFlushedDetails(() => importBackup()));
   secureIpc.handle('backup:chooseDirectory', () => chooseBackupDirectory());
   secureIpc.handle('app:clearCurrentWorkspace', async () => {
-    await syncEngine.pauseWorkspaceSync();
-    const result = await db.clearCurrentWorkspace();
+    const result = await runDestructiveDatabaseOperation(() => db.clearCurrentWorkspace());
     mainWindow?.webContents.send('bugs:changed');
     mainWindow?.webContents.send('settings:changed');
     return { success: true, ...result };
   });
   secureIpc.handle('app:factoryReset', async () => {
-    await syncEngine.stopAndWait();
-    await db.factoryReset();
+    await runDestructiveDatabaseOperation(() => db.factoryReset());
     app.relaunch();
     app.exit(0);
     return { success: true };
   });
-  registerUpdateInstallIpc(secureIpc, autoUpdater, gracefulShutdown);
   secureIpc.handle('sync:testConnection', () => syncEngine.testConnection());
-  secureIpc.handle('sync:authSignIn', (_event, email: string, password: string) => syncEngine.authSignIn(email, password));
-  secureIpc.handle('sync:authSignUp', (_event, email: string, password: string, setup: SyncAccountSetup) => syncEngine.authSignUp(email, password, setup));
+  secureIpc.handle('sync:authSignIn', (_event, email: string, password: string) => withFlushedDetails(() => operationBarrier.acquire(() => syncEngine.authSignIn(email, password))));
+  secureIpc.handle('sync:authSignUp', (_event, email: string, password: string, setup: SyncAccountSetup) => withFlushedDetails(() => operationBarrier.acquire(() => syncEngine.authSignUp(email, password, setup))));
   secureIpc.handle('sync:generateInvite', async (_event, passphrase: string, targetEmail: string, targetRole: string) => {
     const workspaceId = db.getCurrentWorkspaceId();
     const projectUrl = db.getSupabaseProjectUrl();
@@ -1075,34 +1116,36 @@ function registerIpc(): void {
     return generateInviteCode(projectUrl, anonKey, workspaceId, passphrase, targetEmail);
   });
   secureIpc.handle('sync:decodeInvite', (_event, token: string, passphrase: string) => decodeInviteCode(token, passphrase));
-  secureIpc.handle('sync:authSignOut', async () => {
+  secureIpc.handle('sync:authSignOut', () => withFlushedDetails(() => operationBarrier.acquire(async () => {
     const result = await syncEngine.authSignOut();
     mainWindow?.webContents.send('bugs:changed');
     return result;
-  });
-  secureIpc.handle('sync:getSessionStatus', () => syncEngine.getSyncSessionStatus());
-  secureIpc.handle('sync:listWorkspaces', () => syncEngine.listWorkspaceMemberships());
+  })));
+  secureIpc.handle('sync:getSessionStatus', () => operationBarrier.acquire(() => syncEngine.getSyncSessionStatus()));
+  secureIpc.handle('sync:listWorkspaces', () => operationBarrier.acquire(() => syncEngine.listWorkspaceMemberships()));
   secureIpc.handle('sync:updateWorkspaceName', (_event, workspaceId: string, name: string) => mutateWorkspace(() => syncEngine.updateWorkspaceName(workspaceId, name)));
   secureIpc.handle('sync:getWorkspaceRole', (_event, workspaceId: string | null) => db.getWorkspaceRole(workspaceId));
   secureIpc.handle('sync:getDiagnostics', () => db.getSyncDiagnostics());
   secureIpc.handle('sync:getRuntimeStatus', () => syncEngine.getRuntimeStatus());
   secureIpc.handle('sync:retryNow', async () => {
+    operationBarrier.assertAcceptingOperations();
     await syncEngine.retrySyncQueueNow();
     return syncEngine.getRuntimeStatus();
   });
   secureIpc.handle('sync:forceRetry', async () => {
+    assertAppAcceptingMutations();
     assertCurrentWorkspaceWriteAccess();
     db.resetSyncQueueRetries();
     await syncEngine.retrySyncQueueNow();
     return db.getSyncDiagnostics();
   });
-  secureIpc.handle('sync:switchWorkspace', async (_event, workspaceId: string) => {
+  secureIpc.handle('sync:switchWorkspace', async (_event, workspaceId: string) => withFlushedDetails(async () => {
     const result = await syncEngine.switchWorkspace(workspaceId);
     if (result.success) mainWindow?.webContents.send('bugs:changed');
     return result;
-  });
-  secureIpc.handle('ai:triageBug', (_event, bugData: unknown) => operationBarrier.acquire(triageBugWithConfiguredAi(bugData)));
-  secureIpc.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => operationBarrier.acquire(processIssueWithByokAi(db, payload)));
+  }));
+  secureIpc.handle('ai:triageBug', (_event, bugData: unknown) => operationBarrier.acquire(() => triageBugWithConfiguredAi(bugData)));
+  secureIpc.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => operationBarrier.acquire(() => processIssueWithByokAi(db, payload)));
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -1111,7 +1154,7 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    openMainWindow('/dashboard');
+    openMainWindow(DASHBOARD_ROUTE);
   });
 
   app.whenReady().then(async () => {
@@ -1139,16 +1182,13 @@ if (!gotTheLock) {
     startSupabaseKeepAliveIfConfigured();
     enforceStartupPreference(db.getRunOnSystemStartup());
     registerIpc();
-    configureAutoUpdater(autoUpdater, log, {
-      onUpdateReady: () => mainWindow?.webContents.send('update-ready')
-    });
+    const captureCleanup = setInterval(() => {
+      if (db?.isOpen() && !shutdownInProgress && !operationBarrier.isInMaintenance) {
+        try { db.cleanupExpiredCaptures(); } catch (error) { log.warn('Capture cleanup will retry later.', error); }
+      }
+    }, 60 * 60 * 1000);
+    captureCleanup.unref();
     createMainWindow('/dashboard', !process.argv.includes(backgroundStartArg));
-    if (app.isPackaged) {
-      autoUpdater.checkForUpdatesAndNotify().catch((error) => {
-        console.log('[auto-updater] Update check failed:', error);
-        log.error('[auto-updater] Update check failed:', error);
-      });
-    }
     createQuickWindow();
     createTray();
     registerAppShortcuts();

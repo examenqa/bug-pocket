@@ -53,6 +53,39 @@ function createTestAuthStorage(database: InstanceType<typeof BugPocketDatabase>)
   });
 }
 
+function createAttachmentPullClient(
+  remoteAttachments: Array<Record<string, unknown>>,
+  download: (storageKey: string) => Promise<{ data: { arrayBuffer(): Promise<ArrayBuffer> } | null; error: unknown }>
+): unknown {
+  return {
+    from(table: string) {
+      let requestedWorkspace = '';
+      const query = {
+        select: () => query,
+        eq: (_column: string, value: string) => {
+          requestedWorkspace = value;
+          return query;
+        },
+        gte: () => query,
+        or: () => query,
+        order: () => query,
+        limit: async (limit: number) => ({
+          data: (table === 'attachments' ? remoteAttachments : [])
+            .filter((row) => row.workspace_id === requestedWorkspace)
+            .slice(0, limit),
+          error: null
+        })
+      };
+      return query;
+    },
+    storage: {
+      from: (bucket: string) => {
+        assert.equal(bucket, 'attachments');
+        return { download };
+      }
+    }
+  };
+}
 function isInsideAttachmentsDirectory(filePath: string): boolean {
   const childPath = relativePath(attachmentsDirectory, filePath);
   return childPath === '' || (!childPath.startsWith(`..${sep}`) && childPath !== '..' && !isAbsolute(childPath));
@@ -290,7 +323,201 @@ test('does not advance a composite cursor when a local batch transaction fails',
   assert.deepEqual(cursorUpdates, []);
 });
 
-test('rejects a corrupted attachment download and removes temporary bytes', async () => {
+test('null-hash pruning tombstones commit metadata and advance the attachment cursor', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-null-hash-pull-'));
+  const database = new BugPocketDatabase(dataDir);
+  const remoteAttachmentId = 'attachment-pruned-remotely';
+  const oldHash = '1a'.repeat(32);
+
+  try {
+    database.connectToWorkspace(workspaceId);
+    const workspaceDb = (database as unknown as {
+      workspaceDb: {
+        prepare(sql: string): {
+          run(...params: unknown[]): { lastInsertRowid: number | bigint };
+          get(...params: unknown[]): unknown;
+        };
+      } | null;
+    }).workspaceDb;
+    assert.ok(workspaceDb);
+    workspaceDb.prepare('INSERT INTO attachments (remote_id, content_hash, file_extension, mime_type, source_type, sync_status, last_sync_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(remoteAttachmentId, oldHash, '.png', 'image/png', 'snip', 'Synced', '', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+
+    const remoteRow = {
+      id: remoteAttachmentId,
+      workspace_id: workspaceId,
+      content_hash: null,
+      file_extension: '.png',
+      mime_type: 'image/png',
+      source_type: 'snip',
+      created_at: '2025-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:01.000Z',
+      deleted_at: null
+    };
+    const client = createAttachmentPullClient([remoteRow], async () => {
+      throw new Error('Null-hash tombstones must never trigger a download.');
+    });
+    const syncEngine = new SyncEngine(database) as unknown as {
+      pullRemoteChangesFor(client: unknown, activeWorkspaceId: string): Promise<boolean>;
+    };
+
+    await syncEngine.pullRemoteChangesFor(client, workspaceId);
+
+    assert.deepEqual(database.getRemoteSyncCursor(workspaceId, 'attachment'), {
+      updated_at: remoteRow.updated_at,
+      id: remoteAttachmentId
+    });
+    assert.deepEqual(database.getPendingAttachmentDownloads(), []);
+    const persisted = workspaceDb
+      .prepare('SELECT content_hash FROM attachments WHERE remote_id = ?')
+      .get(remoteAttachmentId) as { content_hash: string | null } | undefined;
+    assert.equal(persisted?.content_hash, null);
+  } finally {
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('deleted remote attachments clear download intents and never fetch binary data', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-deleted-attachment-pull-'));
+  const database = new BugPocketDatabase(dataDir);
+  const remoteAttachmentId = 'attachment-deleted-remotely';
+  const oldHash = '2b'.repeat(32);
+  let downloadCalls = 0;
+
+  try {
+    database.connectToWorkspace(workspaceId);
+    const workspaceDb = (database as unknown as {
+      workspaceDb: {
+        prepare(sql: string): {
+          run(...params: unknown[]): { lastInsertRowid: number | bigint };
+          get(...params: unknown[]): unknown;
+        };
+      } | null;
+    }).workspaceDb;
+    assert.ok(workspaceDb);
+    const inserted = workspaceDb.prepare('INSERT INTO attachments (remote_id, content_hash, file_extension, mime_type, source_type, sync_status, last_sync_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(remoteAttachmentId, oldHash, '.png', 'image/png', 'snip', 'Synced', '', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+    workspaceDb.prepare('INSERT INTO attachment_download_queue (attachment_id, content_hash, file_extension, retry_count, last_error) VALUES (?, ?, ?, 0, NULL)')
+      .run(Number(inserted.lastInsertRowid), oldHash, '.png');
+
+    const remoteRow = {
+      id: remoteAttachmentId,
+      workspace_id: workspaceId,
+      content_hash: '../../../malformed-deleted-hash',
+      file_extension: '../../../exe',
+      updated_at: '2026-01-01T00:00:02.000Z',
+      deleted_at: '2026-01-01T00:00:02.000Z'
+    };
+    const client = createAttachmentPullClient([remoteRow], async () => {
+      downloadCalls += 1;
+      return { data: null, error: { message: 'should not download', statusCode: 404 } };
+    });
+    const syncEngine = new SyncEngine(database) as unknown as {
+      pullRemoteChangesFor(client: unknown, activeWorkspaceId: string): Promise<boolean>;
+      drainAttachmentDownloadQueue(client: unknown, activeWorkspaceId: string): Promise<void>;
+    };
+
+    await syncEngine.pullRemoteChangesFor(client, workspaceId);
+    await syncEngine.drainAttachmentDownloadQueue(client, workspaceId);
+
+    assert.equal(downloadCalls, 0);
+    assert.deepEqual(database.getPendingAttachmentDownloads(), []);
+    assert.equal(
+      workspaceDb.prepare('SELECT id FROM attachments WHERE remote_id = ?').get(remoteAttachmentId),
+      undefined
+    );
+    assert.deepEqual(database.getRemoteSyncCursor(workspaceId, 'attachment'), {
+      updated_at: remoteRow.updated_at,
+      id: remoteAttachmentId
+    });
+  } finally {
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('a 404 binary download does not block later attachment metadata or binaries', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-download-404-continue-'));
+  const database = new BugPocketDatabase(dataDir);
+  const missingBytes = Buffer.from('missing remote attachment', 'utf8');
+  const availableBytes = Buffer.from('available remote attachment', 'utf8');
+  const missingHash = createHash('sha256').update(missingBytes).digest('hex');
+  const availableHash = createHash('sha256').update(availableBytes).digest('hex');
+  const missingId = 'attachment-404';
+  const availableId = 'attachment-available';
+
+  try {
+    database.connectToWorkspace(workspaceId);
+    const remoteRows = [
+      {
+        id: missingId,
+        workspace_id: workspaceId,
+        content_hash: missingHash,
+        file_extension: '.png',
+        mime_type: 'image/png',
+        source_type: 'snip',
+        created_at: '2026-01-01T00:00:01.000Z',
+        updated_at: '2026-01-01T00:00:01.000Z',
+        deleted_at: null
+      },
+      {
+        id: availableId,
+        workspace_id: workspaceId,
+        content_hash: availableHash,
+        file_extension: '.png',
+        mime_type: 'image/png',
+        source_type: 'snip',
+        created_at: '2026-01-01T00:00:02.000Z',
+        updated_at: '2026-01-01T00:00:02.000Z',
+        deleted_at: null
+      }
+    ];
+    const client = createAttachmentPullClient(remoteRows, async (storageKey) => {
+      if (storageKey.includes(missingHash)) {
+        return { data: null, error: { message: 'Object not found', statusCode: 404 } };
+      }
+      return {
+        data: {
+          arrayBuffer: async () => availableBytes.buffer.slice(
+            availableBytes.byteOffset,
+            availableBytes.byteOffset + availableBytes.byteLength
+          )
+        },
+        error: null
+      };
+    });
+    const syncEngine = new SyncEngine(database) as unknown as {
+      pullRemoteChangesFor(client: unknown, activeWorkspaceId: string): Promise<boolean>;
+      drainAttachmentDownloadQueue(client: unknown, activeWorkspaceId: string): Promise<void>;
+    };
+
+    await syncEngine.pullRemoteChangesFor(client, workspaceId);
+    assert.deepEqual(database.getRemoteSyncCursor(workspaceId, 'attachment'), {
+      updated_at: '2026-01-01T00:00:02.000Z',
+      id: availableId
+    });
+
+    await syncEngine.drainAttachmentDownloadQueue(client, workspaceId);
+
+    const queued = database.getPendingAttachmentDownloads(25, 6);
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0]?.content_hash, missingHash);
+    assert.equal(queued[0]?.retry_count, 1);
+    assert.match(queued[0]?.last_error ?? '', /object not found/i);
+    const diagnostic = database.getSyncDiagnostics().find((row) => row.queue_type === 'download');
+    assert.equal(diagnostic?.operation, 'DOWNLOAD');
+    assert.equal(diagnostic?.missing_binary, true);
+    assert.match(diagnostic?.last_error ?? '', /object not found/i);
+    assert.equal(database.attachmentFileExists(availableHash, '.png'), true);
+    assert.equal(database.attachmentFileExists(missingHash, '.png'), false);
+  } finally {
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('rejects a corrupted queued attachment download without rewinding metadata', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-corrupt-download-'));
   const database = new BugPocketDatabase(dataDir);
   const remoteAttachmentId = 'attachment-integrity-test';
@@ -304,101 +531,130 @@ test('rejects a corrupted attachment download and removes temporary bytes', asyn
 
   try {
     database.connectToWorkspace(workspaceId);
-
-    const remoteRows: Record<string, Array<Record<string, unknown>>> = {
-      bugs: [],
-      attachments: [{
-        id: remoteAttachmentId,
-        workspace_id: workspaceId,
-        content_hash: expectedHash,
-        file_extension: '.png',
-        mime_type: 'image/png',
-        source_type: 'snip',
-        sync_status: 'Synced',
-        created_at: '2026-01-01T00:00:00.000Z',
-        updated_at: '2026-01-01T00:00:01.000Z',
-        deleted_at: null
-      }]
+    const remoteRow = {
+      id: remoteAttachmentId,
+      workspace_id: workspaceId,
+      content_hash: expectedHash,
+      file_extension: '.png',
+      mime_type: 'image/png',
+      source_type: 'snip',
+      sync_status: 'Synced',
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:01.000Z',
+      deleted_at: null
     };
-
-    const client = {
-      from(table: string) {
-        let requestedWorkspace = '';
-        const query = {
-          select: () => query,
-          eq: (_column: string, value: string) => {
-            requestedWorkspace = value;
-            return query;
-          },
-          gte: () => query,
-          or: () => query,
-          order: () => query,
-          limit: async (limit: number) => ({
-            data: (remoteRows[table] ?? [])
-              .filter((row) => row.workspace_id === requestedWorkspace)
-              .slice(0, limit),
-            error: null
-          })
-        };
-        return query;
-      },
-      storage: {
-        from: (bucket: string) => {
-          assert.equal(bucket, 'attachments');
-          return {
-            download: async (storageKey: string) => {
-              downloadedKeys.push(storageKey);
-              return {
-                data: {
-                  arrayBuffer: async () => corruptedBytes.buffer.slice(
-                    corruptedBytes.byteOffset,
-                    corruptedBytes.byteOffset + corruptedBytes.byteLength
-                  )
-                },
-                error: null
-              };
-            }
-          };
-        }
-      }
-    };
-
+    const client = createAttachmentPullClient([remoteRow], async (storageKey) => {
+      downloadedKeys.push(storageKey);
+      return {
+        data: {
+          arrayBuffer: async () => corruptedBytes.buffer.slice(
+            corruptedBytes.byteOffset,
+            corruptedBytes.byteOffset + corruptedBytes.byteLength
+          )
+        },
+        error: null
+      };
+    });
     const syncEngine = new SyncEngine(database) as unknown as {
       pullRemoteChangesFor(client: unknown, activeWorkspaceId: string): Promise<boolean>;
+      drainAttachmentDownloadQueue(client: unknown, activeWorkspaceId: string): Promise<void>;
     };
-    const targetPath = join(database.screenshotsDir, `${expectedHash}.png`);
-    const temporaryPath = join(database.screenshotsDir, `${expectedHash}.tmp`);
-    await assert.rejects(
-      syncEngine.pullRemoteChangesFor(client, workspaceId),
-      /attachment integrity check failed.*SHA-256 mismatch/i
-    );
+    const targetPath = join(database.screenshotsDir, expectedHash + '.png');
+    const temporaryPath = join(database.screenshotsDir, expectedHash + '.tmp');
 
-    assert.deepEqual(downloadedKeys, [`${workspaceId}/${expectedHash}.png`]);
+    await syncEngine.pullRemoteChangesFor(client, workspaceId);
+    await syncEngine.drainAttachmentDownloadQueue(client, workspaceId);
+
+    assert.deepEqual(downloadedKeys, [workspaceId + '/' + expectedHash + '.png']);
     assert.equal(existsSync(temporaryPath), false);
     assert.equal(existsSync(targetPath), false);
     assert.deepEqual(database.getRemoteSyncCursor(workspaceId, 'attachment'), {
-      updated_at: '1970-01-01T00:00:00.000Z',
-      id: ''
+      updated_at: remoteRow.updated_at,
+      id: remoteAttachmentId
     });
-
-    const workspaceDb = (database as unknown as {
-      workspaceDb: {
-        prepare(sql: string): {
-          get(...params: unknown[]): unknown;
-        };
-      } | null;
-    }).workspaceDb;
-    assert.ok(workspaceDb);
-    const persisted = workspaceDb
-      .prepare('SELECT content_hash, sync_status FROM attachments WHERE remote_id = ?')
-      .get(remoteAttachmentId) as { content_hash: string; sync_status: string } | undefined;
-    assert.deepEqual(persisted, { content_hash: expectedHash, sync_status: 'Synced' });
+    const queued = database.getPendingAttachmentDownloads(25, 6);
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0]?.retry_count, 1);
+    assert.match(queued[0]?.last_error ?? '', /attachment integrity check failed.*SHA-256 mismatch/i);
   } finally {
     database.close();
     rmSync(dataDir, { recursive: true, force: true });
   }
 });
 
+test('a missing local upload never creates dangling remote attachment metadata', async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-missing-local-upload-'));
+  const database = new BugPocketDatabase(dataDir);
+  const contentHash = '7e'.repeat(32);
+  let metadataUpserts = 0;
+  let uploads = 0;
+
+  try {
+    database.connectToWorkspace(workspaceId);
+    const client = {
+      storage: {
+        from: (bucket: string) => {
+          assert.equal(bucket, 'attachments');
+          return {
+            exists: async () => ({
+              data: false,
+              error: { message: 'Object not found', statusCode: 404 }
+            }),
+            upload: async () => {
+              uploads += 1;
+              return { data: null, error: null };
+            }
+          };
+        }
+      },
+      from: (table: string) => {
+        assert.equal(table, 'attachments');
+        return {
+          upsert: async () => {
+            metadataUpserts += 1;
+            return { data: null, error: null };
+          }
+        };
+      }
+    };
+    const syncEngine = new SyncEngine(database) as unknown as {
+      syncAttachmentEvent(
+        client: unknown,
+        activeWorkspaceId: string,
+        event: Record<string, unknown>,
+        payload: Record<string, unknown>
+      ): Promise<void>;
+    };
+    const event = {
+      id: 1,
+      local_seq: 1,
+      op_id: 'missing-local-upload',
+      entity_type: 'attachment',
+      entity_id: 999,
+      operation: 'INSERT',
+      payload: '{}',
+      created_at: new Date().toISOString(),
+      retry_count: 0,
+      last_error: null
+    };
+
+    await assert.rejects(
+      syncEngine.syncAttachmentEvent(client, workspaceId, event, {
+        content_hash: contentHash,
+        file_extension: '.png',
+        mime_type: 'image/png',
+        source_type: 'snip'
+      }),
+      /binary is missing locally and does not exist remotely.*metadata was not created/i
+    );
+
+    assert.equal(uploads, 0);
+    assert.equal(metadataUpserts, 0);
+  } finally {
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
 test('restores the encrypted authenticated session after client reinitialization', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-session-restart-'));
   const database = new BugPocketDatabase(dataDir);
@@ -434,16 +690,33 @@ test('restores the encrypted authenticated session after client reinitialization
   };
 
   try {
+    const workspaceId = '10000000-0000-4000-8000-000000000001';
     globalThis.fetch = async (input) => {
       const url = String(input);
-      assert.match(url, /\/auth\/v1\/token\?grant_type=password$/);
-      return new Response(JSON.stringify({
-        access_token: accessToken,
-        token_type: 'bearer',
-        expires_in: 3600,
-        expires_at: nowSeconds + 3600,
-        refresh_token: 'test-refresh-token',
-        user: {
+      if (/\/auth\/v1\/token\?grant_type=password$/.test(url)) {
+        return new Response(JSON.stringify({
+          access_token: accessToken,
+          token_type: 'bearer',
+          expires_in: 3600,
+          expires_at: nowSeconds + 3600,
+          refresh_token: 'test-refresh-token',
+          user: {
+            id: '00000000-0000-4000-8000-000000000001',
+            aud: 'authenticated',
+            role: 'authenticated',
+            email: 'tester@example.com',
+            app_metadata: { provider: 'email', providers: ['email'] },
+            user_metadata: {},
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      if (/\/auth\/v1\/user$/.test(url)) {
+        return new Response(JSON.stringify({
           id: '00000000-0000-4000-8000-000000000001',
           aud: 'authenticated',
           role: 'authenticated',
@@ -452,11 +725,24 @@ test('restores the encrypted authenticated session after client reinitialization
           user_metadata: {},
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        }
-      }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' }
-      });
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      if (/\/rest\/v1\/workspace_members\?/.test(url)) {
+        return new Response(JSON.stringify([{ workspace_id: workspaceId, role: 'owner' }]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      if (/\/rest\/v1\//.test(url)) {
+        return new Response('[]', {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      throw new Error(`Unexpected Supabase test request: ${url}`);
     };
 
     database.updateSupabaseSettings('https://test.supabase.co', 'sb_publishable_test_key');
@@ -497,9 +783,10 @@ test('restores the encrypted authenticated session after client reinitialization
     const restartedClient = (restartedEngine as unknown as ExposedSyncEngine).client;
     assert.ok(restartedClient);
     assert.equal(await restartedEngine.restorePersistedSession(), true);
+    assert.equal(database.getCurrentWorkspaceId(), workspaceId, 'the sole accessible workspace is mounted after restart');
     assert.equal((await restartedClient.auth.getSession()).data.session?.access_token, accessToken);
     restartedClient.auth.stopAutoRefresh();
-    restartedEngine.stop();
+    await restartedEngine.stopAndDrain();
   } finally {
     globalThis.fetch = originalFetch;
     database.close();

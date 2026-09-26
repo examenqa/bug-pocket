@@ -373,6 +373,48 @@ test('clearing the current workspace preserves shared attachments referenced by 
   }
 });
 
+test('pruning stale attachments preserves blobs referenced by another workspace database', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-prune-cross-workspace-'));
+  const database = new BugPocketDatabase(dataDir);
+  const sharedHash = '9'.repeat(64);
+  const extension = '.png';
+  const oldTimestamp = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+  try {
+    database.connectToWorkspace('A');
+    const workspaceA = (database as unknown as ExposedDatabase).workspaceDb;
+    assert.ok(workspaceA);
+    const bugId = Number(workspaceA
+      .prepare('INSERT INTO bugs (title, status, created_at, updated_at) VALUES (?, ?, ?, ?)')
+      .run('Discarded attachment fixture', 'Discarded', oldTimestamp, oldTimestamp).lastInsertRowid);
+    const attachmentId = database.createAttachment(sharedHash, extension);
+    workspaceA.prepare('UPDATE attachments SET bug_id = ? WHERE id = ?').run(bugId, attachmentId);
+    const sharedPath = database.resolveAttachmentPath(sharedHash, extension);
+    writeFileSync(sharedPath, Buffer.from('shared workspace attachment', 'utf8'));
+
+    database.connectToWorkspace('B');
+    database.createAttachment(sharedHash, extension);
+
+    database.connectToWorkspace('A');
+    assert.equal(database.pruneStaleAttachments(), 1);
+    assert.equal(existsSync(sharedPath), true, 'Workspace B still references the shared physical blob');
+
+    const prunedRow = (database as unknown as ExposedDatabase).workspaceDb
+      ?.prepare('SELECT content_hash FROM attachments WHERE id = ?')
+      .get(attachmentId) as { content_hash: string | null } | undefined;
+    assert.equal(prunedRow?.content_hash, null, 'Workspace A metadata should still be tombstoned');
+
+    database.connectToWorkspace('B');
+    const workspaceBReference = (database as unknown as ExposedDatabase).workspaceDb
+      ?.prepare('SELECT content_hash FROM attachments WHERE content_hash = ?')
+      .get(sharedHash) as { content_hash: string } | undefined;
+    assert.equal(workspaceBReference?.content_hash, sharedHash);
+  } finally {
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('factory reset removes every workspace and taxonomy while retaining settings and presets', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-factory-reset-contract-'));
   const database = new BugPocketDatabase(dataDir);

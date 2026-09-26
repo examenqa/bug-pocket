@@ -10,16 +10,37 @@ import { BugDetailsView } from './pages/BugDetailPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SnipOverlay } from './pages/SnipOverlay';
 import { SupportModal, type SupportModalMode } from './components/shared/SupportModal';
-import { ToastProvider } from './components/shared/ToastContext';
+import { ToastProvider, useToast } from './components/shared/ToastContext';
 import { BrandMark } from './components/shared/BrandMark';
+import { useDraftLifecycleBridge } from './hooks/useDraftLifecycleBridge';
+import { bugDetailsRoute, resolveMainShellRoute } from '../../shared/navigation';
 
 function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: () => Promise<void> }) {
   const [attachments, setAttachments] = useState<ScreenshotResult[]>([]);
   const [saving, setSaving] = useState(false);
   const [focusToken, setFocusToken] = useState(0);
+  const pendingRefresh = useRef(0);
+  const showToast = useToast();
 
-  useEffect(() => window.bugPocket.onOpenQuickCapture(() => setFocusToken((current) => current + 1)), []);
-  useEffect(() => window.bugPocket.onScreenshotCaptured((result) => setAttachments((current) => [...current, result as ScreenshotResult])), []);
+  useEffect(() => {
+    let mounted = true;
+    const recover = (): void => {
+      const request = ++pendingRefresh.current;
+      void window.bugPocket.getPendingCaptures().then(values => {
+        if (mounted && request === pendingRefresh.current) setAttachments(values);
+      }).catch(error => { if (mounted) showToast(String(error), 'error'); });
+    };
+    recover();
+    const unsubscribeOpen = window.bugPocket.onOpenQuickCapture(() => { recover(); setFocusToken(current => current + 1); });
+    const unsubscribeScreenshot = window.bugPocket.onScreenshotCaptured(recover);
+    return () => { mounted = false; unsubscribeOpen(); unsubscribeScreenshot(); };
+  }, [showToast]);
+
+  const clearAttachments = async (): Promise<void> => {
+    pendingRefresh.current += 1;
+    try { await window.bugPocket.discardPendingCaptures(); setAttachments([]); }
+    catch (error) { showToast(String(error), 'error'); }
+  };
 
   const saveDraft = async (draft: QuickCaptureDraft): Promise<void> => {
     setSaving(true);
@@ -47,7 +68,7 @@ function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: 
       focusToken={focusToken}
       onConfigurePresets={() => window.bugPocket.openSettings('presets')}
       onTakeScreenshot={() => window.bugPocket.startScreenshotCapture()}
-      onClearAttachments={() => setAttachments([])}
+      onClearAttachments={() => void clearAttachments()}
       onSave={saveDraft}
       onCancel={() => window.bugPocket.hideQuickCapture()}
       onCreateApplication={async (name) => {
@@ -114,34 +135,24 @@ function SupportPopover({ anchorRect, open, onClose, onSelectMode }: { anchorRec
 }
 
 function MainShell({ route, navigate, settings, refresh }: { route: string; navigate: (route: string) => void; settings: SettingsData; refresh: () => Promise<void> }) {
-  const bugMatch = route.match(/^\/bugs\/(\d+)$/);
-  const bugId = bugMatch ? Number(bugMatch[1]) : null;
-  const [selectedBugId, setSelectedBugId] = useState<number | null>(bugId);
+  const shellRoute = resolveMainShellRoute(route);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [supportModalMode, setSupportModalMode] = useState<SupportModalMode>('bug');
   const [isSupportPopoverOpen, setIsSupportPopoverOpen] = useState(false);
   const [supportAnchorRect, setSupportAnchorRect] = useState<DOMRect | null>(null);
   const supportButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(() => route.startsWith('/settings'));
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [installingUpdate, setInstallingUpdate] = useState(false);
   const [syncRuntimeStatus, setSyncRuntimeStatus] = useState<SyncRuntimeStatus | null>(null);
   const [retryingSync, setRetryingSync] = useState(false);
-  const showingDetails = selectedBugId != null && !route.startsWith('/settings');
-  const activeView = route.startsWith('/settings') ? 'settings' : 'dashboard';
+  const activeView = shellRoute.view === 'settings' ? 'settings' : 'dashboard';
   const activeWorkspaceId = settings.currentWorkspaceId?.trim() ?? '';
   const cloudWorkspaceActive = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(activeWorkspaceId);
   const cloudProjectPaused = syncRuntimeStatus?.code === 'PROJECT_PAUSED';
 
-  useEffect(() => {
-    if (bugId) setSelectedBugId(bugId);
-  }, [bugId]);
 
   useEffect(() => {
     if (route.startsWith('/settings')) setIsSettingsExpanded(true);
   }, [route]);
-
-  useEffect(() => window.bugPocket.onUpdateReady(() => setUpdateAvailable(true)), []);
 
   useEffect(() => {
     let mounted = true;
@@ -160,16 +171,6 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
     };
   }, []);
 
-  const installUpdate = async (): Promise<void> => {
-    setInstallingUpdate(true);
-    try {
-      await window.bugPocket.installUpdate();
-    } catch (error) {
-      console.error('Unable to install the staged update.', error);
-      setInstallingUpdate(false);
-    }
-  };
-
   const retryPausedSync = async (): Promise<void> => {
     setRetryingSync(true);
     try {
@@ -182,8 +183,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
   };
 
   const closeBugDetails = (): void => {
-    setSelectedBugId(null);
-    if (route.startsWith('/bugs/')) navigate('/dashboard');
+    navigate('/dashboard');
   };
 
   return (
@@ -195,10 +195,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
         </div>
         <button
           className={activeView === 'dashboard' ? 'nav active' : 'nav'}
-          onClick={() => {
-            setSelectedBugId(null);
-            navigate('/dashboard');
-          }}
+          onClick={() => navigate('/dashboard')}
         >
           <Home size={17} /> Dashboard
         </button>
@@ -207,7 +204,6 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
             className={activeView === 'settings' ? 'nav settings-parent active' : 'nav settings-parent'}
             aria-expanded={isSettingsExpanded}
             onClick={() => {
-              setSelectedBugId(null);
               setIsSettingsExpanded((expanded) => !expanded);
               if (!route.startsWith('/settings')) navigate('/settings/workspace');
             }}
@@ -226,10 +222,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
                     key={item.route}
                     className={active ? 'settings-subnav-link active' : 'settings-subnav-link'}
                     type="button"
-                    onClick={() => {
-                      setSelectedBugId(null);
-                      navigate(item.route);
-                    }}
+                    onClick={() => navigate(item.route)}
                   >
                     <Icon size={14} /> {item.label}
                   </button>
@@ -269,15 +262,6 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
         }}
       />
       <SupportModal mode={supportModalMode} open={isSupportModalOpen} onClose={() => setIsSupportModalOpen(false)} />
-      {updateAvailable && (
-        <div className="update-ready-banner" role="status" aria-live="polite">
-          <RefreshCw size={18} aria-hidden="true" />
-          <span>Update Ready</span>
-          <button type="button" onClick={() => void installUpdate()} disabled={installingUpdate}>
-            {installingUpdate ? 'Restarting...' : 'Restart to Install'}
-          </button>
-        </div>
-      )}
       <main className="content">
         {cloudProjectPaused && (
           <div className="sync-paused-banner" role="alert" aria-live="assertive">
@@ -296,16 +280,15 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
             </div>
           </div>
         )}
-        {route.startsWith('/settings') ? (
+        {shellRoute.view === 'settings' ? (
           <SettingsPage settings={settings} refresh={refresh} route={route} />
-        ) : (
-          <>
-            <div className={showingDetails ? 'dashboard-view hidden' : 'dashboard-view'}>
-              <Dashboard settings={settings} onSelect={setSelectedBugId} />
-            </div>
-            {showingDetails && <BugDetailsView bugId={selectedBugId} settings={settings} onBack={closeBugDetails} />}
-          </>
-        )}
+        ) : shellRoute.view === 'dashboard' ? (
+          <div className="dashboard-view">
+            <Dashboard settings={settings} onSelect={(id) => navigate(bugDetailsRoute(id))} />
+          </div>
+        ) : shellRoute.view === 'bug' ? (
+          <BugDetailsView key={shellRoute.bugId} bugId={shellRoute.bugId} settings={settings} onBack={closeBugDetails} />
+        ) : null}
       </main>
     </div>
   );
@@ -314,6 +297,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
 export function App() {
   const { route, navigate } = useHashRoute();
   const { settings, refresh } = useSettings();
+  useDraftLifecycleBridge();
 
   let content: React.ReactNode;
   if (route.startsWith('/capture')) content = <CaptureRoute settings={settings} refresh={refresh} />;

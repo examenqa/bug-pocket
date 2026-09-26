@@ -8,9 +8,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import type {
   Application,
   Attachment,
+  AttachmentDownloadQueueItem,
   Bug,
   BugDetails,
   BugFilters,
+  BugStatusCounts,
   BugUpdateInput,
   CaptureStatus,
   CapturePreset,
@@ -34,7 +36,6 @@ import type {
   WorkspaceRole,
   AiProvider
 } from '../shared/types';
-import { operationBarrier } from './OperationBarrier';
 import { resolveAttachmentFilePath, validateAttachmentMetadata } from './sync/attachmentPaths';
 
 const now = (): string => new Date().toISOString();
@@ -48,7 +49,6 @@ const defaultEnvironments = ['Dev', 'QA', 'Staging', 'Production'];
 const defaultDevices = ['Desktop', 'Laptop', 'Tablet', 'Mobile', 'Other'];
 const defaultBrowsers = ['Chrome', 'Edge', 'Firefox', 'Safari', 'Other'];
 const defaultUserRoles = ['Admin', 'Standard User', 'Guest', 'Read-Only'];
-const defaultLocalWorkspaceId = 'default-local';
 const referenceTables: Record<ReferenceTable, string> = {
   environment: 'environments',
   device: 'devices',
@@ -69,7 +69,7 @@ const defaultShortcuts: Array<Pick<ShortcutSetting, 'action' | 'label' | 'accele
   { action: 'global_screenshot', label: 'Global Screenshot', accelerator: 'CommandOrControl+Alt+S', is_enabled: 1, sort_order: 2 }
 ];
 const MAX_CAPTURE_PRESETS = 3;
-const DATABASE_SCHEMA_VERSION = 2;
+const DATABASE_SCHEMA_VERSION = 4;
 
 const quickReportTemplate = `🚨 *[{{severity}}] {{title}}*
 *Context:* {{application}} > {{module}} | {{environment}} | {{user_role}}
@@ -223,12 +223,13 @@ export class BugPocketDatabase {
   private readonly localDbPath: string;
   private cloudSyncSessionActive = false;
 
-  constructor(dataDirOverride?: string) {
+  constructor(dataDirOverride?: string, options: { restoring?: boolean } = {}) {
     this.dataDir = dataDirOverride ?? app.getPath('userData');
     mkdirSync(this.dataDir, { recursive: true });
     this.localDbPath = join(this.dataDir, 'local.sqlite');
     const legacyDbPath = join(this.dataDir, 'bug-pocket.sqlite');
-    if (!existsSync(this.localDbPath) && existsSync(legacyDbPath)) {
+    const importingLegacy = !existsSync(this.localDbPath) && existsSync(legacyDbPath);
+    if (importingLegacy) {
       copyFileSync(legacyDbPath, this.localDbPath);
     }
 
@@ -236,9 +237,12 @@ export class BugPocketDatabase {
     this.db = this.localDb;
     this.migrateConnection(this.localDb, false);
     this.seedDefaults();
+    if (importingLegacy) this.updateCurrentWorkspaceId(null);
     const workspaceId = this.getCurrentWorkspaceId();
-    if (workspaceId) this.connectToWorkspace(workspaceId);
+    if (workspaceId && !options.restoring) this.connectToWorkspace(workspaceId);
     try {
+      if (options.restoring) return;
+      this.cleanupExpiredCaptures();
       this.pruneStaleAttachments();
     } catch {
       // Retention cleanup should never block app startup.
@@ -297,7 +301,7 @@ export class BugPocketDatabase {
         .prepare(
           `SELECT id, bug_id, parent_id, content_hash, file_extension, created_at
            FROM attachments
-           WHERE content_hash IS NOT NULL AND content_hash != ''
+           WHERE pending_capture_until IS NULL AND content_hash IS NOT NULL AND content_hash != ''
            ORDER BY id`
         )
         .all() as AttachmentReference[];
@@ -373,11 +377,7 @@ export class BugPocketDatabase {
       const sameHashRows = attachmentRows.filter((row) => row.content_hash.toLowerCase() === normalizedHash);
       for (const row of sameHashRows) {
         try {
-          const attachmentPath = this.resolveAttachmentPath(row.content_hash, row.file_extension);
-          if (attachmentPath && existsSync(attachmentPath)) {
-            await rm(attachmentPath, { force: true });
-            deletedAttachmentFiles += 1;
-          }
+          if (this.deleteAttachmentBlobIfUnused(row.content_hash, row.file_extension)) deletedAttachmentFiles += 1;
         } catch {
           // Malformed legacy metadata is never converted into a filesystem path.
         }
@@ -409,6 +409,7 @@ export class BugPocketDatabase {
           .run(now());
         for (const table of [
           'sync_queue',
+          'attachment_download_queue',
           'attachments',
           'bugs',
           'modules',
@@ -443,8 +444,8 @@ export class BugPocketDatabase {
     ].map((filePath) => rm(filePath, { force: true })));
   }
 
-  private isAttachmentHashReferencedByAnyDatabase(contentHash: string, excludedDatabasePath: string): boolean {
-    const excludedPath = resolve(excludedDatabasePath).toLowerCase();
+  private isAttachmentHashReferencedByAnyDatabase(contentHash: string, excludedDatabasePath?: string): boolean {
+    const excludedPath = excludedDatabasePath ? resolve(excludedDatabasePath).toLowerCase() : null;
     const databasePaths = readdirSync(this.dataDir, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.sqlite'))
       .map((entry) => join(this.dataDir, entry.name))
@@ -476,53 +477,25 @@ export class BugPocketDatabase {
     const manifestPath = existsSync(join(this.dataDir, 'manifest.json'))
       ? join(this.dataDir, 'manifest.json')
       : join(this.dataDir, 'backup-manifest.json');
-    const restoredSingleDatabasePath = join(this.dataDir, 'bug-pocket.sqlite');
-    const defaultWorkspacePath = this.workspaceDatabasePath(defaultLocalWorkspaceId);
     const restoredManifest = this.readRestoreManifest(manifestPath);
-
     if (restoredManifest?.databases) {
-      const currentWorkspaceId = typeof restoredManifest.databases.current_workspace_id === 'string'
-        ? restoredManifest.databases.current_workspace_id.trim()
-        : '';
-      const workspaceDbName = typeof restoredManifest.databases.workspace_db === 'string'
-        ? restoredManifest.databases.workspace_db.trim()
-        : '';
-
-      if (currentWorkspaceId && workspaceDbName) {
-        const extractedWorkspacePath = join(this.dataDir, workspaceDbName);
-        const targetWorkspacePath = this.workspaceDatabasePath(currentWorkspaceId);
-        if (!existsSync(extractedWorkspacePath)) {
-          throw new Error(`Backup restore failed: workspace database '${workspaceDbName}' is missing from the archive.`);
+      const workspaceId = String(restoredManifest.databases.current_workspace_id ?? '').trim();
+      const workspaceName = String(restoredManifest.databases.workspace_db ?? '').trim();
+      if (workspaceId && workspaceName) {
+        if (workspaceName !== `ws_${workspaceId}.sqlite` || !existsSync(this.workspaceDatabasePath(workspaceId))) {
+          throw new Error('Restored workspace database is missing or does not match its manifest.');
         }
-        if (existsSync(extractedWorkspacePath) && extractedWorkspacePath !== targetWorkspacePath) {
-          this.workspaceDb?.close();
-          this.workspaceDb = null;
-          copyFileSync(extractedWorkspacePath, targetWorkspacePath);
-        }
-        this.connectToWorkspace(currentWorkspaceId);
+        this.connectToWorkspace(workspaceId);
+      } else if (!workspaceId && !workspaceName) {
+        this.connectToWorkspace('');
       } else {
-        this.connectToWorkspace(defaultLocalWorkspaceId);
-        this.copyLegacyLocalRowsToWorkspace();
+        throw new Error('Restored database mapping is incomplete.');
       }
-
-      this.clearLegacyLocalWorkspaceRows();
       return;
     }
-
-    const restoredSingleDatabaseExists = existsSync(restoredSingleDatabasePath);
-
-    if (restoredSingleDatabaseExists) {
-      this.workspaceDb?.close();
-      this.workspaceDb = null;
-      copyFileSync(restoredSingleDatabasePath, defaultWorkspacePath);
-    }
-
-    this.connectToWorkspace(defaultLocalWorkspaceId);
-    if (!restoredSingleDatabaseExists) {
-      this.copyLegacyLocalRowsToWorkspace();
-    }
-    this.clearLegacyLocalWorkspaceRows();
-    this.updateCurrentWorkspaceId(defaultLocalWorkspaceId);
+    // Legacy single-database data is copied to local.sqlite by the constructor
+    // (or by the validated archive swap). It already has the correct local role.
+    this.connectToWorkspace('');
   }
 
   private readRestoreManifest(manifestPath: string): { databases?: { local_db?: unknown; workspace_db?: unknown; current_workspace_id?: unknown } } | null {
@@ -564,14 +537,14 @@ export class BugPocketDatabase {
     this.attachLocalTaxonomyViews(this.workspaceDb);
     this.cleanupDuplicateWorkspaceEnvironments();
     this.seedWorkspaceEnvironments();
+    this.backfillAttachmentDownloadQueue();
     this.workspaceDb.pragma('foreign_keys = OFF');
     this.updateCurrentWorkspaceId(cleaned);
     return cleaned;
   }
 
   connectToWorkspaceTracked(workspaceId: string): Promise<string | null> {
-    const operation = Promise.resolve().then(() => this.connectToWorkspace(workspaceId));
-    return operationBarrier.acquire(operation);
+    return Promise.resolve().then(() => this.connectToWorkspace(workspaceId));
   }
 
   private openDatabase(path: string, enforceForeignKeys = true): Database.Database {
@@ -601,43 +574,6 @@ export class BugPocketDatabase {
   private workspaceDatabasePath(workspaceId: string): string {
     const safeId = workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_');
     return join(this.dataDir, `ws_${safeId}.sqlite`);
-  }
-
-  private copyLegacyLocalRowsToWorkspace(): void {
-    if (!this.workspaceDb) return;
-    const legacyTables = ['applications', 'modules', 'environments', 'bugs', 'attachments', 'sync_queue'];
-    this.workspaceDb.exec('PRAGMA foreign_keys = OFF');
-    try {
-      for (const table of legacyTables) {
-        if (!this.tableExists(this.localDb, table) || !this.tableExists(this.workspaceDb, table)) continue;
-        const localCount = this.localDb.prepare(`SELECT COUNT(*) AS count FROM ${this.quoteIdentifier(table)}`).get() as { count: number };
-        if (!localCount.count) continue;
-
-        const commonColumns = this.commonColumns(this.localDb, this.workspaceDb, table);
-        if (!commonColumns.length) continue;
-
-        const columnSql = commonColumns.map((column) => this.quoteIdentifier(column)).join(', ');
-        const placeholders = commonColumns.map((column) => `@${column}`).join(', ');
-        const rows = this.localDb.prepare(`SELECT ${columnSql} FROM ${this.quoteIdentifier(table)}`).all() as Array<Record<string, unknown>>;
-        const insert = this.workspaceDb.prepare(`INSERT OR IGNORE INTO ${this.quoteIdentifier(table)} (${columnSql}) VALUES (${placeholders})`);
-        const copyRows = this.workspaceDb.transaction((values: Array<Record<string, unknown>>) => {
-          values.forEach((row) => insert.run(row));
-        });
-        copyRows(rows);
-      }
-    } finally {
-      this.workspaceDb.exec('PRAGMA foreign_keys = OFF');
-    }
-  }
-
-  private clearLegacyLocalWorkspaceRows(): void {
-    const clearRows = this.localDb.transaction(() => {
-      ['sync_queue', 'attachments', 'bugs'].forEach((table) => {
-        if (!this.tableExists(this.localDb, table)) return;
-        this.localDb.prepare(`DELETE FROM ${this.quoteIdentifier(table)}`).run();
-      });
-    });
-    clearRows();
   }
 
   private tableExists(connection: Database.Database, table: string): boolean {
@@ -1006,6 +942,13 @@ export class BugPocketDatabase {
         retry_count INTEGER NOT NULL DEFAULT 0,
         last_error TEXT NULL DEFAULT NULL
       );
+      CREATE TABLE IF NOT EXISTS attachment_download_queue (
+        attachment_id INTEGER PRIMARY KEY,
+        content_hash TEXT NOT NULL,
+        file_extension TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT NULL DEFAULT NULL
+      );
 
       CREATE TABLE IF NOT EXISTS app_settings (
         key        TEXT PRIMARY KEY NOT NULL,
@@ -1018,6 +961,7 @@ export class BugPocketDatabase {
       CREATE INDEX IF NOT EXISTS idx_attachments_content_hash ON attachments(content_hash);
       CREATE INDEX IF NOT EXISTS idx_sync_queue_created_at ON sync_queue(created_at);
       CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity_type, entity_id);
+      CREATE INDEX IF NOT EXISTS idx_attachment_download_queue_retry ON attachment_download_queue(retry_count, attachment_id);
       CREATE INDEX IF NOT EXISTS idx_modules_application_id ON modules(application_id);
       CREATE INDEX IF NOT EXISTS idx_presets_application_id ON presets(application_id);
       CREATE INDEX IF NOT EXISTS idx_presets_module_id ON presets(module_id);
@@ -1063,6 +1007,9 @@ export class BugPocketDatabase {
     this.rebuildAttachmentsTableWithoutAbsolutePaths();
     this.ensureNullableAttachmentContentHash();
     this.ensureColumn('attachments', 'parent_id', 'INTEGER NULL REFERENCES attachments(id) ON DELETE SET NULL');
+    // Only newly captured screenshots receive an expiry; legacy orphans retain their ownership.
+    this.ensureColumn('attachments', 'pending_capture_until', 'TEXT NULL DEFAULT NULL');
+    this.db.exec('CREATE TABLE IF NOT EXISTS attachment_gc (content_hash TEXT NOT NULL, file_extension TEXT NOT NULL, PRIMARY KEY (content_hash, file_extension))');
     this.migrateReferenceOptions();
     this.migrateCaptureStatuses();
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_entry_type ON bugs(entry_type)');
@@ -1080,6 +1027,7 @@ export class BugPocketDatabase {
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_local_seq ON sync_queue(local_seq) WHERE local_seq > 0');
     this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_op_id ON sync_queue(op_id) WHERE op_id != ''");
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity_type, entity_id)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_attachment_download_queue_retry ON attachment_download_queue(retry_count, attachment_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_application_id ON presets(application_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_module_id ON presets(module_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_presets_environment_id ON presets(environment_id)');
@@ -1401,12 +1349,25 @@ export class BugPocketDatabase {
     `);
   }
 
-  private deleteAttachmentBlobIfUnused(contentHash: string | null, fileExtension: string): void {
-    if (!contentHash) return;
-    const remaining = this.workspaceDataDb().prepare('SELECT COUNT(*) AS count FROM attachments WHERE content_hash = ?').get(contentHash) as { count: number };
-    if (remaining.count > 0) return;
+  private queueAttachmentGarbageCollection(contentHash: string, fileExtension: string): void {
+    this.resolveAttachmentPath(contentHash, fileExtension);
+    this.localDb.prepare('INSERT OR IGNORE INTO attachment_gc (content_hash, file_extension) VALUES (?, ?)').run(contentHash, fileExtension);
+  }
+
+  private deleteAttachmentBlobIfUnused(contentHash: string | null, fileExtension: string): boolean {
+    if (!contentHash) return false;
+    this.queueAttachmentGarbageCollection(contentHash, fileExtension);
+    if (this.isAttachmentHashReferencedByAnyDatabase(contentHash)) return false;
     const filePath = this.resolveAttachmentPath(contentHash, fileExtension);
-    if (existsSync(filePath)) unlinkSync(filePath);
+    try {
+      const existed = existsSync(filePath);
+      if (existed) unlinkSync(filePath);
+      this.localDb.prepare('DELETE FROM attachment_gc WHERE content_hash = ? AND file_extension = ?').run(contentHash, fileExtension);
+      return existed;
+    } catch {
+      // A locked/read-only file retains a durable deletion intent for a later sweep.
+      return false;
+    }
   }
 
   private nextLocalSeq(): number {
@@ -1877,6 +1838,19 @@ Attachments:
     return row.count;
   }
 
+  getBugStatusCounts(): BugStatusCounts {
+    return this.workspaceDataDb()
+      .prepare(
+        `SELECT
+          COALESCE(SUM(CASE WHEN status != 'Discarded' THEN 1 ELSE 0 END), 0) AS total,
+          COALESCE(SUM(CASE WHEN status = 'Draft' THEN 1 ELSE 0 END), 0) AS draft,
+          COALESCE(SUM(CASE WHEN status = 'Reported' THEN 1 ELSE 0 END), 0) AS reported,
+          COALESCE(SUM(CASE WHEN status = 'Discarded' THEN 1 ELSE 0 END), 0) AS discarded
+        FROM bugs`
+      )
+      .get() as BugStatusCounts;
+  }
+
   updateShortcut(action: ShortcutAction, accelerator: string, enabled: boolean): ShortcutSetting {
     const cleaned = accelerator.trim();
     this.db
@@ -2144,6 +2118,10 @@ Attachments:
 
     if (this.remoteString(remoteBug.deleted_at)) {
       if (!existing) return false;
+      db.prepare(`
+        DELETE FROM attachment_download_queue
+        WHERE attachment_id IN (SELECT id FROM attachments WHERE bug_id = ?)
+      `).run(existing.id);
       db.prepare('DELETE FROM attachments WHERE bug_id = ?').run(existing.id);
       db.prepare('DELETE FROM bugs WHERE id = ?').run(existing.id);
       return true;
@@ -2305,10 +2283,6 @@ Attachments:
   }
 
   upsertRemoteAttachment(remoteAttachment: Record<string, unknown>): boolean {
-    const attachmentMetadata = validateAttachmentMetadata(
-      remoteAttachment.content_hash,
-      remoteAttachment.file_extension
-    );
     const db = this.requireWorkspaceDb();
     const remoteId = this.remoteString(remoteAttachment.id);
     if (!remoteId) return false;
@@ -2318,10 +2292,15 @@ Attachments:
 
     if (this.remoteString(remoteAttachment.deleted_at)) {
       if (!existing) return false;
+      db.prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?').run(existing.id);
       db.prepare('DELETE FROM attachments WHERE id = ?').run(existing.id);
       return true;
     }
 
+    const attachmentMetadata = validateAttachmentMetadata(
+      remoteAttachment.content_hash,
+      remoteAttachment.file_extension
+    );
     if (existing && this.isLocalNewer(existing.updated_at, remoteUpdatedAt)) return false;
 
     const remoteBugId = this.remoteString(remoteAttachment.bug_id);
@@ -2342,6 +2321,7 @@ Attachments:
       updated_at: remoteUpdatedAt
     };
 
+    let attachmentId: number;
     if (existing) {
       db.prepare(`
         UPDATE attachments SET
@@ -2356,21 +2336,78 @@ Attachments:
           updated_at = @updated_at
         WHERE id = @id
       `).run({ ...values, id: existing.id });
-      return true;
+      attachmentId = existing.id;
+    } else {
+      const result = db.prepare(`
+        INSERT INTO attachments (
+          remote_id, bug_id, parent_id, content_hash, file_extension, mime_type, source_type,
+          sync_status, last_sync_at, created_at, updated_at
+        ) VALUES (
+          @remote_id, @bug_id, @parent_id, @content_hash, @file_extension, @mime_type, @source_type,
+          @sync_status, @last_sync_at, @created_at, @updated_at
+        )
+      `).run(values);
+      attachmentId = Number(result.lastInsertRowid);
     }
 
-    db.prepare(`
-      INSERT INTO attachments (
-        remote_id, bug_id, parent_id, content_hash, file_extension, mime_type, source_type,
-        sync_status, last_sync_at, created_at, updated_at
-      ) VALUES (
-        @remote_id, @bug_id, @parent_id, @content_hash, @file_extension, @mime_type, @source_type,
-        @sync_status, @last_sync_at, @created_at, @updated_at
-      )
-    `).run(values);
+    this.reconcileAttachmentDownloadIntent(
+      db,
+      attachmentId,
+      attachmentMetadata.contentHash,
+      attachmentMetadata.extension
+    );
     return true;
   }
 
+  private reconcileAttachmentDownloadIntent(
+    db: Database.Database,
+    attachmentId: number,
+    contentHash: string | null,
+    fileExtension: string
+  ): void {
+    if (!contentHash || this.attachmentFileExists(contentHash, fileExtension)) {
+      db.prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?').run(attachmentId);
+      return;
+    }
+
+    db.prepare(`
+      INSERT INTO attachment_download_queue (
+        attachment_id, content_hash, file_extension, retry_count, last_error
+      ) VALUES (?, ?, ?, 0, NULL)
+      ON CONFLICT(attachment_id) DO UPDATE SET
+        retry_count = CASE
+          WHEN content_hash != excluded.content_hash OR file_extension != excluded.file_extension THEN 0
+          ELSE retry_count
+        END,
+        last_error = CASE
+          WHEN content_hash != excluded.content_hash OR file_extension != excluded.file_extension THEN NULL
+          ELSE last_error
+        END,
+        content_hash = excluded.content_hash,
+        file_extension = excluded.file_extension
+    `).run(attachmentId, contentHash, fileExtension);
+  }
+
+  private backfillAttachmentDownloadQueue(): void {
+    const db = this.workspaceDb;
+    if (!db) return;
+    const rows = db.prepare(`
+      SELECT id, content_hash, file_extension
+      FROM attachments
+      WHERE remote_id != '' AND content_hash IS NOT NULL AND content_hash != ''
+    `).all() as Array<{ id: number; content_hash: string; file_extension: string }>;
+    const transaction = db.transaction(() => {
+      for (const row of rows) {
+        try {
+          const metadata = validateAttachmentMetadata(row.content_hash, row.file_extension);
+          this.reconcileAttachmentDownloadIntent(db, row.id, metadata.contentHash, metadata.extension);
+        } catch {
+          // Invalid legacy metadata remains visible in diagnostics only after a fresh remote pull.
+        }
+      }
+    });
+    transaction();
+  }
   private legacyRemoteSyncWatermarkKey(workspaceId: string): string {
     return `last_remote_sync_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
   }
@@ -2483,6 +2520,37 @@ Attachments:
     this.setSetting('byok_ai_custom_system_prompt', customSystemPrompt);
   }
 
+  getPendingAttachmentDownloads(limit = 25, maxRetries = 5): AttachmentDownloadQueueItem[] {
+    return this.workspaceDataDb().prepare(`
+      SELECT attachment_id, content_hash, file_extension, retry_count, last_error
+      FROM attachment_download_queue
+      WHERE retry_count < ?
+      ORDER BY attachment_id
+      LIMIT ?
+    `).all(maxRetries, limit) as AttachmentDownloadQueueItem[];
+  }
+
+  markAttachmentDownloadSucceeded(attachmentId: number): void {
+    this.workspaceDataDb()
+      .prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?')
+      .run(attachmentId);
+  }
+
+  recordAttachmentDownloadFailure(attachmentId: number, errorMessage: string): number {
+    const dataDb = this.workspaceDataDb();
+    const transaction = dataDb.transaction(() => {
+      dataDb.prepare(`
+        UPDATE attachment_download_queue
+        SET retry_count = retry_count + 1, last_error = ?
+        WHERE attachment_id = ?
+      `).run(errorMessage.slice(0, 2000), attachmentId);
+      const row = dataDb
+        .prepare('SELECT retry_count FROM attachment_download_queue WHERE attachment_id = ?')
+        .get(attachmentId) as { retry_count: number } | undefined;
+      return row?.retry_count ?? 0;
+    });
+    return transaction() as number;
+  }
   getPendingSyncQueue(limit = 25, maxRetries = 5): SyncQueueEvent[] {
     const dataDb = this.workspaceDataDb();
     return dataDb
@@ -2554,11 +2622,16 @@ Attachments:
   }
 
   resetSyncQueueRetries(): void {
-    this.workspaceDataDb().prepare('UPDATE sync_queue SET retry_count = 0, last_error = NULL').run();
+    const dataDb = this.workspaceDataDb();
+    const transaction = dataDb.transaction(() => {
+      dataDb.prepare('UPDATE sync_queue SET retry_count = 0, last_error = NULL').run();
+      dataDb.prepare('UPDATE attachment_download_queue SET retry_count = 0, last_error = NULL').run();
+    });
+    transaction();
   }
 
   getSyncDiagnostics(): SyncDiagnosticsRow[] {
-    return this.workspaceDataDb().prepare(`
+    const rows = this.workspaceDataDb().prepare(`
       SELECT
         q.id,
         q.local_seq,
@@ -2575,14 +2648,35 @@ Attachments:
             WHEN q.entity_type = 'attachment' THEN COALESCE(NULLIF(a.content_hash || a.file_extension, ''), 'Attachment #' || q.entity_id)
             ELSE q.entity_type || ' #' || q.entity_id
           END
-        ) AS label
+        ) AS label,
+        'upload' AS queue_type,
+        0 AS missing_binary
       FROM sync_queue q
       LEFT JOIN bugs b ON q.entity_type = 'bug' AND b.id = q.entity_id
       LEFT JOIN attachments a ON q.entity_type = 'attachment' AND a.id = q.entity_id
-      ORDER BY q.local_seq, q.id
-    `).all() as SyncDiagnosticsRow[];
-  }
 
+      UNION ALL
+
+      SELECT
+        d.attachment_id AS id,
+        0 AS local_seq,
+        '' AS op_id,
+        'attachment' AS entity_type,
+        d.attachment_id AS entity_id,
+        'DOWNLOAD' AS operation,
+        COALESCE(a.updated_at, a.created_at, '') AS created_at,
+        d.retry_count,
+        d.last_error,
+        COALESCE(NULLIF(d.content_hash || d.file_extension, ''), 'Attachment #' || d.attachment_id) AS label,
+        'download' AS queue_type,
+        1 AS missing_binary
+      FROM attachment_download_queue d
+      LEFT JOIN attachments a ON a.id = d.attachment_id
+
+      ORDER BY created_at, id
+    `).all() as Array<SyncDiagnosticsRow & { missing_binary: number | boolean }>;
+    return rows.map((row) => ({ ...row, missing_binary: Boolean(row.missing_binary) }));
+  }
   getPresets(): CapturePreset[] {
     return this.db.prepare('SELECT * FROM presets ORDER BY id LIMIT ?').all(MAX_CAPTURE_PRESETS) as CapturePreset[];
   }
@@ -3172,10 +3266,10 @@ Attachments:
           stamp
         );
       const bugId = Number(result.lastInsertRowid);
-      const attach = dataDb.prepare('UPDATE attachments SET bug_id = ?, updated_at = ? WHERE id = ? AND bug_id IS NULL');
+      const attach = dataDb.prepare('UPDATE attachments SET bug_id = ?, updated_at = ?, pending_capture_until = NULL WHERE id = ? AND bug_id IS NULL');
       this.enqueueBugSyncEvent(bugId, 'INSERT');
       input.attachment_ids.forEach((attachmentId) => {
-        attach.run(bugId, stamp, attachmentId);
+        if (attach.run(bugId, stamp, attachmentId).changes !== 1) throw new Error('A capture attachment is no longer available. Review the screenshots before saving.');
         this.enqueueAttachmentSyncEvent(attachmentId, 'UPDATE');
       });
       return bugId;
@@ -3248,6 +3342,10 @@ Attachments:
     const tx = dataDb.transaction(() => {
       attachmentPayloads.forEach((attachment) => this.enqueueAttachmentSyncEvent(attachment.id, 'DELETE', attachment));
       this.enqueueBugSyncEvent(id, 'DELETE', bugPayload);
+      dataDb.prepare(`
+        DELETE FROM attachment_download_queue
+        WHERE attachment_id IN (SELECT id FROM attachments WHERE bug_id = ?)
+      `).run(id);
       dataDb.prepare('DELETE FROM attachments WHERE bug_id = ?').run(id);
       dataDb.prepare('DELETE FROM bugs WHERE id = ?').run(id);
     });
@@ -3257,15 +3355,65 @@ Attachments:
     });
   }
 
-  createAttachment(contentHash: string, fileExtension: string, mimeType = 'image/png', sourceType = 'snip'): number {
+  createAttachment(contentHash: string, fileExtension: string, mimeType = 'image/png', sourceType = 'snip', pendingCapture = false): number {
     const dataDb = this.workspaceDataDb();
     const tx = dataDb.transaction(() => {
       const result = dataDb
-        .prepare('INSERT INTO attachments (bug_id, content_hash, file_extension, mime_type, source_type, sync_status, created_at) VALUES (NULL, ?, ?, ?, ?, ?, ?)')
-        .run(contentHash, fileExtension, mimeType, sourceType, 'Local Only', now());
+        .prepare('INSERT INTO attachments (bug_id, content_hash, file_extension, mime_type, source_type, sync_status, created_at, pending_capture_until) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)')
+        .run(contentHash, fileExtension, mimeType, sourceType, 'Local Only', now(), pendingCapture ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null);
       return Number(result.lastInsertRowid);
     });
     return tx();
+  }
+
+  listPendingCaptures(): Array<{ id: number; fileName: string; contentHash: string }> {
+    return (this.workspaceDataDb().prepare(
+      "SELECT id, content_hash, file_extension FROM attachments WHERE bug_id IS NULL AND pending_capture_until IS NOT NULL"
+    ).all() as Array<{ id: number; content_hash: string; file_extension: string }>).map(row => ({
+      id: row.id, contentHash: row.content_hash, fileName: row.content_hash + row.file_extension
+    }));
+  }
+
+  discardPendingCaptures(): void {
+    const connection = this.workspaceDataDb();
+    this.removePendingCaptures(connection);
+  }
+
+  private removePendingCaptures(connection: Database.Database, expiredBefore?: string): void {
+    const columns = connection.prepare('PRAGMA table_info(attachments)').all() as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'pending_capture_until')) return;
+    const condition = 'bug_id IS NULL AND pending_capture_until IS NOT NULL'
+      + (expiredBefore ? ' AND pending_capture_until <= ?' : '');
+    const rows = connection.prepare(`SELECT id, content_hash, file_extension FROM attachments WHERE ${condition}`)
+      .all(...(expiredBefore ? [expiredBefore] : [])) as Array<{ id: number; content_hash: string; file_extension: string }>;
+    // Persist cleanup intent before deleting temporary ownership, including across crashes.
+    for (const row of rows) this.queueAttachmentGarbageCollection(row.content_hash, row.file_extension);
+    connection.transaction(() => {
+      for (const row of rows) {
+        connection.prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?').run(row.id);
+        connection.prepare('DELETE FROM attachments WHERE id = ?').run(row.id);
+      }
+    })();
+    for (const row of rows) this.deleteAttachmentBlobIfUnused(row.content_hash, row.file_extension);
+  }
+
+  cleanupExpiredCaptures(at = new Date().toISOString()): void {
+    for (const entry of readdirSync(this.dataDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !/^(local|ws_.+)\.sqlite$/i.test(entry.name)) continue;
+      const path = join(this.dataDir, entry.name);
+      const local = resolve(path).toLowerCase() === resolve(this.localDbPath).toLowerCase();
+      let connection: Database.Database | null = null;
+      try {
+        connection = local ? this.localDb : new Database(path, { fileMustExist: true });
+        this.removePendingCaptures(connection, at);
+      } catch {
+        // Unreadable or locked databases are preserved and retried on the next sweep.
+      } finally {
+        if (!local) connection?.close();
+      }
+    }
+    const pending = this.localDb.prepare('SELECT content_hash, file_extension FROM attachment_gc').all() as Array<{ content_hash: string; file_extension: string }>;
+    for (const row of pending) this.deleteAttachmentBlobIfUnused(row.content_hash, row.file_extension);
   }
 
   createAnnotatedAttachment(parentId: number, contentHash: string, fileExtension: string, mimeType = 'image/png'): Attachment {
@@ -3295,7 +3443,7 @@ Attachments:
     const dataDb = this.workspaceDataDb();
     const stamp = now();
     const tx = dataDb.transaction(() => {
-      dataDb.prepare('UPDATE attachments SET bug_id = ?, updated_at = ? WHERE id = ?').run(bugId, stamp, attachmentId);
+      dataDb.prepare('UPDATE attachments SET bug_id = ?, updated_at = ?, pending_capture_until = NULL WHERE id = ?').run(bugId, stamp, attachmentId);
       dataDb.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(bugId), stamp, bugId);
       this.enqueueAttachmentSyncEvent(attachmentId, 'UPDATE');
       this.enqueueBugSyncEvent(bugId, 'UPDATE');
@@ -3313,6 +3461,7 @@ Attachments:
     const deletedPayload = this.attachmentPayload(attachmentId);
     const tx = dataDb.transaction(() => {
       this.enqueueAttachmentSyncEvent(attachmentId, 'DELETE', deletedPayload);
+      dataDb.prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?').run(attachmentId);
       dataDb.prepare('DELETE FROM attachments WHERE id = ?').run(attachmentId);
       if (attachment.bug_id) {
         dataDb.prepare('UPDATE bugs SET sync_status = ?, updated_at = ? WHERE id = ?').run(this.pendingSyncStatusForBugId(attachment.bug_id), now(), attachment.bug_id);
@@ -3348,34 +3497,20 @@ Attachments:
       groups.set(key, group);
     });
 
-    const idsToPrune: number[] = [];
-    groups.forEach((group) => {
-      const placeholders = group.ids.map(() => '?').join(', ');
-      const remaining = dataDb
-        .prepare(`SELECT COUNT(*) AS count FROM attachments WHERE content_hash = ? AND id NOT IN (${placeholders})`)
-        .get(group.contentHash, ...group.ids) as { count: number };
-
-      if (remaining.count === 0) {
-        const filePath = this.resolveAttachmentPath(group.contentHash, group.fileExtension);
-        try {
-          if (filePath && existsSync(filePath)) unlinkSync(filePath);
-        } catch {
-          return;
-        }
-      }
-      idsToPrune.push(...group.ids);
-    });
-
+    const idsToPrune = staleAttachments.map(attachment => attachment.id);
     if (!idsToPrune.length) return 0;
     const stamp = now();
     const tx = dataDb.transaction((attachmentIds: number[]) => {
       const update = dataDb.prepare('UPDATE attachments SET content_hash = NULL, updated_at = ? WHERE id = ?');
+      const clearDownload = dataDb.prepare('DELETE FROM attachment_download_queue WHERE attachment_id = ?');
       attachmentIds.forEach((attachmentId) => {
         update.run(stamp, attachmentId);
+        clearDownload.run(attachmentId);
         this.enqueueAttachmentSyncEvent(attachmentId, 'UPDATE');
       });
     });
     tx(idsToPrune);
+    groups.forEach(group => this.deleteAttachmentBlobIfUnused(group.contentHash, group.fileExtension));
     return idsToPrune.length;
   }
 

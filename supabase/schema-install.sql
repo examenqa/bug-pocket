@@ -516,12 +516,10 @@ cross join (values
 on conflict (workspace_id, role) do nothing;
 
 -- 6. Storage
--- Workspace attachments are private. Telemetry assets remain public so Slack can
--- unfurl screenshots submitted through the support Edge Function.
+-- Workspace attachments are private. Product support is handled by the dedicated
+-- Examen QA API and does not provision storage in customer Supabase projects.
 insert into storage.buckets (id, name, public)
-values
-  ('attachments', 'attachments', false),
-  ('telemetry-assets', 'telemetry-assets', true)
+values ('attachments', 'attachments', false)
 on conflict (id) do nothing;
 
 -- Extract the first path segment without risking an invalid UUID cast. Every

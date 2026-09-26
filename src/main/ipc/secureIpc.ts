@@ -300,7 +300,7 @@ const feedbackPayload = plainObject({
 }, {
   user_email: optional(stringValue(500)),
   image_base64: optional(stringValue(maxDataUrlLength)),
-  image_url: optional(webUrl)
+  image_mime_type: optional(enumeration(['image/png', 'image/jpeg']))
 });
 
 export function createIpcArgumentValidators(): Record<string, IpcArgumentValidator> {
@@ -308,10 +308,9 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   const noArgs = [
     'window:openQuickCapture', 'window:hideQuickCapture', 'window:expandQuickCaptureForReview',
     'window:restoreQuickCaptureCompact', 'settings:get', 'get-ai-config', 'shortcuts:suspend',
-    'shortcuts:resume', 'bugs:count', 'details:flushComplete', 'screenshot:getSource',
+    'shortcuts:resume', 'bugs:count', 'bugs:statusCounts', 'capture:listPending', 'capture:discardPending', 'screenshot:getSource',
     'screenshot:cancel', 'quickScreenshot:getPending', 'quickScreenshot:discardPending',
     'backup:export', 'backup:import', 'backup:chooseDirectory', 'app:clearCurrentWorkspace', 'app:factoryReset',
-    'app:installUpdate',
     'sync:testConnection', 'sync:authSignOut', 'sync:getSessionStatus', 'sync:listWorkspaces',
     'sync:getDiagnostics', 'sync:getRuntimeStatus', 'sync:retryNow', 'sync:forceRetry'
   ];
@@ -361,6 +360,7 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   validators['clipboard:copy'] = args(stringValue(maxTextLength));
   validators['shell:openExternal'] = args(webUrl);
   validators['support:sendFeedback'] = args(feedbackPayload);
+  validators['details:flushComplete'] = args(nonEmptyString(128), booleanValue);
   validators['details:setDirty'] = args(booleanValue);
   validators['screenshot:start'] = optionalSingleArg(positiveInteger);
   validators['screenshot:complete'] = args(pngDataUrl);
