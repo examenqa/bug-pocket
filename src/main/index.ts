@@ -944,8 +944,8 @@ function registerIpc(): void {
   secureIpc.handle('window:openMain', (_event, route = DASHBOARD_ROUTE) => openMainWindow(route));
   secureIpc.handle('window:openSettings', (_event, section?: string) => openSettings(section));
   secureIpc.handle('settings:get', () => settingsWithShortcutStatus());
-  secureIpc.handle('settings:addApplication', (_event, name: string, contextDescription?: string | null) => mutateWorkspaceSettings(() => db.addApplication(name, contextDescription ?? '')));
-  secureIpc.handle('settings:updateApplication', (_event, id: TaxonomyId, name: string, contextDescription = '') => mutateWorkspaceSettings(() => db.updateApplication(id, name, contextDescription)));
+  secureIpc.handle('settings:addApplication', (_event, name: string, contextDescription?: string | null, issuePrefix = '') => mutateWorkspaceSettings(() => db.addApplication(name, contextDescription ?? '', issuePrefix)));
+  secureIpc.handle('settings:updateApplication', (_event, id: TaxonomyId, name: string, contextDescription = '', issuePrefix = '') => mutateWorkspaceSettings(() => db.updateApplication(id, name, contextDescription, issuePrefix)));
   secureIpc.handle('settings:updateApplicationContext', (_event, id: TaxonomyId, contextDescription: string) => mutateWorkspaceSettings(() => db.updateApplicationContext(id, contextDescription)));
   secureIpc.handle('settings:updateApplicationSync', (_event, id: TaxonomyId, isSynced: boolean) => mutateWorkspaceSettings(() => db.updateApplicationSync(id, isSynced)));
   secureIpc.handle('settings:deleteApplication', (_event, id: TaxonomyId) => mutateWorkspaceSettings(() => db.deleteApplication(id)));
@@ -1125,6 +1125,11 @@ function registerIpc(): void {
   secureIpc.handle('sync:listWorkspaces', () => operationBarrier.acquire(() => syncEngine.listWorkspaceMemberships()));
   secureIpc.handle('sync:updateWorkspaceName', (_event, workspaceId: string, name: string) => mutateWorkspace(() => syncEngine.updateWorkspaceName(workspaceId, name)));
   secureIpc.handle('sync:getWorkspaceRole', (_event, workspaceId: string | null) => db.getWorkspaceRole(workspaceId));
+  secureIpc.handle('sync:claimIssueUserCode', async (_event, userCode: string) => {
+    const claimedCode = await operationBarrier.acquire(() => syncEngine.claimIssueUserCode(userCode));
+    notifySettingsChanged();
+    return claimedCode;
+  });
   secureIpc.handle('sync:getDiagnostics', () => db.getSyncDiagnostics());
   secureIpc.handle('sync:getRuntimeStatus', () => syncEngine.getRuntimeStatus());
   secureIpc.handle('sync:retryNow', async () => {

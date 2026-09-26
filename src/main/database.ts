@@ -37,6 +37,7 @@ import type {
   AiProvider
 } from '../shared/types';
 import { resolveAttachmentFilePath, validateAttachmentMetadata } from './sync/attachmentPaths';
+import { deriveIssuePrefix, formatIssueKey, normalizeIssuePrefix, normalizeIssueUserCode } from '../shared/issueKeys';
 
 const now = (): string => new Date().toISOString();
 
@@ -626,14 +627,15 @@ export class BugPocketDatabase {
       CREATE TABLE IF NOT EXISTS applications_uuid (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
+        issue_prefix TEXT NOT NULL DEFAULT '',
         context_description TEXT NULL DEFAULT NULL,
         is_active INTEGER NOT NULL DEFAULT 1,
         is_synced INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
-      INSERT OR IGNORE INTO applications_uuid (id, name, context_description, is_active, is_synced, created_at, updated_at)
-      SELECT CAST(id AS TEXT), name, context_description, is_active, is_synced, created_at, updated_at FROM applications;
+      INSERT OR IGNORE INTO applications_uuid (id, name, issue_prefix, context_description, is_active, is_synced, created_at, updated_at)
+      SELECT CAST(id AS TEXT), name, issue_prefix, context_description, is_active, is_synced, created_at, updated_at FROM applications;
 
       CREATE TABLE IF NOT EXISTS modules_uuid (
         id TEXT PRIMARY KEY,
@@ -661,6 +663,10 @@ export class BugPocketDatabase {
 
       CREATE TABLE IF NOT EXISTS bugs_uuid (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        issue_key TEXT NOT NULL DEFAULT '',
+        issue_prefix TEXT NOT NULL DEFAULT '',
+        issue_user_code TEXT NULL DEFAULT NULL,
+        issue_number INTEGER NULL DEFAULT NULL,
         application_id TEXT NULL REFERENCES applications(id) ON DELETE SET NULL,
         module_id TEXT NULL REFERENCES modules(id) ON DELETE SET NULL,
         environment_id TEXT NULL REFERENCES environments(id) ON DELETE SET NULL,
@@ -690,12 +696,12 @@ export class BugPocketDatabase {
         updated_at TEXT NOT NULL
       );
       INSERT OR IGNORE INTO bugs_uuid (
-        id, application_id, module_id, environment_id, device_id, browser_id, user_role_id,
+        id, issue_key, issue_prefix, issue_user_code, issue_number, application_id, module_id, environment_id, device_id, browser_id, user_role_id,
         entry_type, title, note, other_details, steps_to_reproduce, expected_result, actual_result,
         status, severity, reported, issue_platform, issue_id, issue_url, tags, sync_status, last_sync_at, remote_id, workspace_id, created_by, created_at, updated_at
       )
       SELECT
-        id,
+        id, issue_key, issue_prefix, issue_user_code, issue_number,
         CASE WHEN application_id IS NULL THEN NULL ELSE CAST(application_id AS TEXT) END,
         CASE WHEN module_id IS NULL THEN NULL ELSE CAST(module_id AS TEXT) END,
         CASE WHEN environment_id IS NULL THEN NULL ELSE CAST(environment_id AS TEXT) END,
@@ -719,6 +725,8 @@ export class BugPocketDatabase {
       CREATE INDEX IF NOT EXISTS idx_bugs_environment_id ON bugs(environment_id);
       CREATE INDEX IF NOT EXISTS idx_bugs_sync_status ON bugs(sync_status);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_bugs_remote_id ON bugs(remote_id) WHERE remote_id != '';
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_bugs_issue_key ON bugs(issue_key) WHERE issue_key != '';
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_applications_issue_prefix ON applications(issue_prefix) WHERE issue_prefix != '';
 
       PRAGMA foreign_keys = ON;
     `);
@@ -789,6 +797,7 @@ export class BugPocketDatabase {
       CREATE TABLE IF NOT EXISTS applications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
+        issue_prefix TEXT NOT NULL DEFAULT '',
         context_description TEXT NULL DEFAULT NULL,
         is_active INTEGER NOT NULL DEFAULT 1,
         is_synced INTEGER NOT NULL DEFAULT 1,
@@ -848,6 +857,10 @@ export class BugPocketDatabase {
 
       CREATE TABLE IF NOT EXISTS bugs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        issue_key TEXT NOT NULL DEFAULT '',
+        issue_prefix TEXT NOT NULL DEFAULT '',
+        issue_user_code TEXT NULL DEFAULT NULL,
+        issue_number INTEGER NULL DEFAULT NULL,
         application_id TEXT NULL REFERENCES applications(id) ON DELETE SET NULL,
         module_id TEXT NULL REFERENCES modules(id) ON DELETE SET NULL,
         environment_id TEXT NULL REFERENCES environments(id) ON DELETE SET NULL,
@@ -971,6 +984,7 @@ export class BugPocketDatabase {
     this.ensureColumn('applications', 'is_active', 'INTEGER NOT NULL DEFAULT 1');
     this.ensureColumn('applications', 'is_synced', 'INTEGER NOT NULL DEFAULT 1');
     this.ensureColumn('applications', 'context_description', 'TEXT NULL DEFAULT NULL');
+    this.ensureColumn('applications', 'issue_prefix', "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn('modules', 'context_description', 'TEXT NULL DEFAULT NULL');
     this.ensureColumn('modules', 'is_active', 'INTEGER NOT NULL DEFAULT 1');
     this.ensureReferenceColumns();
@@ -988,6 +1002,10 @@ export class BugPocketDatabase {
     this.ensureColumn('bugs', 'remote_id', "TEXT NOT NULL DEFAULT ''");
     this.ensureColumn('bugs', 'workspace_id', 'TEXT NULL DEFAULT NULL');
     this.ensureColumn('bugs', 'created_by', 'TEXT NULL DEFAULT NULL');
+    this.ensureColumn('bugs', 'issue_key', "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumn('bugs', 'issue_prefix', "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumn('bugs', 'issue_user_code', 'TEXT NULL DEFAULT NULL');
+    this.ensureColumn('bugs', 'issue_number', 'INTEGER NULL DEFAULT NULL');
     this.ensureColumn('attachments', 'source_type', "TEXT NOT NULL DEFAULT 'snip'");
     this.ensureColumn('attachments', 'sync_status', "TEXT NOT NULL DEFAULT 'Local Only'");
     this.ensureColumn('attachments', 'last_sync_at', "TEXT NOT NULL DEFAULT ''");
@@ -1012,12 +1030,15 @@ export class BugPocketDatabase {
     this.db.exec('CREATE TABLE IF NOT EXISTS attachment_gc (content_hash TEXT NOT NULL, file_extension TEXT NOT NULL, PRIMARY KEY (content_hash, file_extension))');
     this.migrateReferenceOptions();
     this.migrateCaptureStatuses();
+    this.ensureIssueIdentifierSchema();
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_entry_type ON bugs(entry_type)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_environment_id ON bugs(environment_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_device_id ON bugs(device_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_browser_id ON bugs(browser_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_user_role_id ON bugs(user_role_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_bugs_sync_status ON bugs(sync_status)');
+    this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bugs_issue_key ON bugs(issue_key) WHERE issue_key != ''");
+    this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_applications_issue_prefix ON applications(issue_prefix) WHERE issue_prefix != ''");
     this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bugs_remote_id ON bugs(remote_id) WHERE remote_id != ''");
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_attachments_bug_id ON attachments(bug_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_attachments_content_hash ON attachments(content_hash)');
@@ -1050,6 +1071,55 @@ export class BugPocketDatabase {
       this.ensureColumn(table, 'updated_at', `TEXT NOT NULL DEFAULT '${now()}'`);
       this.db.prepare(`UPDATE ${table} SET value = name WHERE value = ''`).run();
     });
+  }
+
+  private ensureIssueIdentifierSchema(): void {
+    const usedPrefixes = new Set<string>();
+    const applications = this.db
+      .prepare('SELECT id, name, issue_prefix FROM applications ORDER BY created_at, id')
+      .all() as Array<{ id: TaxonomyId; name: string; issue_prefix: string }>;
+
+    for (const application of applications) {
+      let prefix = normalizeIssuePrefix(application.issue_prefix || deriveIssuePrefix(application.name), application.name);
+      const basePrefix = prefix;
+      let suffix = 2;
+      while (usedPrefixes.has(prefix)) {
+        const suffixText = String(suffix);
+        prefix = `${basePrefix.slice(0, Math.max(2, 8 - suffixText.length))}${suffixText}`;
+        suffix += 1;
+      }
+      usedPrefixes.add(prefix);
+      if (application.issue_prefix !== prefix) {
+        this.db.prepare('UPDATE applications SET issue_prefix = ? WHERE id = ?').run(prefix, application.id);
+      }
+    }
+
+    const prefixByApplication = new Map(
+      (this.db.prepare('SELECT id, issue_prefix FROM applications').all() as Array<{ id: TaxonomyId; issue_prefix: string }>)
+        .map((application) => [String(application.id), application.issue_prefix])
+    );
+    const bugs = this.db
+      .prepare('SELECT id, application_id, issue_key, issue_prefix, issue_user_code, issue_number FROM bugs ORDER BY id')
+      .all() as Array<{
+        id: number;
+        application_id: TaxonomyId | null;
+        issue_key: string;
+        issue_prefix: string;
+        issue_user_code: string | null;
+        issue_number: number | null;
+      }>;
+
+    for (const bug of bugs) {
+      if (bug.issue_key && bug.issue_prefix && bug.issue_number) continue;
+      const prefix = bug.issue_prefix || prefixByApplication.get(String(bug.application_id)) || 'BUG';
+      const issueNumber = bug.issue_number && bug.issue_number > 0 ? bug.issue_number : bug.id;
+      const userCode = bug.issue_user_code && /^[A-Z0-9]{3}$/.test(bug.issue_user_code)
+        ? bug.issue_user_code
+        : null;
+      this.db.prepare(
+        'UPDATE bugs SET issue_key = ?, issue_prefix = ?, issue_user_code = ?, issue_number = ? WHERE id = ?'
+      ).run(formatIssueKey(prefix, issueNumber, userCode), prefix, userCode, issueNumber, bug.id);
+    }
   }
 
   private ensureClientId(): void {
@@ -1294,6 +1364,10 @@ export class BugPocketDatabase {
 
       CREATE TABLE bugs_status_limited (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        issue_key TEXT NOT NULL DEFAULT '',
+        issue_prefix TEXT NOT NULL DEFAULT '',
+        issue_user_code TEXT NULL DEFAULT NULL,
+        issue_number INTEGER NULL DEFAULT NULL,
         application_id TEXT NULL REFERENCES applications(id) ON DELETE SET NULL,
         module_id TEXT NULL REFERENCES modules(id) ON DELETE SET NULL,
         environment_id TEXT NULL REFERENCES environments(id) ON DELETE SET NULL,
@@ -1324,12 +1398,12 @@ export class BugPocketDatabase {
       );
 
       INSERT INTO bugs_status_limited (
-        id, application_id, module_id, environment_id, device_id, browser_id, user_role_id, entry_type, title, note, other_details,
+        id, issue_key, issue_prefix, issue_user_code, issue_number, application_id, module_id, environment_id, device_id, browser_id, user_role_id, entry_type, title, note, other_details,
         steps_to_reproduce, expected_result, actual_result, status, severity, reported, issue_platform, issue_id,
         issue_url, tags, sync_status, last_sync_at, remote_id, workspace_id, created_by, created_at, updated_at
       )
       SELECT
-        id, application_id, module_id, environment_id, device_id, browser_id, user_role_id, entry_type, title, note, other_details,
+        id, issue_key, issue_prefix, issue_user_code, issue_number, application_id, module_id, environment_id, device_id, browser_id, user_role_id, entry_type, title, note, other_details,
         steps_to_reproduce, expected_result, actual_result,
         CASE
           WHEN LOWER(TRIM(status)) IN ('reported', 'fixed', 'verified', 'done', 'converted to bug') THEN 'Reported'
@@ -1510,9 +1584,9 @@ export class BugPocketDatabase {
 
   private seedDefaults(): void {
     const stamp = now();
-    const appInsert = this.db.prepare('INSERT OR IGNORE INTO applications (name, is_active, is_synced, created_at, updated_at) VALUES (?, 1, 1, ?, ?)');
+    const appInsert = this.db.prepare("INSERT OR IGNORE INTO applications (name, issue_prefix, is_active, is_synced, created_at, updated_at) VALUES (?, 'GEN', 1, 1, ?, ?)");
     appInsert.run('General', stamp, stamp);
-    this.db.prepare('UPDATE applications SET is_active = 1, updated_at = ? WHERE name = ?').run(stamp, 'General');
+    this.db.prepare("UPDATE applications SET issue_prefix = CASE WHEN issue_prefix = '' THEN 'GEN' ELSE issue_prefix END, is_active = 1, updated_at = ? WHERE name = ?").run(stamp, 'General');
     this.ensureDefaultGeneralModule(stamp);
 
     this.db.prepare("UPDATE config_options SET is_active = 0 WHERE type IN ('status', 'scenario_status')").run();
@@ -1822,6 +1896,7 @@ Attachments:
       supabaseInviteEmail: this.getSupabaseInviteEmail(),
       currentWorkspaceId: this.getCurrentWorkspaceId(),
       currentWorkspaceRole: this.getWorkspaceRole(this.getCurrentWorkspaceId()),
+      currentWorkspaceUserCode: this.getWorkspaceUserCode(this.getCurrentWorkspaceId()),
       currentWorkspaceCanRead: this.getWorkspacePermissions(this.getCurrentWorkspaceId()).canRead,
       currentWorkspaceCanWrite: this.getWorkspacePermissions(this.getCurrentWorkspaceId()).canWrite,
       cloudSyncActive: this.isCloudSyncActive(),
@@ -2019,6 +2094,53 @@ Attachments:
     return normalizedRole;
   }
 
+  getWorkspaceUserCode(workspaceId: string | null): string | null {
+    const cleanedWorkspaceId = (workspaceId ?? '').trim();
+    if (!cleanedWorkspaceId) return null;
+    const value = this.getSetting(this.workspaceUserCodeKey(cleanedWorkspaceId)).trim().toUpperCase();
+    return /^[A-Z0-9]{3}$/.test(value) ? value : null;
+  }
+
+  updateWorkspaceUserCode(workspaceId: string, userCode: string | null | undefined): string | null {
+    const cleanedWorkspaceId = workspaceId.trim();
+    const normalized = userCode ? normalizeIssueUserCode(userCode) : '';
+    if (cleanedWorkspaceId) this.setSetting(this.workspaceUserCodeKey(cleanedWorkspaceId), normalized);
+    if (normalized && this.workspaceDb && this.getCurrentWorkspaceId() === cleanedWorkspaceId) {
+      this.promoteProvisionalIssueKeys(normalized);
+    }
+    return normalized || null;
+  }
+
+  private promoteProvisionalIssueKeys(userCode: string): void {
+    const db = this.requireWorkspaceDb();
+    const transaction = db.transaction(() => {
+      const provisional = db.prepare(
+        `SELECT id, issue_prefix, issue_number
+         FROM bugs
+         WHERE issue_user_code IS NULL AND issue_number IS NOT NULL AND issue_number > 0
+         ORDER BY id`
+      ).all() as Array<{ id: number; issue_prefix: string; issue_number: number }>;
+
+      for (const bug of provisional) {
+        let issueNumber = bug.issue_number;
+        let issueKey = formatIssueKey(bug.issue_prefix || 'BUG', issueNumber, userCode);
+        const collision = db.prepare('SELECT id FROM bugs WHERE issue_key = ? AND id != ?').get(issueKey, bug.id);
+        if (collision) {
+          const row = db.prepare(
+            `SELECT COALESCE(MAX(issue_number), 0) + 1 AS next_number
+             FROM bugs WHERE issue_prefix = ? AND issue_user_code = ?`
+          ).get(bug.issue_prefix, userCode) as { next_number: number };
+          issueNumber = Number(row.next_number) || 1;
+          issueKey = formatIssueKey(bug.issue_prefix || 'BUG', issueNumber, userCode);
+        }
+        db.prepare(
+          'UPDATE bugs SET issue_key = ?, issue_user_code = ?, issue_number = ? WHERE id = ?'
+        ).run(issueKey, userCode, issueNumber, bug.id);
+      }
+    });
+    transaction();
+  }
+
   /**
    * Cloud workspace permissions are cached after the authenticated Supabase
    * handshake. A missing cache fails closed so a custom read-only role cannot
@@ -2108,6 +2230,24 @@ Attachments:
     this.requireWorkspaceDb().prepare(`UPDATE ${table} SET remote_id = ? WHERE id = ?`).run(remoteId, localId);
   }
 
+  markRemoteBugIdentity(
+    localId: number,
+    remoteId: string,
+    identity: { issue_key?: unknown; issue_prefix?: unknown; issue_user_code?: unknown; issue_number?: unknown }
+  ): void {
+    const issueKey = this.remoteString(identity.issue_key);
+    const issuePrefix = this.remoteString(identity.issue_prefix);
+    const issueUserCode = this.remoteString(identity.issue_user_code) || null;
+    const issueNumber = Number(identity.issue_number);
+    if (!issueKey || !issuePrefix || !Number.isSafeInteger(issueNumber) || issueNumber < 1) {
+      this.markRemoteId('bug', localId, remoteId);
+      return;
+    }
+    this.requireWorkspaceDb().prepare(
+      'UPDATE bugs SET remote_id = ?, issue_key = ?, issue_prefix = ?, issue_user_code = ?, issue_number = ? WHERE id = ?'
+    ).run(remoteId, issueKey, issuePrefix, issueUserCode, issueNumber, localId);
+  }
+
   upsertRemoteBug(remoteBug: Record<string, unknown>): boolean {
     const db = this.requireWorkspaceDb();
     const remoteId = this.remoteString(remoteBug.id);
@@ -2131,6 +2271,10 @@ Attachments:
 
     const values = {
       remote_id: remoteId,
+      issue_key: this.remoteString(remoteBug.issue_key) || '',
+      issue_prefix: this.remoteString(remoteBug.issue_prefix) || 'BUG',
+      issue_user_code: this.remoteString(remoteBug.issue_user_code) || null,
+      issue_number: Number(remoteBug.issue_number) || null,
       application_id: this.remoteString(remoteBug.application_id) || null,
       module_id: this.remoteString(remoteBug.module_id) || null,
       environment_id: this.remoteString(remoteBug.environment_id) || null,
@@ -2160,6 +2304,10 @@ Attachments:
     if (existing) {
       db.prepare(`
         UPDATE bugs SET
+          issue_key = @issue_key,
+          issue_prefix = @issue_prefix,
+          issue_user_code = @issue_user_code,
+          issue_number = @issue_number,
           application_id = @application_id,
           module_id = @module_id,
           environment_id = @environment_id,
@@ -2190,11 +2338,11 @@ Attachments:
 
     db.prepare(`
       INSERT INTO bugs (
-        remote_id, application_id, module_id, environment_id, device_id, browser_id, user_role_id,
+        remote_id, issue_key, issue_prefix, issue_user_code, issue_number, application_id, module_id, environment_id, device_id, browser_id, user_role_id,
         entry_type, title, note, other_details, steps_to_reproduce, expected_result, actual_result,
         status, severity, reported, issue_platform, issue_id, issue_url, tags, sync_status, last_sync_at, created_at, updated_at
       ) VALUES (
-        @remote_id, @application_id, @module_id, @environment_id, @device_id, @browser_id, @user_role_id,
+        @remote_id, @issue_key, @issue_prefix, @issue_user_code, @issue_number, @application_id, @module_id, @environment_id, @device_id, @browser_id, @user_role_id,
         @entry_type, @title, @note, @other_details, @steps_to_reproduce, @expected_result, @actual_result,
         @status, @severity, @reported, @issue_platform, @issue_id, @issue_url, @tags, @sync_status, @last_sync_at, @created_at, @updated_at
       )
@@ -2209,10 +2357,11 @@ Attachments:
     if (!id || !name) return false;
 
     db.prepare(`
-      INSERT INTO applications (id, name, context_description, is_active, is_synced, created_at, updated_at)
-      VALUES (@id, @name, @context_description, @is_active, 1, @created_at, @updated_at)
+      INSERT INTO applications (id, name, issue_prefix, context_description, is_active, is_synced, created_at, updated_at)
+      VALUES (@id, @name, @issue_prefix, @context_description, @is_active, 1, @created_at, @updated_at)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
+        issue_prefix = excluded.issue_prefix,
         context_description = excluded.context_description,
         is_active = excluded.is_active,
         is_synced = 1,
@@ -2220,6 +2369,7 @@ Attachments:
     `).run({
       id,
       name,
+      issue_prefix: normalizeIssuePrefix(this.remoteString(remoteApplication.issue_prefix), name),
       context_description: this.remoteString(remoteApplication.context_description) || null,
       is_active: remoteApplication.is_active === false ? 0 : 1,
       created_at: this.remoteString(remoteApplication.created_at) || now(),
@@ -2419,6 +2569,10 @@ Attachments:
 
   private workspaceRoleKey(workspaceId: string): string {
     return `workspace_role_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+  }
+
+  private workspaceUserCodeKey(workspaceId: string): string {
+    return `workspace_user_code_${workspaceId.trim().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
   }
 
   private workspaceCanReadKey(workspaceId: string): string {
@@ -2900,15 +3054,31 @@ Attachments:
     throw new Error('Unsupported reference table.');
   }
 
-  addApplication(name: string, contextDescription = ''): Application {
+  private availableIssuePrefix(
+    db: Database.Database,
+    requestedPrefix: string,
+    applicationName: string,
+    excludeId?: TaxonomyId
+  ): string {
+    const prefix = normalizeIssuePrefix(requestedPrefix, applicationName);
+    const duplicate = excludeId === undefined
+      ? db.prepare('SELECT id FROM applications WHERE issue_prefix = ? LIMIT 1').get(prefix)
+      : db.prepare('SELECT id FROM applications WHERE issue_prefix = ? AND id != ? LIMIT 1').get(prefix, excludeId);
+    if (duplicate) throw new Error(`Application prefix ${prefix} is already in use.`);
+    return prefix;
+  }
+
+  addApplication(name: string, contextDescription = '', issuePrefix = ''): Application {
     const db = this.taxonomyDb();
     const cleaned = name.trim();
     const context = contextDescription.trim() || null;
     if (!cleaned) throw new Error('Application name is required.');
     const stamp = now();
     const existing = db.prepare('SELECT * FROM applications WHERE name = ?').get(cleaned) as Application | undefined;
+    const prefix = this.availableIssuePrefix(db, issuePrefix || existing?.issue_prefix || '', cleaned, existing?.id);
     if (existing) {
-      db.prepare('UPDATE applications SET context_description = COALESCE(?, context_description), is_active = 1, updated_at = ? WHERE id = ?').run(context, stamp, existing.id);
+      const existingPrefix = normalizeIssuePrefix(existing.issue_prefix || prefix, cleaned);
+      db.prepare('UPDATE applications SET issue_prefix = ?, context_description = COALESCE(?, context_description), is_active = 1, updated_at = ? WHERE id = ?').run(existingPrefix, context, stamp, existing.id);
       const application = db.prepare('SELECT * FROM applications WHERE id = ?').get(existing.id) as Application;
       this.enqueueApplicationSyncEvent(application.id, 'UPDATE', this.applicationPayload(application.id));
       return application;
@@ -2919,14 +3089,14 @@ Attachments:
       if (this.workspaceDb) {
         const applicationId = randomUUID();
         const moduleId = randomUUID();
-        db.prepare('INSERT INTO applications (id, name, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, ?, 1, 1, ?, ?)')
-          .run(applicationId, cleaned, context, stamp, stamp);
+        db.prepare('INSERT INTO applications (id, name, issue_prefix, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 1, ?, ?)')
+          .run(applicationId, cleaned, prefix, context, stamp, stamp);
         application = db.prepare('SELECT * FROM applications WHERE id = ?').get(applicationId) as Application;
         db.prepare('INSERT INTO modules (id, application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)')
           .run(moduleId, application.id, 'General', null, stamp, stamp);
         module = db.prepare('SELECT * FROM modules WHERE id = ?').get(moduleId) as Module;
       } else {
-        db.prepare('INSERT INTO applications (name, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, 1, 1, ?, ?)').run(cleaned, context, stamp, stamp);
+        db.prepare('INSERT INTO applications (name, issue_prefix, context_description, is_active, is_synced, created_at, updated_at) VALUES (?, ?, ?, 1, 1, ?, ?)').run(cleaned, prefix, context, stamp, stamp);
         application = db.prepare('SELECT * FROM applications WHERE id = last_insert_rowid()').get() as Application;
         db.prepare('INSERT INTO modules (application_id, name, context_description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)').run(application.id, 'General', null, stamp, stamp);
         module = db.prepare('SELECT * FROM modules WHERE id = last_insert_rowid()').get() as Module;
@@ -2939,13 +3109,16 @@ Attachments:
     return application;
   }
 
-  updateApplication(id: TaxonomyId, name: string, contextDescription = ''): Application {
+  updateApplication(id: TaxonomyId, name: string, contextDescription = '', issuePrefix = ''): Application {
     const db = this.taxonomyDb();
     const cleaned = name.trim();
+    const existingApplication = db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application | undefined;
+    if (!existingApplication) throw new Error('Application was not found.');
+    const prefix = this.availableIssuePrefix(db, issuePrefix || existingApplication.issue_prefix, cleaned, id);
     if (!cleaned) throw new Error('Application name is required.');
     const duplicate = db.prepare('SELECT id FROM applications WHERE name = ? AND id != ?').get(cleaned, id) as { id: TaxonomyId } | undefined;
     if (duplicate) throw new Error('Application already exists.');
-    db.prepare('UPDATE applications SET name = ?, context_description = ?, updated_at = ? WHERE id = ?').run(cleaned, contextDescription.trim() || null, now(), id);
+    db.prepare('UPDATE applications SET name = ?, issue_prefix = ?, context_description = ?, updated_at = ? WHERE id = ?').run(cleaned, prefix, contextDescription.trim() || null, now(), id);
     const application = db.prepare('SELECT * FROM applications WHERE id = ?').get(id) as Application;
     this.enqueueApplicationSyncEvent(application.id, 'UPDATE', this.applicationPayload(application.id));
     return application;
@@ -3085,9 +3258,9 @@ Attachments:
     const clauses: string[] = [];
     const params: unknown[] = [];
     if (filters.search) {
-      clauses.push('(bugs.title LIKE ? OR bugs.note LIKE ? OR bugs.steps_to_reproduce LIKE ? OR bugs.expected_result LIKE ? OR bugs.actual_result LIKE ? OR bugs.tags LIKE ?)');
+      clauses.push('(bugs.issue_key LIKE ? OR bugs.title LIKE ? OR bugs.note LIKE ? OR bugs.steps_to_reproduce LIKE ? OR bugs.expected_result LIKE ? OR bugs.actual_result LIKE ? OR bugs.tags LIKE ?)');
       const term = `%${filters.search}%`;
-      params.push(term, term, term, term, term, term);
+      params.push(term, term, term, term, term, term, term);
     }
     if (filters.entryType && filters.entryType !== 'all') {
       clauses.push('bugs.entry_type = ?');
@@ -3230,6 +3403,37 @@ Attachments:
       .all(root.id) as Attachment[];
   }
 
+  private nextIssueIdentity(applicationId: TaxonomyId | null): {
+    issueKey: string;
+    issuePrefix: string;
+    issueUserCode: string | null;
+    issueNumber: number;
+  } {
+    const dataDb = this.workspaceDataDb();
+    const application = applicationId === null
+      ? undefined
+      : this.taxonomyDb().prepare('SELECT issue_prefix, name FROM applications WHERE id = ?').get(applicationId) as
+        | { issue_prefix: string; name: string }
+        | undefined;
+    const issuePrefix = normalizeIssuePrefix(application?.issue_prefix || 'BUG', application?.name || 'Bug');
+    const issueUserCode = this.workspaceDb
+      ? this.getWorkspaceUserCode(this.getCurrentWorkspaceId())
+      : null;
+    const row = dataDb.prepare(
+      `SELECT COALESCE(MAX(issue_number), 0) + 1 AS next_number
+       FROM bugs
+       WHERE issue_prefix = ?
+         AND COALESCE(issue_user_code, '') = COALESCE(?, '')`
+    ).get(issuePrefix, issueUserCode) as { next_number: number };
+    const issueNumber = Number(row.next_number) || 1;
+    return {
+      issueKey: formatIssueKey(issuePrefix, issueNumber, issueUserCode),
+      issuePrefix,
+      issueUserCode,
+      issueNumber
+    };
+  }
+
   createQuickBug(input: QuickBugInput): Bug {
     const stamp = now();
     const title = this.makeTitle(input.note);
@@ -3245,12 +3449,17 @@ Attachments:
       createdBy: this.sanitizeOptionalForeignKey(input.created_by)
     };
     const tx = dataDb.transaction(() => {
+      const identity = this.nextIssueIdentity(sanitized.applicationId);
       const result = dataDb
         .prepare(
-          `INSERT INTO bugs (entry_type, application_id, module_id, environment_id, device_id, browser_id, user_role_id, workspace_id, created_by, title, note, status, severity, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', 'Medium', ?, ?)`
+          `INSERT INTO bugs (issue_key, issue_prefix, issue_user_code, issue_number, entry_type, application_id, module_id, environment_id, device_id, browser_id, user_role_id, workspace_id, created_by, title, note, status, severity, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', 'Medium', ?, ?)`
         )
         .run(
+          identity.issueKey,
+          identity.issuePrefix,
+          identity.issueUserCode,
+          identity.issueNumber,
           input.entry_type || 'Bug',
           sanitized.applicationId,
           sanitized.moduleId,

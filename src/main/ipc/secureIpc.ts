@@ -146,6 +146,16 @@ function twoOrThreeArgs(first: ValueValidator, second: ValueValidator, third: Va
   };
 }
 
+function threeOrFourArgs(first: ValueValidator, second: ValueValidator, third: ValueValidator, fourth: ValueValidator): IpcArgumentValidator {
+  return (values) => {
+    if (values.length !== 3 && values.length !== 4) fail('arguments', 'three or four arguments');
+    first(values[0], 'arguments[0]');
+    second(values[1], 'arguments[1]');
+    third(values[2], 'arguments[2]');
+    if (values.length === 4) fourth(values[3], 'arguments[3]');
+  };
+}
+
 const nullableInteger = nullable(positiveInteger);
 const nullableId = nullable(idValue);
 const internalRoute: ValueValidator = (value, path) => {
@@ -318,8 +328,8 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
 
   validators['window:openMain'] = optionalSingleArg(internalRoute);
   validators['window:openSettings'] = optionalSingleArg(stringValue(100));
-  validators['settings:addApplication'] = args(nonEmptyString(200), optional(nullable(stringValue(maxTextLength))));
-  validators['settings:updateApplication'] = args(idValue, nonEmptyString(200), stringValue(maxTextLength));
+  validators['settings:addApplication'] = twoOrThreeArgs(nonEmptyString(200), nullable(stringValue(maxTextLength)), stringValue(8));
+  validators['settings:updateApplication'] = threeOrFourArgs(idValue, nonEmptyString(200), stringValue(maxTextLength), stringValue(8));
   validators['settings:updateApplicationContext'] = args(idValue, stringValue(maxTextLength));
   validators['settings:updateApplicationSync'] = args(idValue, booleanValue);
   validators['settings:deleteApplication'] = args(idValue);
@@ -371,6 +381,7 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   validators['sync:decodeInvite'] = args(nonEmptyString(50_000), nonEmptyString(512));
   validators['sync:updateWorkspaceName'] = args(nonEmptyString(128), nonEmptyString(200));
   validators['sync:getWorkspaceRole'] = args(nullable(nonEmptyString(128)));
+  validators['sync:claimIssueUserCode'] = args(nonEmptyString(3));
   validators['sync:switchWorkspace'] = args(nonEmptyString(128));
   validators['ai:triageBug'] = args(aiTriagePayload);
   validators['ai:processIssueWithByok'] = args(aiIssuePayload);
