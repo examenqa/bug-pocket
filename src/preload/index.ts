@@ -1,11 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugStatusCounts, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction, SyncAccountSetup, SyncRuntimeStatus, TaxonomyId, TeamInvitePayload } from '../shared/types';
 
+let captureContext: import('../shared/types').CaptureContext | null = null;
 const api = {
+  getCaptureContext: async (): Promise<import('../shared/types').CaptureContext | null> => {
+    captureContext = await ipcRenderer.invoke('capture:context');
+    return captureContext;
+  },
   openQuickCapture: () => ipcRenderer.invoke('window:openQuickCapture'),
-  getPendingCaptures: (): Promise<import('../shared/types').ScreenshotResult[]> => ipcRenderer.invoke('capture:listPending'),
-  discardPendingCaptures: (): Promise<void> => ipcRenderer.invoke('capture:discardPending'),
-  hideQuickCapture: () => ipcRenderer.invoke('window:hideQuickCapture'),
+  getPendingCaptures: (): Promise<import('../shared/types').ScreenshotResult[]> => ipcRenderer.invoke('capture:listPending', captureContext),
+  discardPendingCaptures: (): Promise<void> => ipcRenderer.invoke('capture:discardPending', captureContext),
+  hideQuickCapture: () => ipcRenderer.invoke('window:hideQuickCapture', captureContext),
   openMainWindow: (route?: string) => ipcRenderer.invoke('window:openMain', route),
   openSettings: (section?: string) => ipcRenderer.invoke('window:openSettings', section),
   expandQuickCaptureForReview: () => ipcRenderer.invoke('window:expandQuickCaptureForReview'),
@@ -87,13 +92,13 @@ const api = {
   sendFeedback: (payload: FeedbackPayload) => ipcRenderer.invoke('support:sendFeedback', payload),
   setDetailsDirty: (dirty: boolean) => ipcRenderer.invoke('details:setDirty', dirty),
   detailsFlushComplete: (requestId: string, success: boolean) => ipcRenderer.invoke('details:flushComplete', requestId, success),
-  startScreenshotCapture: (bugId?: number) => ipcRenderer.invoke('screenshot:start', bugId),
+  startScreenshotCapture: (bugId?: number) => ipcRenderer.invoke('screenshot:start', bugId, captureContext),
   getScreenshotSource: (): Promise<Uint8Array | null> => ipcRenderer.invoke('screenshot:getSource'),
   completeScreenshotCapture: (dataUrl: string) => ipcRenderer.invoke('screenshot:complete', dataUrl),
   cancelScreenshotCapture: () => ipcRenderer.invoke('screenshot:cancel'),
-  getPendingQuickScreenshot: () => ipcRenderer.invoke('quickScreenshot:getPending'),
-  attachPendingQuickScreenshot: (dataUrl: string) => ipcRenderer.invoke('quickScreenshot:attachPending', dataUrl),
-  discardPendingQuickScreenshot: () => ipcRenderer.invoke('quickScreenshot:discardPending'),
+  getPendingQuickScreenshot: () => ipcRenderer.invoke('quickScreenshot:getPending', captureContext),
+  attachPendingQuickScreenshot: (dataUrl: string) => ipcRenderer.invoke('quickScreenshot:attachPending', dataUrl, captureContext),
+  discardPendingQuickScreenshot: () => ipcRenderer.invoke('quickScreenshot:discardPending', captureContext),
   exportBackup: () => ipcRenderer.invoke('backup:export'),
   importBackup: () => ipcRenderer.invoke('backup:import'),
   chooseBackupDirectory: () => ipcRenderer.invoke('backup:chooseDirectory'),

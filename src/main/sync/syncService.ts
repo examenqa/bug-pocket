@@ -370,6 +370,7 @@ export class SyncEngine {
    * never cross from one workspace database into another Supabase project.
    */
   async disconnectWorkspace(): Promise<void> {
+    this.database.assertCaptureTransition();
     this.syncSuspended = true;
     this.stopBackgroundSync();
     await this.waitForQueueIdle();
@@ -793,6 +794,7 @@ export class SyncEngine {
     const events = this.database.getPendingSyncQueue(syncBatchSize, maxSyncAttempts);
     for (const event of events) {
       try {
+        if (!this.database.isSyncEventPending(event.id)) continue;
         await this.processEvent(client, workspaceId, event);
         this.retryCounts.delete(this.retryKey(event));
         this.database.markSyncEventSucceeded(event);
@@ -908,34 +910,33 @@ export class SyncEngine {
   }
 
   private async syncBugEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
-    const id = this.localUuid(workspaceId, 'bug', event.entity_id);
-    if (event.operation === 'DELETE') {
-      const stamp = new Date().toISOString();
-      const result = await client
-        .from('bugs')
-        .update({
-          deleted_at: stamp,
-          updated_at: stamp,
-          sync_status: 'Synced'
-        })
-        .eq('id', id)
-        .eq('workspace_id', workspaceId);
-      throwIfSupabaseError(result, 'Unable to delete remote bug');
-      return;
-    }
-
+    const id = this.eventIdentity(payload).id;
     const record = this.serializeBugPayload(workspaceId, id, payload);
-    const result = await client
-      .from('bugs')
-      .upsert(record, { onConflict: 'id' })
-      .select('id, issue_key, issue_prefix, issue_user_code, issue_number')
-      .single();
-    throwIfSupabaseError(result, 'Unable to sync bug');
-    this.database.markRemoteBugIdentity(
-      this.numericLocalId(event.entity_id),
-      id,
-      (result.data ?? {}) as Record<string, unknown>
-    );
+    await this.applySyncMutation(client, workspaceId, event, payload, record);
+  }
+
+  private eventIdentity(payload: SyncPayload): { id: string; revision: number; predecessor: string | null; references: Record<string,string>; uncertain?: number } {
+    const identity = payload._sync as ReturnType<SyncEngine['eventIdentity']> | undefined;
+    if (!identity || identity.uncertain) throw new Error('Legacy sync identity needs review. Queued changes have been retained.');
+    return identity;
+  }
+
+  private async applySyncMutation(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload, record: SyncPayload): Promise<void> {
+    const identity = this.eventIdentity(payload);
+    const result = await client.rpc('apply_sync_mutation', {
+      target_workspace: workspaceId, entity_kind: event.entity_type, entity_uuid: identity.id,
+      operation_uuid: event.op_id, expected_revision: identity.revision,
+      predecessor_uuid: identity.predecessor, mutation: event.operation, body: record
+    });
+    throwIfSupabaseError(result, 'Unable to apply sync mutation; install the current workspace schema');
+    const response = result.data as { applied: boolean; row: Record<string,unknown> };
+    if (!response || typeof response.applied !== 'boolean' || !response.row) throw new Error('Invalid sync acknowledgement.');
+    this.database.reconcileSyncEvent(event, response.row, response.applied);
+    if (!response.applied) {
+      this.runtimeStatus = { status: 'error', code: 'SYNC_CONFLICT', message: 'Newer cloud changes were kept. Conflicting local changes are retained in the local recovery log.' };
+      this.emitSyncStatus(this.getRuntimeStatus());
+    }
+    this.emitBugsChanged();
   }
 
   private formatSyncError(caught: unknown): string {
@@ -989,7 +990,7 @@ export class SyncEngine {
   }
 
   private async syncApplicationEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
-    const id = this.remoteEntityId(workspaceId, 'application', event.entity_id);
+    const id = this.eventIdentity(payload).id;
     const stamp = new Date().toISOString();
     const record = {
       id,
@@ -1003,17 +1004,16 @@ export class SyncEngine {
       updated_at: event.operation === 'DELETE' ? stamp : String(payload.updated_at ?? stamp)
     };
 
-    const result = await client.from('applications').upsert(record, { onConflict: 'id' });
-    throwIfSupabaseError(result, 'Unable to sync application');
+    await this.applySyncMutation(client, workspaceId, event, payload, record);
   }
 
   private async syncModuleEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
-    const id = this.remoteEntityId(workspaceId, 'module', event.entity_id);
+    const id = this.eventIdentity(payload).id;
     const stamp = new Date().toISOString();
     const record = {
       id,
       workspace_id: workspaceId,
-      application_id: this.remoteTaxonomyId(workspaceId, 'application', payload.application_id),
+      application_id: this.eventIdentity(payload).references.application_id ?? null,
       name: String(payload.name ?? 'Module'),
       context_description: this.stringOrNull(payload.context_description),
       is_active: event.operation === 'DELETE' ? false : Number(payload.is_active ?? 1) !== 0,
@@ -1021,12 +1021,11 @@ export class SyncEngine {
       updated_at: event.operation === 'DELETE' ? stamp : String(payload.updated_at ?? stamp)
     };
 
-    const result = await client.from('modules').upsert(record, { onConflict: 'id' });
-    throwIfSupabaseError(result, 'Unable to sync module');
+    await this.applySyncMutation(client, workspaceId, event, payload, record);
   }
 
   private async syncEnvironmentEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
-    const id = this.remoteEntityId(workspaceId, 'environment', event.entity_id);
+    const id = this.eventIdentity(payload).id;
     const stamp = new Date().toISOString();
     const record = {
       id,
@@ -1038,12 +1037,11 @@ export class SyncEngine {
       updated_at: event.operation === 'DELETE' ? stamp : String(payload.updated_at ?? stamp)
     };
 
-    const result = await client.from('environments').upsert(record, { onConflict: 'id' });
-    throwIfSupabaseError(result, 'Unable to sync environment');
+    await this.applySyncMutation(client, workspaceId, event, payload, record);
   }
 
   private async syncAttachmentEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
-    const id = this.localUuid(workspaceId, 'attachment', event.entity_id);
+    const id = this.eventIdentity(payload).id;
     const contentHash = this.stringOrNull(payload.content_hash);
     const fileExtension = normalizeAttachmentExtension(this.stringOrNull(payload.file_extension) ?? '.png');
     const storageTarget = contentHash
@@ -1052,17 +1050,7 @@ export class SyncEngine {
     const storageKey = storageTarget?.storageKey ?? null;
 
     if (event.operation === 'DELETE') {
-      const stamp = new Date().toISOString();
-      const result = await client
-        .from('attachments')
-        .update({
-          deleted_at: stamp,
-          updated_at: stamp,
-          sync_status: 'Synced'
-        })
-        .eq('id', id)
-        .eq('workspace_id', workspaceId);
-      throwIfSupabaseError(result, 'Unable to delete remote attachment');
+      await this.applySyncMutation(client, workspaceId, event, payload, {id, workspace_id:workspaceId});
       return;
     }
 
@@ -1092,23 +1080,11 @@ export class SyncEngine {
     }
 
     const record = this.serializeAttachmentPayload(workspaceId, id, storageKey, payload);
-    const result = await client.from('attachments').upsert(record, { onConflict: 'id' });
-    throwIfSupabaseError(result, 'Unable to sync attachment metadata');
-    this.database.markRemoteId('attachment', this.numericLocalId(event.entity_id), id);
+    await this.applySyncMutation(client, workspaceId, event, payload, record);
   }
 
-  private async syncReferenceEvent(client: SupabaseClient, workspaceId: string, event: SyncQueueEvent, payload: SyncPayload): Promise<void> {
-    const result = await client.from('sync_events').insert({
-      workspace_id: workspaceId,
-      client_id: null,
-      local_seq: event.local_seq,
-      op_id: event.op_id || null,
-      entity_type: event.entity_type,
-      entity_id: this.localUuid(workspaceId, 'reference', event.entity_id),
-      operation: event.operation,
-      payload
-    });
-    throwIfSupabaseError(result, 'Unable to sync reference event');
+  private async syncReferenceEvent(_client: SupabaseClient, _workspaceId: string, _event: SyncQueueEvent, _payload: SyncPayload): Promise<void> {
+    throw new Error('Legacy reference merge requires review; affected report changes are now queued individually.');
   }
 
   private async drainAttachmentDownloadQueue(client: SupabaseClient, workspaceId: string): Promise<void> {
@@ -1176,13 +1152,13 @@ export class SyncEngine {
     return {
       id,
       workspace_id: workspaceId,
-      application_id: this.remoteTaxonomyId(workspaceId, 'application', payload.application_id),
+      application_id: this.eventIdentity(payload).references.application_id ?? null,
       issue_key: String(payload.issue_key ?? ''),
       issue_prefix: String(payload.issue_prefix ?? 'BUG'),
       issue_user_code: this.stringOrNull(payload.issue_user_code),
       issue_number: Number(payload.issue_number ?? 0) || null,
-      module_id: this.remoteTaxonomyId(workspaceId, 'module', payload.module_id),
-      environment_id: this.remoteTaxonomyId(workspaceId, 'environment', payload.environment_id),
+      module_id: this.eventIdentity(payload).references.module_id ?? null,
+      environment_id: this.eventIdentity(payload).references.environment_id ?? null,
       device_id: null,
       browser_id: null,
       user_role_id: null,
@@ -1213,8 +1189,8 @@ export class SyncEngine {
     return {
       id,
       workspace_id: workspaceId,
-      bug_id: bugId ? this.localUuid(workspaceId, 'bug', bugId) : null,
-      parent_id: parentId ? this.localUuid(workspaceId, 'attachment', parentId) : null,
+      bug_id: bugId ? this.eventIdentity(payload).references.bug_id : null,
+      parent_id: parentId ? this.eventIdentity(payload).references.parent_id : null,
       content_hash: this.stringOrNull(payload.content_hash),
       file_extension: normalizeAttachmentExtension(this.stringOrNull(payload.file_extension) ?? '.png'),
       mime_type: String(payload.mime_type ?? 'image/png'),
@@ -1259,6 +1235,7 @@ export class SyncEngine {
     const resolution = resolveWorkspaceMembership((data ?? []) as WorkspaceMembershipRow[], preferredWorkspaceId);
     const membership = resolution.membership;
     if (!membership) {
+      this.database.assertCaptureTransition();
       this.database.disconnectWorkspace();
       this.database.updateCurrentWorkspaceId(null);
       return {
@@ -1351,24 +1328,6 @@ export class SyncEngine {
 
   private retryKey(event: SyncQueueEvent): string {
     return event.op_id || String(event.id);
-  }
-
-  private remoteTaxonomyId(workspaceId: string, entityType: 'application' | 'module' | 'environment', value: unknown): string | null {
-    return resolveRemoteTaxonomyId(workspaceId, entityType, value);
-  }
-
-  private numericLocalId(value: number | string): number {
-    const numeric = typeof value === 'number' ? value : Number(value);
-    if (!Number.isFinite(numeric)) throw new Error(`Expected numeric local sync id, received ${value}.`);
-    return numeric;
-  }
-
-  private remoteEntityId(workspaceId: string, entityType: string, localId: number | string): string {
-    return deriveRemoteEntityId(workspaceId, entityType, localId);
-  }
-
-  private localUuid(workspaceId: string, entityType: string, localId: number | string): string {
-    return deriveRemoteEntityId(workspaceId, entityType, localId);
   }
 
   private stringOrNull(value: unknown): string | null {

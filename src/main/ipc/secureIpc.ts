@@ -191,7 +191,9 @@ const capturePresetInput = plainObject({
   entry_type_id: nullableInteger
 });
 
+const captureContext = plainObject({ workspaceId: nullable(nonEmptyString(128)), draftId: nonEmptyString(128) });
 const quickBugInput = plainObject({
+  capture_context: captureContext,
   entry_type: nonEmptyString(100),
   application_id: nullableId,
   module_id: nullableId,
@@ -316,10 +318,10 @@ const feedbackPayload = plainObject({
 export function createIpcArgumentValidators(): Record<string, IpcArgumentValidator> {
   const validators: Record<string, IpcArgumentValidator> = {};
   const noArgs = [
-    'window:openQuickCapture', 'window:hideQuickCapture', 'window:expandQuickCaptureForReview',
+    'window:openQuickCapture', 'window:expandQuickCaptureForReview',
     'window:restoreQuickCaptureCompact', 'settings:get', 'get-ai-config', 'shortcuts:suspend',
-    'shortcuts:resume', 'bugs:count', 'bugs:statusCounts', 'capture:listPending', 'capture:discardPending', 'screenshot:getSource',
-    'screenshot:cancel', 'quickScreenshot:getPending', 'quickScreenshot:discardPending',
+    'shortcuts:resume', 'bugs:count', 'bugs:statusCounts', 'capture:context', 'screenshot:getSource',
+    'screenshot:cancel',
     'backup:export', 'backup:import', 'backup:chooseDirectory', 'app:clearCurrentWorkspace', 'app:factoryReset',
     'sync:testConnection', 'sync:authSignOut', 'sync:getSessionStatus', 'sync:listWorkspaces',
     'sync:getDiagnostics', 'sync:getRuntimeStatus', 'sync:retryNow', 'sync:forceRetry'
@@ -371,10 +373,13 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   validators['shell:openExternal'] = args(webUrl);
   validators['support:sendFeedback'] = args(feedbackPayload);
   validators['details:flushComplete'] = args(nonEmptyString(128), booleanValue);
+  for (const channel of ['capture:listPending','capture:discardPending','window:hideQuickCapture','quickScreenshot:getPending','quickScreenshot:discardPending']) {
+    validators[channel] = args(nullable(captureContext));
+  }
   validators['details:setDirty'] = args(booleanValue);
-  validators['screenshot:start'] = optionalSingleArg(positiveInteger);
+  validators['screenshot:start'] = args(optional(positiveInteger), nullable(captureContext));
   validators['screenshot:complete'] = args(pngDataUrl);
-  validators['quickScreenshot:attachPending'] = args(pngDataUrl);
+  validators['quickScreenshot:attachPending'] = args(pngDataUrl, nullable(captureContext));
   validators['sync:authSignIn'] = args(nonEmptyString(500), nonEmptyString(20_000));
   validators['sync:authSignUp'] = args(nonEmptyString(500), nonEmptyString(20_000), syncAccountSetup);
   validators['sync:generateInvite'] = args(nonEmptyString(512), emailAddress, nonEmptyString(80));

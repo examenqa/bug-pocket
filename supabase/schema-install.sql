@@ -764,8 +764,6 @@ begin
   end loop;
 end $$;
 
--- TODO: Drain local SQLite sync_queue into sync_events after login.
--- TODO: Resolve conflicts using updated_at plus deterministic client_id/local_seq/op_id.
 
 -- 7. Base Role Privileges
 -- Ensures PostgREST can access the public schema before RLS is evaluated.
@@ -869,3 +867,169 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user_onboarding();
+
+
+-- 10. Versioned offline sync protocol. Direct writes by old clients fail closed.
+alter table public.applications add column if not exists revision bigint not null default 1;
+alter table public.applications add column if not exists deleted_at timestamptz null;
+alter table public.modules add column if not exists revision bigint not null default 1;
+alter table public.modules add column if not exists deleted_at timestamptz null;
+alter table public.environments add column if not exists revision bigint not null default 1;
+alter table public.environments add column if not exists deleted_at timestamptz null;
+alter table public.reference_options add column if not exists revision bigint not null default 1;
+alter table public.reference_options add column if not exists deleted_at timestamptz null;
+alter table public.bugs add column if not exists revision bigint not null default 1;
+alter table public.attachments add column if not exists revision bigint not null default 1;
+
+create table if not exists public.sync_entity_state (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  entity_kind text not null, entity_id uuid not null,
+  revision bigint not null, last_operation uuid, deleted boolean not null default false,
+  primary key(workspace_id, entity_kind, entity_id)
+);
+create table if not exists public.sync_operation_receipts (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  operation_id uuid not null, entity_kind text not null, entity_id uuid not null,
+  applied boolean not null,
+  primary key(workspace_id, operation_id)
+);
+alter table public.sync_entity_state enable row level security;
+alter table public.sync_operation_receipts enable row level security;
+
+create or replace function public.apply_sync_mutation(
+  target_workspace uuid, entity_kind text, entity_uuid uuid, operation_uuid uuid,
+  expected_revision bigint, predecessor_uuid uuid, mutation text, body jsonb
+) returns jsonb
+language plpgsql security definer set search_path = pg_catalog, public
+as $protocol$
+declare
+  target_table text;
+  current_row jsonb;
+  next_row jsonb;
+  state public.sync_entity_state%rowtype;
+  receipt public.sync_operation_receipts%rowtype;
+  columns_sql text;
+  values_sql text;
+  updates_sql text;
+  reference_key text;
+  reference_table text;
+  reference_workspace uuid;
+  accepted boolean;
+  child record;
+begin
+  if auth.uid() is null or not public.is_workspace_writer(target_workspace) then
+    raise exception 'Workspace write access required' using errcode = '42501';
+  end if;
+  target_table := case entity_kind
+    when 'bug' then 'bugs' when 'attachment' then 'attachments'
+    when 'application' then 'applications' when 'module' then 'modules'
+    when 'environment' then 'environments' when 'reference' then 'reference_options'
+    else null end;
+  if target_workspace is null or expected_revision is null or body is null or jsonb_typeof(body) <> 'object'
+    or target_table is null or mutation is null or mutation not in ('INSERT','UPDATE','DELETE')
+    or operation_uuid is null or entity_uuid is null or expected_revision < 0 then
+    raise exception 'Invalid sync mutation' using errcode = '22023';
+  end if;
+  -- Serializes even concurrent first inserts, which do not yet have a row to lock.
+  perform pg_advisory_xact_lock(hashtextextended(target_workspace::text || entity_kind || entity_uuid::text, 0));
+  execute format('select to_jsonb(t) from public.%I t where id=$1 and workspace_id=$2 for update', target_table)
+    into current_row using entity_uuid,target_workspace;
+  -- A UUID already belonging to another workspace cannot be repurposed.
+  if current_row is null then
+    execute format('select workspace_id from public.%I where id=$1', target_table)
+      into reference_workspace using entity_uuid;
+    if reference_workspace is not null then raise exception 'Entity belongs to another workspace' using errcode='42501'; end if;
+  end if;
+  insert into public.sync_entity_state(workspace_id,entity_kind,entity_id,revision,deleted)
+    values(target_workspace,entity_kind,entity_uuid,coalesce((current_row->>'revision')::bigint,0),
+      current_row->>'deleted_at' is not null)
+    on conflict do nothing;
+  select * into state from public.sync_entity_state s
+    where s.workspace_id=target_workspace and s.entity_kind=apply_sync_mutation.entity_kind and s.entity_id=entity_uuid for update;
+  select * into receipt from public.sync_operation_receipts r
+    where r.workspace_id=target_workspace and r.operation_id=operation_uuid;
+  if found then
+    if receipt.entity_kind <> entity_kind or receipt.entity_id <> entity_uuid then
+      raise exception 'Operation identity reused for another entity' using errcode='22023';
+    end if;
+    -- Always reconcile to current state, even when another client wrote after this receipt.
+    return jsonb_build_object('applied',receipt.applied,'row',coalesce(current_row,
+      jsonb_build_object('id',entity_uuid,'revision',state.revision,'deleted_at',case when state.deleted then '1970-01-01T00:00:00Z' end)));
+  end if;
+  accepted := not state.deleted and (
+    state.revision=expected_revision or
+    (predecessor_uuid is not null and state.last_operation=predecessor_uuid)
+  );
+  if accepted then
+    if entity_kind='attachment' and exists(select 1 from public.bugs
+      where id=(body->>'bug_id')::uuid and workspace_id=target_workspace and deleted_at is not null) then
+      mutation := 'DELETE';
+    end if;
+    if mutation='DELETE' then
+      if entity_kind='bug' then
+        -- A report tombstone is authoritative for its attachment subtree too.
+        for child in select id,revision from public.attachments
+          where workspace_id=target_workspace and bug_id=entity_uuid and deleted_at is null for update
+        loop
+          update public.attachments set deleted_at=clock_timestamp(),updated_at=clock_timestamp(),revision=child.revision+1 where id=child.id;
+          insert into public.sync_entity_state(workspace_id,entity_kind,entity_id,revision,deleted)
+            values(target_workspace,'attachment',child.id,child.revision+1,true)
+            on conflict on constraint sync_entity_state_pkey do update
+              set revision=excluded.revision,deleted=true,last_operation=null;
+        end loop;
+      end if;
+      if current_row is not null then
+        execute format('update public.%I set deleted_at=clock_timestamp(),updated_at=clock_timestamp(),revision=$3 where id=$1 and workspace_id=$2 returning to_jsonb(%I)',target_table,target_table)
+          into current_row using entity_uuid,target_workspace,state.revision+1;
+      else
+        current_row := jsonb_build_object('id',entity_uuid,'workspace_id',target_workspace,'revision',state.revision+1,'deleted_at',clock_timestamp());
+      end if;
+    else
+      -- Clients supply business fields only; ownership, clocks and revisions are server-owned.
+      next_row := coalesce(body,'{}'::jsonb) - array['id','workspace_id','revision','created_at','updated_at','deleted_at','created_by','issue_key','issue_number','issue_user_code'];
+      if entity_kind='bug' then next_row := next_row - 'issue_prefix'; end if;
+      next_row := next_row || jsonb_build_object('id',entity_uuid,'workspace_id',target_workspace,
+        'revision',state.revision+1,'updated_at',clock_timestamp(),'deleted_at',null);
+      if current_row is null then next_row := next_row || jsonb_build_object('created_at',clock_timestamp()); end if;
+      if entity_kind in ('bug','attachment') and current_row is null then
+        next_row := next_row || jsonb_build_object('created_by',auth.uid());
+      end if;
+      -- SECURITY DEFINER must validate every foreign workspace reference as well as the target.
+      for reference_key,reference_table in select * from (values
+        ('application_id','applications'),('module_id','modules'),('environment_id','environments'),
+        ('bug_id','bugs'),('parent_id','attachments'),('device_id','reference_options'),
+        ('browser_id','reference_options'),('user_role_id','reference_options')) refs(k,t)
+      loop
+        if next_row->>reference_key is not null then
+          execute format('select workspace_id from public.%I where id=$1 and deleted_at is null for share',reference_table)
+            into reference_workspace using (next_row->>reference_key)::uuid;
+          if reference_workspace is distinct from target_workspace then
+            raise exception 'Invalid cross-workspace or deleted reference' using errcode='42501';
+          end if;
+        end if;
+      end loop;
+      -- Use only actual columns; JSON values are typed by PostgreSQL, never interpolated SQL.
+      select string_agg(format('%I',a.attname),','),
+             string_agg(format('p.%I',a.attname),','),
+             string_agg(format('%I=excluded.%I',a.attname,a.attname),',')
+        into columns_sql,values_sql,updates_sql
+        from pg_attribute a where a.attrelid=format('public.%I',target_table)::regclass
+          and a.attnum>0 and not a.attisdropped and next_row ? a.attname;
+      execute format('insert into public.%I (%s) select %s from jsonb_populate_record(null::public.%I,$1) p on conflict(id) do update set %s returning to_jsonb(%I)',
+        target_table,columns_sql,values_sql,target_table,updates_sql,target_table)
+        into current_row using next_row;
+    end if;
+    update public.sync_entity_state s set revision=state.revision+1,last_operation=operation_uuid,deleted=(mutation='DELETE')
+      where s.workspace_id=target_workspace and s.entity_kind=apply_sync_mutation.entity_kind and s.entity_id=entity_uuid;
+  end if;
+  insert into public.sync_operation_receipts values(target_workspace,operation_uuid,entity_kind,entity_uuid,accepted);
+  return jsonb_build_object('applied',accepted,'row',coalesce(current_row,
+    jsonb_build_object('id',entity_uuid,'revision',state.revision,'deleted_at',case when state.deleted then '1970-01-01T00:00:00Z' end)));
+end;
+$protocol$;
+
+revoke all on table public.sync_entity_state, public.sync_operation_receipts from public, anon, authenticated;
+revoke insert,update,delete on table public.applications,public.modules,public.environments,
+  public.reference_options,public.bugs,public.attachments from public,anon,authenticated;
+revoke all on function public.apply_sync_mutation(uuid,text,uuid,uuid,bigint,uuid,text,jsonb) from public,anon;
+grant execute on function public.apply_sync_mutation(uuid,text,uuid,uuid,bigint,uuid,text,jsonb) to authenticated;

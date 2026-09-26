@@ -161,7 +161,10 @@ export interface CapturePresetInput {
   entry_type_id: number | null;
 }
 
+export interface CaptureContext { workspaceId: string | null; draftId: string; }
+
 export interface QuickBugInput {
+  capture_context?: CaptureContext;
   entry_type: string;
   application_id: TaxonomyId | null;
   module_id: TaxonomyId | null;
@@ -314,8 +317,8 @@ export interface SyncConnectionResult {
 
 export interface SyncRuntimeStatus {
   status: 'error';
-  code: 'PROJECT_PAUSED';
-  message: 'Supabase project is paused';
+  code: 'PROJECT_PAUSED' | 'SYNC_CONFLICT';
+  message: string;
 }
 
 export interface SyncSessionStatus {

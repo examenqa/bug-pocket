@@ -84,7 +84,7 @@ Taxonomy identifiers are polymorphic:
 type TaxonomyId = string | number;
 ```
 
-Legacy local rows can use numeric IDs. Cloud taxonomy uses canonical UUID strings. Never apply `Number(...)` or `parseInt(...)` to a taxonomy selection. `remoteTaxonomyId` must preserve valid UUIDs and only derive deterministic UUIDs for legacy numeric IDs.
+Legacy local rows can use numeric IDs. Cloud taxonomy uses canonical UUID strings. Never apply `Number(...)` or `parseInt(...)` to a taxonomy selection. The persistent `sync_identity` registry preserves known remote UUIDs and assigns random UUIDs to new local entities. Never derive cloud identity from local row numbers. See `docs/sync-protocol.md` for migration and revision rules.
 
 Local workspace data acts as a loosely coupled cache. Do not reintroduce cross-database `REFERENCES` constraints between workspace bugs and taxonomy stored in another SQLite connection. Supabase owns authoritative cloud relational integrity.
 
@@ -140,7 +140,7 @@ Remote pull is lossless and table-specific:
 - Persist a cursor only after its local batch transaction commits.
 - Never replace this with a shared timestamp watermark; that causes permanent starvation across tables.
 
-Conflict behavior is last-write-wins by `updated_at`. Remote soft-delete tombstones (`deleted_at`) delete the corresponding local cache row.
+Conflict decisions use server revisions and idempotent operation receipts through `apply_sync_mutation`; client clocks never decide winners. Terminal remote tombstones delete the corresponding local cache row. Rejected local snapshots remain in `sync_conflicts` for recovery.
 
 Workspace switching sequence:
 
