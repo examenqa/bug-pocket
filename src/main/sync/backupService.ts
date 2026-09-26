@@ -10,9 +10,10 @@ import {
   renameSync,
   rmSync,
   statSync,
-  unlinkSync
+  unlinkSync,
+  writeFileSync
 } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { basename, join, resolve, sep } from 'node:path';
 import type { BackupExportResult } from '../../shared/types';
 import { operationBarrier } from '../OperationBarrier';
@@ -25,6 +26,8 @@ const rollbackDirectoryName = '.restore_rollback';
 type DatabaseRole = 'local' | 'workspace';
 
 interface BackupManifest {
+  format_version?: number;
+  database?: string;
   databases: {
     local_db: string;
     workspace_db: string | null;
@@ -117,6 +120,17 @@ async function createBackupArchiveInternal(
         const tempPath = join(tempDirectory, `bug-pocket-temp-${file.role}-${Date.now()}-${randomUUID()}.sqlite`);
         copyFileSync(file.filePath, tempPath);
         tempDatabasePaths.push(tempPath);
+        // Temporary recovery captures are not part of a report backup, including metadata.
+        const snapshot = new Database(tempPath);
+        try {
+          const columns = snapshot.prepare('PRAGMA table_info(attachments)').all() as Array<{ name: string }>;
+          if (columns.some(column => column.name === 'pending_capture_until')) {
+            snapshot.exec('DELETE FROM attachment_download_queue WHERE attachment_id IN (SELECT id FROM attachments WHERE bug_id IS NULL AND pending_capture_until IS NOT NULL)');
+            snapshot.exec('DELETE FROM attachments WHERE bug_id IS NULL AND pending_capture_until IS NOT NULL');
+            snapshot.exec('DELETE FROM attachment_gc');
+          }
+          snapshot.pragma('wal_checkpoint(TRUNCATE)');
+        } finally { snapshot.close(); }
         return { ...file, tempPath };
       });
     const attachmentsDir = source.screenshotsDir;
@@ -138,6 +152,7 @@ async function createBackupArchiveInternal(
     });
 
     const manifest = {
+      format_version: 2,
       exported_at: new Date().toISOString(),
       database: archiveDatabaseFiles.find((file) => file.role === 'workspace')?.archiveName
         ?? archiveDatabaseFiles[0]?.archiveName
@@ -283,12 +298,15 @@ function readAndValidateManifest(stagingPath: string, archiveEntries: Set<string
   } catch {
     throw new Error('Backup manifest is not valid JSON.');
   }
+  if (parsed?.format_version != null && parsed.format_version !== 2) throw new Error('Unsupported backup format version.');
+  const legacySingle = parsed && !parsed.databases && parsed.database === 'bug-pocket.sqlite';
+  if (legacySingle) parsed.databases = { local_db: 'bug-pocket.sqlite', workspace_db: null, current_workspace_id: null };
   if (!parsed || typeof parsed !== 'object' || !parsed.databases || typeof parsed.databases !== 'object') {
     throw new Error('Backup manifest is missing its database map.');
   }
 
   const localDatabaseName = validateManifestFileName(parsed.databases.local_db, 'local database');
-  if (localDatabaseName !== 'local.sqlite') throw new Error("Backup local database must be named 'local.sqlite'.");
+  if (localDatabaseName !== 'local.sqlite' && !(legacySingle && localDatabaseName === 'bug-pocket.sqlite')) throw new Error("Backup local database must be named 'local.sqlite'.");
 
   const workspaceId = typeof parsed.databases.current_workspace_id === 'string'
     ? parsed.databases.current_workspace_id.trim()
@@ -324,6 +342,8 @@ function readAndValidateManifest(stagingPath: string, archiveEntries: Set<string
     }
   }
 
+  // Earlier exporters recorded names/source only. Infer metadata only for that
+  // unversioned legacy representation, and verify the actual content-addressed bytes.
   const rawAttachments = parsed.archived_attachments ?? [];
   if (!Array.isArray(rawAttachments)) throw new Error('Backup manifest has an invalid attachment list.');
   const declaredAttachmentEntries = new Set<string>();
@@ -333,6 +353,14 @@ function readAndValidateManifest(stagingPath: string, archiveEntries: Set<string
     }
     const fileName = validateManifestFileName(attachment.file_name, `attachment ${index + 1}`);
     const extensionIndex = fileName.lastIndexOf('.');
+    if (parsed.format_version == null && attachment.content_hash == null && attachment.file_size == null) {
+      const legacyHash = fileName.slice(0, extensionIndex);
+      validateAttachmentMetadata(legacyHash, fileName.slice(extensionIndex));
+      const bytes = readFileSync(join(stagingPath, 'attachments', fileName));
+      if (createHash('sha256').update(bytes).digest('hex') !== legacyHash.toLowerCase()) throw new Error('Legacy attachment content hash mismatch.');
+      attachment.content_hash = legacyHash;
+      attachment.file_size = bytes.length;
+    }
     const metadata = validateAttachmentMetadata(
       attachment.content_hash,
       extensionIndex >= 0 ? fileName.slice(extensionIndex) : ''
@@ -385,6 +413,11 @@ function readAndValidateManifest(stagingPath: string, archiveEntries: Set<string
     if (!archiveEntries.has(databaseName)) throw new Error(`Backup archive is missing '${databaseName}'.`);
   }
 
+  if (legacySingle) {
+    // Commit always installs the single legacy database as local.sqlite.
+    parsed.databases.local_db = 'local.sqlite';
+    writeFileSync(manifestPath, JSON.stringify(parsed));
+  }
   return {
     manifestPath,
     localDatabasePath: join(stagingPath, localDatabaseName),
@@ -538,5 +571,5 @@ export function restoreBackupArchive(
   userDataPath: string,
   hooks: RestoreBackupHooks
 ): Promise<void> {
-  return operationBarrier.acquire(() => restoreBackupArchiveInternal(backupPath, userDataPath, hooks));
+  return operationBarrier.exclusive(() => restoreBackupArchiveInternal(backupPath, userDataPath, hooks));
 }

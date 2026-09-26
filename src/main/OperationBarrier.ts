@@ -22,6 +22,17 @@ export class OperationBarrier {
     return operation;
   }
 
+  // Register the exclusive operation itself, but drain only operations that preceded it.
+  // Shutdown can then wait for restore without restore waiting on its own promise.
+  exclusive<T>(factory: () => Promise<T>): Promise<T> {
+    this.enterMaintenance();
+    const previous = Array.from(this.operations);
+    const operation = Promise.allSettled(previous).then(factory).finally(() => this.exitMaintenance());
+    this.operations.add(operation);
+    void operation.then(() => this.operations.delete(operation), () => this.operations.delete(operation));
+    return operation;
+  }
+
   enterMaintenance(): void {
     if (this.maintenanceMode) throw new Error('Bug Pocket maintenance is already in progress.');
     this.maintenanceMode = true;

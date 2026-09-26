@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { withSavedDraft } from '../utils/draftLifecycle';
 
 function readRoute(): string {
   const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
@@ -8,17 +10,26 @@ function readRoute(): string {
 export function useHashRoute() {
   const [route, setRoute] = useState(readRoute);
 
+  const acceptedRoute = useRef(route);
+  const navigation = useRef<Promise<void>>(Promise.resolve());
   const navigate = useCallback((nextRoute: string): void => {
-    if (readRoute() === nextRoute) {
+    navigation.current = navigation.current.then(() => withSavedDraft(() => {
+      acceptedRoute.current = nextRoute;
+      window.history.replaceState(null, '', '#' + nextRoute);
       setRoute(nextRoute);
-      return;
-    }
-    window.location.hash = nextRoute;
+    })).catch(() => {
+      // Save failure keeps the current view and draft; the save owner displays the error.
+      window.history.replaceState(null, '', '#' + acceptedRoute.current);
+    });
   }, []);
 
   useEffect(() => {
-    const syncRoute = (): void => setRoute(readRoute());
-    const unsubscribeNavigation = window.bugPocket.onNavigate((nextRoute) => navigate(nextRoute));
+    const syncRoute = (): void => {
+      const target = readRoute();
+      window.history.replaceState(null, '', '#' + acceptedRoute.current);
+      navigate(target);
+    };
+    const unsubscribeNavigation = window.bugPocket.onNavigate(navigate);
     window.addEventListener('hashchange', syncRoute);
     return () => {
       window.removeEventListener('hashchange', syncRoute);

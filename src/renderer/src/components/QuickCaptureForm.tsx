@@ -4,6 +4,7 @@ import type { KeyboardEvent } from 'react';
 import type { CapturePreset, ScreenshotResult, SettingsData, TaxonomyId } from '../../../shared/types';
 import { ScreenshotAnnotator } from './ScreenshotAnnotator';
 import type { ScreenshotAnnotatorHandle } from './ScreenshotAnnotator';
+import { useToast } from './shared/ToastContext';
 import { BrandMark } from './shared/BrandMark';
 import { QuickSearchSelect } from './QuickSearchSelect';
 
@@ -59,6 +60,7 @@ export function QuickCaptureForm({
   onCreateEnvironment,
   onCreateUserRole
 }: QuickCaptureFormProps) {
+  const showToast = useToast();
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null);
   const [applicationId, setApplicationId] = useState<TaxonomyId | null>(null);
   const [moduleId, setModuleId] = useState<TaxonomyId | null>(null);
@@ -165,9 +167,13 @@ export function QuickCaptureForm({
   };
 
   const save = async (): Promise<void> => {
-    if (workspaceReadOnly || !note.trim()) return;
-    await onSave({ applicationId, moduleId, environmentId, userRoleId, note });
-    setNote('');
+    if (workspaceReadOnly || saving || !note.trim()) return;
+    try {
+      await onSave({ applicationId, moduleId, environmentId, userRoleId, note });
+      setNote('');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Capture could not be saved. Your note and screenshots are retained.', 'error');
+    }
   };
 
   const takeScreenshot = (): void => {
@@ -391,7 +397,7 @@ export function QuickCaptureForm({
           {workspaceReadOnly && <p className="quick-read-only-notice">Your workspace role is read-only. Captures and taxonomy changes are disabled.</p>}
           {attachments.length > 0 && (
             <div className="attachment-strip quick-attachment-status">
-              <span>{attachments.length} screenshot{attachments.length === 1 ? '' : 's'} attached</span>
+              <span title="Unsaved screenshots can be recovered for 24 hours after capture. Remove or cancel to discard them immediately. They are excluded from backups.">{attachments.length} screenshot{attachments.length === 1 ? '' : 's'} attached</span>
               <button type="button" className="remove-attachment-btn" title="Remove screenshot" aria-label="Remove attached screenshots" onClick={onClearAttachments}>
                 &times;
               </button>

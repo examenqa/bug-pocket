@@ -3,6 +3,8 @@ import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider
 
 const api = {
   openQuickCapture: () => ipcRenderer.invoke('window:openQuickCapture'),
+  getPendingCaptures: (): Promise<import('../shared/types').ScreenshotResult[]> => ipcRenderer.invoke('capture:listPending'),
+  discardPendingCaptures: (): Promise<void> => ipcRenderer.invoke('capture:discardPending'),
   hideQuickCapture: () => ipcRenderer.invoke('window:hideQuickCapture'),
   openMainWindow: (route?: string) => ipcRenderer.invoke('window:openMain', route),
   openSettings: (section?: string) => ipcRenderer.invoke('window:openSettings', section),
@@ -83,7 +85,7 @@ const api = {
   openExternalUrl: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
   sendFeedback: (payload: FeedbackPayload) => ipcRenderer.invoke('support:sendFeedback', payload),
   setDetailsDirty: (dirty: boolean) => ipcRenderer.invoke('details:setDirty', dirty),
-  detailsFlushComplete: () => ipcRenderer.invoke('details:flushComplete'),
+  detailsFlushComplete: (requestId: string, success: boolean) => ipcRenderer.invoke('details:flushComplete', requestId, success),
   startScreenshotCapture: (bugId?: number) => ipcRenderer.invoke('screenshot:start', bugId),
   getScreenshotSource: (): Promise<Uint8Array | null> => ipcRenderer.invoke('screenshot:getSource'),
   completeScreenshotCapture: (dataUrl: string) => ipcRenderer.invoke('screenshot:complete', dataUrl),
@@ -168,8 +170,13 @@ const api = {
       ipcRenderer.removeListener('app:toast', listener);
     };
   },
-  onDetailsFlushRequest: (callback: () => void) => {
+  onDetailsResume: (callback: () => void) => {
     const listener = (): void => callback();
+    ipcRenderer.on('details:resume', listener);
+    return () => { ipcRenderer.removeListener('details:resume', listener); };
+  },
+  onDetailsFlushRequest: (callback: (requestId: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, requestId: string): void => callback(requestId);
     ipcRenderer.on('details:flush-save-request', listener);
     return () => {
       ipcRenderer.removeListener('details:flush-save-request', listener);

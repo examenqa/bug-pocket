@@ -89,7 +89,7 @@ export function useAttachmentSpotlight({ bugId, bug, setBug }: UseAttachmentSpot
     const created = (await window.bugPocket.saveAnnotatedAttachment(currentSpotlightAttachment.id, dataUrl)) as Attachment;
     const updatedBug = await window.bugPocket.getBug(bug.id);
     const lineageData = await loadAttachmentLineage(created.id);
-    if (updatedBug) setBug(updatedBug);
+    if (updatedBug) setBug(current => current && current.id === updatedBug.id ? { ...current, attachments: updatedBug.attachments } : current);
     setAttachmentPreviews((current) => ({ ...current, [created.id]: dataUrl }));
     setSpotlight((current) => {
       if (!current) return current;

@@ -10,17 +10,37 @@ import { BugDetailsView } from './pages/BugDetailPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SnipOverlay } from './pages/SnipOverlay';
 import { SupportModal, type SupportModalMode } from './components/shared/SupportModal';
-import { ToastProvider } from './components/shared/ToastContext';
+import { ToastProvider, useToast } from './components/shared/ToastContext';
 import { BrandMark } from './components/shared/BrandMark';
+import { useDraftLifecycleBridge } from './hooks/useDraftLifecycleBridge';
 import { bugDetailsRoute, resolveMainShellRoute } from '../../shared/navigation';
 
 function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: () => Promise<void> }) {
   const [attachments, setAttachments] = useState<ScreenshotResult[]>([]);
   const [saving, setSaving] = useState(false);
   const [focusToken, setFocusToken] = useState(0);
+  const pendingRefresh = useRef(0);
+  const showToast = useToast();
 
-  useEffect(() => window.bugPocket.onOpenQuickCapture(() => setFocusToken((current) => current + 1)), []);
-  useEffect(() => window.bugPocket.onScreenshotCaptured((result) => setAttachments((current) => [...current, result as ScreenshotResult])), []);
+  useEffect(() => {
+    let mounted = true;
+    const recover = (): void => {
+      const request = ++pendingRefresh.current;
+      void window.bugPocket.getPendingCaptures().then(values => {
+        if (mounted && request === pendingRefresh.current) setAttachments(values);
+      }).catch(error => { if (mounted) showToast(String(error), 'error'); });
+    };
+    recover();
+    const unsubscribeOpen = window.bugPocket.onOpenQuickCapture(() => { recover(); setFocusToken(current => current + 1); });
+    const unsubscribeScreenshot = window.bugPocket.onScreenshotCaptured(recover);
+    return () => { mounted = false; unsubscribeOpen(); unsubscribeScreenshot(); };
+  }, [showToast]);
+
+  const clearAttachments = async (): Promise<void> => {
+    pendingRefresh.current += 1;
+    try { await window.bugPocket.discardPendingCaptures(); setAttachments([]); }
+    catch (error) { showToast(String(error), 'error'); }
+  };
 
   const saveDraft = async (draft: QuickCaptureDraft): Promise<void> => {
     setSaving(true);
@@ -48,7 +68,7 @@ function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: 
       focusToken={focusToken}
       onConfigurePresets={() => window.bugPocket.openSettings('presets')}
       onTakeScreenshot={() => window.bugPocket.startScreenshotCapture()}
-      onClearAttachments={() => setAttachments([])}
+      onClearAttachments={() => void clearAttachments()}
       onSave={saveDraft}
       onCancel={() => window.bugPocket.hideQuickCapture()}
       onCreateApplication={async (name) => {
@@ -267,7 +287,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
             <Dashboard settings={settings} onSelect={(id) => navigate(bugDetailsRoute(id))} />
           </div>
         ) : shellRoute.view === 'bug' ? (
-          <BugDetailsView bugId={shellRoute.bugId} settings={settings} onBack={closeBugDetails} />
+          <BugDetailsView key={shellRoute.bugId} bugId={shellRoute.bugId} settings={settings} onBack={closeBugDetails} />
         ) : null}
       </main>
     </div>
@@ -277,6 +297,7 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
 export function App() {
   const { route, navigate } = useHashRoute();
   const { settings, refresh } = useSettings();
+  useDraftLifecycleBridge();
 
   let content: React.ReactNode;
   if (route.startsWith('/capture')) content = <CaptureRoute settings={settings} refresh={refresh} />;

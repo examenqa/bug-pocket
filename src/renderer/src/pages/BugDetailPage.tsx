@@ -41,7 +41,6 @@ export function BugDetailsView({
   const showDetailsToast = useToast();
   const saveBugCallback = useCallback((bugToSave: BugDetails) => window.bugPocket.updateBug(bugToSave.id, buildBugUpdateInput(bugToSave)) as Promise<BugDetails>, []);
   const {
-    triggerSave,
     flushSync,
     bugRef,
     saveState,
@@ -94,8 +93,13 @@ export function BugDetailsView({
     const unsubscribeScreenshot = window.bugPocket.onScreenshotCaptured(() => {
       window.bugPocket.getBug(bugId).then((loadedBug) => {
         if (cancelled) return;
-        setBug(loadedBug);
-        bugRef.current = loadedBug;
+        if (!loadedBug) return;
+        setBug(current => {
+          if (!current || current.id !== loadedBug.id) return current;
+          const merged = { ...current, attachments: loadedBug.attachments };
+          bugRef.current = merged;
+          return merged;
+        });
       });
     });
     window.bugPocket.getBug(bugId).then((loadedBug) => {
@@ -135,9 +139,9 @@ export function BugDetailsView({
 
   const save = async (): Promise<void> => {
     if (developerReadOnly) return;
-    await triggerSave({ showToast: true });
+    try { await flushSync(); showDetailsToast('Details saved successfully.'); } catch { /* Save owner reports the failure. */ }
   };
-  const backToDashboard = async (): Promise<void> => { await flushSync(); onBack(); };
+  const backToDashboard = (): void => { onBack(); };
   const fieldSaveStatus = (key: keyof BugDetails): React.ReactNode => {
     if (lastEditedField !== key || (saveState !== 'saving' && saveState !== 'saved')) return null;
     return (
@@ -202,8 +206,12 @@ export function BugDetailsView({
     await window.bugPocket.deleteAttachment(attachmentId);
     const updated = await window.bugPocket.getBug(bug.id);
     if (updated) {
-      setBug(updated);
-      bugRef.current = updated;
+      setBug(current => {
+        if (!current || current.id !== updated.id) return current;
+        const merged = { ...current, attachments: updated.attachments };
+        bugRef.current = merged;
+        return merged;
+      });
     }
     closeSpotlight();
   };
@@ -211,7 +219,8 @@ export function BugDetailsView({
   const deleteReport = async (): Promise<void> => {
     if (developerReadOnly) return;
     setDeleting(true);
-    try { await window.bugPocket.deleteBug(bug.id); onBack(); }
+    try { await flushSync(); await window.bugPocket.deleteBug(bug.id); resetSavedBaseline(null); onBack(); }
+    catch (error) { showDetailsToast(String(error), 'error'); }
     finally { setDeleting(false); }
   };
   const convertScenarioToBug = async (): Promise<void> => {
