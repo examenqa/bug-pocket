@@ -73,3 +73,11 @@ function getJiraBaseUrl(value: string): string | null {
 
 
 
+
+// Tracker actions are deterministic. AI assistance is available only via explicit AI Triage.
+export async function openTrackerIssue(platform: IssuePlatformLink, bug: BugDetails, template: ReportTemplate | undefined, options: IssueDeepLinkOptions, bridge: { openExternalUrl(url: string): Promise<unknown> }): Promise<void> {
+  if (!buildIssueDeepLink(platform, bug, '', options)) throw new Error('Configure your Jira workspace URL in Settings before opening Jira.');
+  const body = generateReport(bug, template);
+  const url = buildIssueDeepLink(platform, bug, body, options)!;
+  await bridge.openExternalUrl(url);
+}

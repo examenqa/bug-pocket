@@ -213,7 +213,7 @@ Primary implementation: `src/main/ai/byokIssueProcessor.ts`.
 - Supports OpenAI, Gemini-compatible endpoints, OpenRouter, Grok, and custom/local compatible servers.
 - API keys are encrypted with Electron `safeStorage` and never cross IPC in plaintext.
 - Provider failures surface actionable upstream messages.
-- Gemini retryable failures cascade through `gemini-3.5-flash`, `gemini-3.1-flash-lite`, then `gemini-2.5-flash`; authentication and non-retryable errors bubble immediately.
+- Gemini requests use the configured model first, followed by deduplicated fallback models only on HTTP 429/5xx. See `docs/ai-lifecycle.md` for deadlines, cancellation, and field-safe merging.
 - Vision images are resolved by attachment ID, resized with `nativeImage`, and JPEG-compressed before Base64 encoding.
 - Strict JSON response mode maps `title`, `bugNote`, `stepsToReproduce`, `expectedResult`, and `actualResult` into editable React state.
 - Malformed JSON falls back to Bug Note instead of crashing.

@@ -1,3 +1,4 @@
+import { AiRequestRegistry } from './ai/aiRequestRegistry';
 import type { CaptureContext } from '../shared/types';
 import { DetailsFlushGate } from './detailsFlush';
 import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog, safeStorage } from 'electron';
@@ -56,6 +57,7 @@ let gracefulShutdownPromise: Promise<void> | null = null;
 let currentScreenshotSource: Buffer | null = null;
 let pendingQuickScreenshotDataUrl = '';
 let screenshotStarting = false;
+const aiRequests = new AiRequestRegistry();
 let screenshotBugId: number | null = null;
 let mainWasVisibleBeforeSnip = false;
 let shortcutRegistrationErrors: Partial<Record<ShortcutAction, string>> = {};
@@ -87,6 +89,7 @@ function createSyncEngine(): SyncEngine {
 }
 
 function pauseRendererForShutdown(): void {
+  aiRequests.cancelAll();
   BrowserWindow.getAllWindows().forEach((window) => {
     window.webContents.send('app:shutdown-started');
     window.setIgnoreMouseEvents(true);
@@ -914,14 +917,14 @@ async function discardPendingQuickScreenshot(): Promise<void> {
 }
 
 
-async function triageBugWithConfiguredAi(bugData: unknown): Promise<string> {
+async function triageBugWithConfiguredAi(bugData: unknown, signal: AbortSignal): Promise<string> {
   const verifiedPayload = bugData as AiTriageBugPayload;
   const byokConfig = getByokAiConfig(db);
-  if (byokConfig.hasApiKey) return triageBugWithByokAi(db, verifiedPayload);
+  if (byokConfig.hasApiKey) return triageBugWithByokAi(db, verifiedPayload, signal);
 
   if (db.getAiTriageEnabled()) {
     const verifiedImagePath = resolveVerifiedTriageAttachmentPath(db, verifiedPayload);
-    const localResult = await triageBugWithOllama(verifiedPayload, db.getOllamaModelName(), verifiedImagePath);
+    const localResult = await triageBugWithOllama(verifiedPayload, db.getOllamaModelName(), verifiedImagePath, signal);
     if (!localResult.success) throw new Error(localResult.error || 'Local AI triage failed.');
     return JSON.stringify(normalizeOllamaTriageResult(localResult.result));
   }
@@ -1189,8 +1192,15 @@ function registerIpc(): void {
     if (result.success) mainWindow?.webContents.send('bugs:changed');
     return result;
   }));
-  secureIpc.handle('ai:triageBug', (_event, bugData: unknown) => operationBarrier.acquire(() => triageBugWithConfiguredAi(bugData)));
-  secureIpc.handle('ai:processIssueWithByok', (_event, payload: AiIssueProcessPayload) => operationBarrier.acquire(() => processIssueWithByokAi(db, payload)));
+  secureIpc.handle('ai:triageBug', (event, bugData: unknown, requestId: string) => {
+    assertAppAcceptingMutations();
+    return operationBarrier.acquire(() => aiRequests.run(event.sender.id, requestId, signal => triageBugWithConfiguredAi(bugData, signal)));
+  });
+  secureIpc.handle('ai:processIssueWithByok', (event, payload: AiIssueProcessPayload, requestId: string) => {
+    assertAppAcceptingMutations();
+    return operationBarrier.acquire(() => aiRequests.run(event.sender.id, requestId, signal => processIssueWithByokAi(db, payload, signal)));
+  });
+  secureIpc.handle('ai:cancel', (event, requestId: string) => aiRequests.cancel(event.sender.id, requestId));
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -1275,3 +1285,9 @@ app.on('will-quit', () => {
 
 
 
+
+app.on('web-contents-created', (_event, contents) => {
+  const owner = contents.id;
+  contents.once('destroyed', () => aiRequests.cancel(owner));
+  contents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) aiRequests.cancel(owner); });
+});

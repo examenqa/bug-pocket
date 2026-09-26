@@ -119,3 +119,29 @@ test('RPC rejects missing revisions, malformed bodies and anonymous callers',asy
   try {await assert.rejects(mutate(randomUUID(),0,'INSERT',{}),/permission denied/);}
   finally {await pg.exec('set role authenticated');}
 });
+
+test('PostgreSQL partial report updates preserve metadata, support explicit clears and retain CAS receipts', async () => {
+  const metadata:Record<string,string> = {};
+  for (const [type,name] of [['device','Windows Desktop'],['browser','Chrome'],['user_role','Administrator']]) {
+    const id=randomUUID();
+    await mutate(id,0,'INSERT',{type,name,value:name},randomUUID(),null,'reference');
+    metadata[type+'_id']=id;
+  }
+  const environment=randomUUID();
+  await mutate(environment,0,'INSERT',{name:'Production',value:'Production'},randomUUID(),null,'environment');
+  const id=randomUUID();
+  const original=await mutate(id,0,'INSERT',{...metadata,title:'Original',note:'Keep',environment_id:environment});
+  const op=randomUUID();
+  const updated=await mutate(id,1,'UPDATE',{title:'Updated'},op);
+  assert.equal(updated.row.title,'Updated'); assert.equal(updated.row.note,'Keep');
+  assert.equal(updated.row.environment_id,environment);
+  for (const [field,value] of Object.entries(metadata)) assert.equal(updated.row[field],value);
+  assert.equal(updated.row.issue_key,original.row.issue_key);
+  assert.equal((await mutate(id,1,'UPDATE',{title:'Updated'},op)).row.revision,2);
+  assert.equal((await mutate(id,1,'UPDATE',{note:'stale'})).applied,false);
+  const cleared=await mutate(id,2,'UPDATE',{note:'',environment_id:null});
+  assert.equal(cleared.row.note,''); assert.equal(cleared.row.environment_id,null);
+  for (const [field,value] of Object.entries(metadata)) assert.equal(cleared.row[field],value);
+  await mutate(id,3,'DELETE');
+  assert.equal((await mutate(id,4,'UPDATE',{title:'resurrect'})).applied,false);
+});

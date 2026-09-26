@@ -104,3 +104,32 @@ test('extracts the first balanced triage object when the model adds trailing noi
   assert.equal(parsed.title, 'Ad draft fails to display');
   assert.deepEqual(parsed.stepsToReproduce, ['Open the panel', 'Request a draft']);
 });
+
+for (const modelId of ['gemini-custom-one','gemini-custom-two','']) {
+  test(`Gemini sends configured primary model ${modelId || '(default)'}`,async()=>{
+    const original=globalThis.fetch;const models:string[]=[];
+    try {
+      globalThis.fetch=(async(_input,init)=>{models.push(JSON.parse(String(init?.body)).model);return new Response(JSON.stringify({choices:[{message:{content:'result'}}]}));}) as typeof fetch;
+      await callOpenAiCompatibleChatWithFallback({apiKey:'test',baseUrl:'https://example.test',modelId,provider:'Gemini',systemPrompt:'test',userPrompt:'test'});
+      assert.deepEqual(models,[modelId || 'gemini-3.5-flash']);
+    }finally{globalThis.fetch=original;}
+  });
+}
+test('OpenAI-compatible requests preserve their model and propagate cancellation without fallback',async()=>{
+  const original=globalThis.fetch,controller=new AbortController();let requests=0;let signal:AbortSignal|undefined;
+  try{
+    globalThis.fetch=(async(_input,init)=>{requests++;signal=init?.signal as AbortSignal;assert.equal(JSON.parse(String(init?.body)).model,'configured-openai');return new Promise<Response>(()=>{});}) as typeof fetch;
+    const pending=callOpenAiCompatibleChatWithFallback({apiKey:'test',baseUrl:'https://example.test',modelId:'configured-openai',provider:'OpenAI',systemPrompt:'test',userPrompt:'test',signal:controller.signal});
+    controller.abort(new Error('intentional cancel'));
+    await assert.rejects(pending,/intentional cancel/);assert.equal(signal?.aborted,true);assert.equal(requests,1);
+  }finally{globalThis.fetch=original;}
+});
+test('Ollama preserves its model and aborts when its owning request is cancelled',async()=>{
+  const {triageBugWithOllama}=require('./ollamaTriage.ts') as typeof import('./ollamaTriage');
+  const original=globalThis.fetch,controller=new AbortController();let signal:AbortSignal|undefined;
+  try {
+    globalThis.fetch=(async(_input,init)=>{signal=init?.signal as AbortSignal;assert.equal(JSON.parse(String(init?.body)).model,'qwen3-vl:8b');return new Promise<Response>(()=>{});}) as typeof fetch;
+    const pending=triageBugWithOllama({note:'example'},'qwen3-vl:8b',undefined,controller.signal);
+    controller.abort(new Error('cancel Ollama'));await assert.rejects(pending,/cancel Ollama/);assert.equal(signal?.aborted,true);
+  } finally {globalThis.fetch=original;}
+});

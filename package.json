@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && electron-vite build && node scripts/fix-preload.js",
     "start": "electron-vite build && node scripts/fix-preload.js && electron .",
     "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder --win nsis",
-    "test": "npm run test:navigation && npm run test:workspace-selection && npm run test:keep-alive && npm run test:invite-token && npm run test:support-feedback && npm run test:lifecycle && npm run test:security:supabase-schema-repeatability && npm run test:security:phase1 && npm run test:security:logout-db-handle && npm run test:security:destructive-backup-restore && npm run test:regression:taxonomy-uuid && npm run test:ai-fallback && npm run test:ai-error-ui && npm run test:phase1 && npm run test:sync-protocol",
+    "test": "npm run test:navigation && npm run test:workspace-selection && npm run test:keep-alive && npm run test:invite-token && npm run test:support-feedback && npm run test:lifecycle && npm run test:security:supabase-schema-repeatability && npm run test:security:phase1 && npm run test:security:logout-db-handle && npm run test:security:destructive-backup-restore && npm run test:regression:taxonomy-uuid && npm run test:ai-fallback && npm run test:ai-error-ui && npm run test:phase1 && npm run test:sync-protocol && npm run test:ai-integrity && npm run test:restore-integrity",
     "test:packaged-smoke": "node scripts/smoke-test.cjs",
     "test:packaged-smoke:build": "npm run build && electron-builder --win --dir && npm run test:packaged-smoke",
     "test:navigation": "node --import tsx --test src/shared/navigation.test.ts",
@@ -34,7 +34,9 @@
     "test:regression:taxonomy-uuid": "node --import tsx --test src/renderer/src/components/shared/OptionSelect.test.tsx",
     "test:security:phase1": "npm run test:security:attachment-paths && npm run test:security:byok-ipc-leak && npm run test:security:electron-boundaries && npm run test:security:developer-ipc && npm run test:security:triage-attachment",
     "test:phase1": "node scripts/run-electron-test.cjs src/main/phase1.test.ts && node --import tsx --test src/main/detailsFlush.test.ts && node scripts/test-renderer-lifecycle.cjs",
-    "test:sync-protocol": "node scripts/run-electron-test.cjs src/main/sync/protocolLocal.test.ts && node --import tsx --test src/main/sync/protocolSql.test.ts"
+    "test:sync-protocol": "node scripts/run-electron-test.cjs src/main/sync/protocolLocal.test.ts && node --import tsx --test src/main/sync/protocolSql.test.ts",
+    "test:ai-integrity": "node --import tsx --test src/main/ai/aiRequest.test.ts src/renderer/src/services/trackerActions.test.ts && node scripts/test-ai-renderer.cjs",
+    "test:restore-integrity": "node scripts/run-electron-test.cjs src/main/sync/restoreIntegrity.test.ts"
   },
   "build": {
     "appId": "com.bugpocket.app",

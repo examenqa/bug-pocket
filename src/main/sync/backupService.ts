@@ -426,6 +426,16 @@ function readAndValidateManifest(stagingPath: string, archiveEntries: Set<string
   };
 }
 
+async function verifyAttachmentIntegrity(attachments: ValidatedBackupAttachment[]): Promise<void> {
+  for (const attachment of attachments) {
+    const hash = createHash('sha256');
+    for await (const chunk of createReadStream(attachment.sourcePath)) hash.update(chunk);
+    if (hash.digest('hex') !== attachment.contentHash.toLowerCase()) {
+      throw new Error(`Backup attachment '${attachment.fileName}' failed SHA-256 integrity verification.`);
+    }
+  }
+}
+
 function assertSqliteIntegrity(databasePath: string): void {
   if (!existsSync(databasePath) || !statSync(databasePath).isFile()) {
     throw new Error(`Backup database '${basename(databasePath)}' is missing.`);
@@ -557,6 +567,7 @@ async function restoreBackupArchiveInternal(
     });
 
     const validated = readAndValidateManifest(stagingPath, archiveEntries);
+    await verifyAttachmentIntegrity(validated.attachmentFiles);
     assertSqliteIntegrity(validated.localDatabasePath);
     if (validated.workspaceDatabasePath) assertSqliteIntegrity(validated.workspaceDatabasePath);
     await commitValidatedBackup(validated, stagingPath, userDataPath, hooks);

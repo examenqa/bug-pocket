@@ -1,3 +1,4 @@
+import { withAiDeadline } from '../../shared/aiRequest';
 import { nativeImage, safeStorage } from 'electron';
 import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiIssueProcessResult, AiProvider, AiTriageBugPayload } from '../../shared/types';
 import type { BugPocketDatabase } from '../database';
@@ -63,13 +64,13 @@ export function saveByokAiConfig(
   return getByokAiConfig(database);
 }
 
-export async function processIssueWithByokAi(database: BugPocketDatabase, payload: AiIssueProcessPayload): Promise<AiIssueProcessResult> {
+export async function processIssueWithByokAi(database: BugPocketDatabase, payload: AiIssueProcessPayload, signal?: AbortSignal): Promise<AiIssueProcessResult> {
   const config = getByokAiConfig(database);
   const apiKey = decryptStoredApiKey(database.getEncryptedByokAiApiKey(config.provider), safeStorage);
   if (!apiKey) return { success: false, provider: config.provider, error: 'AI API key is not configured.' };
 
   const baseUrl = normalizeBaseUrl(config.baseUrl);
-  const modelId = config.modelId.trim();
+  const modelId = config.modelId.trim() || (config.provider === 'Gemini' ? GEMINI_MODEL_CASCADE[0] : '');
   if (!baseUrl) return { success: false, provider: config.provider, error: 'AI Base URL is not configured.' };
   if (!modelId) return { success: false, provider: config.provider, error: 'AI Model ID is not configured.' };
 
@@ -83,27 +84,28 @@ export async function processIssueWithByokAi(database: BugPocketDatabase, payloa
       modelId,
       provider: config.provider,
       systemPrompt,
-      userPrompt
+      userPrompt,
+      signal
     });
     return { success: true, output, provider: config.provider };
   } catch (caught) {
     return { success: false, provider: config.provider, error: caught instanceof Error ? caught.message : 'AI processing failed.' };
   }
 }
-export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: unknown): Promise<string> {
+export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: unknown, signal?: AbortSignal): Promise<string> {
   const config = getByokAiConfig(database);
   const apiKey = decryptStoredApiKey(database.getEncryptedByokAiApiKey(config.provider), safeStorage);
   if (!apiKey) throw new Error('AI API key is not configured. Add one in Settings > AI Processing.');
 
   const baseUrl = normalizeBaseUrl(config.baseUrl);
-  const modelId = config.modelId.trim();
+  const modelId = config.modelId.trim() || (config.provider === 'Gemini' ? GEMINI_MODEL_CASCADE[0] : '');
   if (!baseUrl) throw new Error('AI Base URL is not configured.');
   if (!modelId) throw new Error('AI Model ID is not configured.');
 
   const systemPrompt = normalizeSystemPrompt(config.customSystemPrompt);
   const userPrompt = buildTriagePrompt(bugData);
   const imageDataUrl = readBugImageDataUrl(database, bugData);
-  const output = await callOpenAiCompatibleChatWithFallback({ apiKey, baseUrl, modelId, provider: config.provider, systemPrompt, userPrompt, imageDataUrl });
+  const output = await callOpenAiCompatibleChatWithFallback({ apiKey, baseUrl, modelId, provider: config.provider, systemPrompt, userPrompt, imageDataUrl, signal });
   return extractJsonObjectString(output);
 }
 
@@ -249,6 +251,7 @@ async function callOpenAiCompatibleChat(input: {
   systemPrompt: string;
   userPrompt: string;
   imageDataUrl?: string;
+  signal?: AbortSignal;
 }): Promise<string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${input.apiKey}`,
@@ -262,6 +265,7 @@ async function callOpenAiCompatibleChat(input: {
 
   const response = await fetch(`${input.baseUrl}/chat/completions`, {
     method: 'POST',
+    signal: input.signal,
     headers,
     body: JSON.stringify({
       model: input.modelId,
@@ -306,21 +310,27 @@ export async function callOpenAiCompatibleChatWithFallback(input: {
   systemPrompt: string;
   userPrompt: string;
   imageDataUrl?: string;
+  signal?: AbortSignal;
 }): Promise<string> {
-  const models = input.provider === 'Gemini'
-    ? GEMINI_MODEL_CASCADE
-    : [input.modelId];
-
-  for (let index = 0; index < models.length; index += 1) {
-    try {
-      return await callOpenAiCompatibleChat({ ...input, modelId: models[index] });
-    } catch (caught) {
-      const hasFallback = index < models.length - 1;
-      if (!hasFallback || !isRetryableAiProviderError(caught)) throw caught;
+  return withAiDeadline(async signal => {
+    const configured = input.modelId.trim();
+    const models = input.provider === 'Gemini'
+      ? [...new Set([configured || GEMINI_MODEL_CASCADE[0], ...GEMINI_MODEL_CASCADE])]
+      : [configured];
+    for (let index = 0; index < models.length; index += 1) {
+      signal.throwIfAborted();
+      try {
+        const output = await callOpenAiCompatibleChat({ ...input, signal, modelId: models[index] });
+        signal.throwIfAborted();
+        return output;
+      } catch (caught) {
+        signal.throwIfAborted();
+        if (index === models.length - 1 || !isRetryableAiProviderError(caught)) throw caught;
+        console.info('[Bug Pocket AI] Retrying Gemini with fallback model', models[index + 1]);
+      }
     }
-  }
-
-  throw new Error('AI provider returned no result.');
+    throw new Error('AI provider returned no result.');
+  }, input.signal);
 }
 
 function isRetryableAiProviderError(error: unknown): boolean {

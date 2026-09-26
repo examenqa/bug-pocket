@@ -46,7 +46,7 @@ boundaryTest('bug and triage validators accept an unselected environment', () =>
   const environmentValues = [null, undefined, ''];
 
   for (const environment of environmentValues) {
-    validators['ai:triageBug']([{ note: 'Fresh installation', environment }]);
+    validators['ai:triageBug']([{ note: 'Fresh installation', environment }, 'request']);
     validators['bugs:createQuick']([{
       capture_context: { workspaceId: null, draftId: 'active-draft' },
       entry_type: 'Bug',
@@ -91,7 +91,7 @@ boundaryTest('bug and triage validators accept an unselected environment', () =>
     browser: longDiagnostic,
     os: longDiagnostic,
     steps_to_reproduce: longDiagnostic
-  }]);
+  }, 'request']);
   validators['ai:processIssueWithByok']([{
     rawInput: 'Verbose diagnostics',
     taxonomy: {
@@ -100,10 +100,10 @@ boundaryTest('bug and triage validators accept an unselected environment', () =>
       browser: longDiagnostic,
       os: longDiagnostic
     }
-  }]);
+  }, 'request']);
 
   boundaryAssert.throws(
-    () => validators['ai:triageBug']([{ note: 'Too long', device: 'x'.repeat(5_001) }]),
+    () => validators['ai:triageBug']([{ note: 'Too long', device: 'x'.repeat(5_001) }, 'request']),
     /Invalid IPC payload/i
   );
 });

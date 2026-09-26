@@ -1,3 +1,4 @@
+import { withAiDeadline } from '../../shared/aiRequest';
 import { readFile } from 'node:fs/promises';
 import { nativeImage } from 'electron';
 import type { AiTriageBugPayload, AiTriageResponse, AiTriageResult } from '../../shared/types';
@@ -20,62 +21,67 @@ interface OllamaChatResponse {
 export async function triageBugWithOllama(
   payload: AiTriageBugPayload,
   configuredModelName: string,
-  verifiedImagePath?: string
+  verifiedImagePath?: string,
+  signal?: AbortSignal
 ): Promise<AiTriageResponse> {
-  const imageBase64 = verifiedImagePath ? await readImageAsBase64(verifiedImagePath) : '';
+  return withAiDeadline(async requestSignal => {
+    const imageBase64 = verifiedImagePath ? await readImageAsBase64(verifiedImagePath) : '';
 
-  try {
-    const model = configuredModelName.trim() || 'qwen3-vl:8b';
-    if (!modelNameRegex.test(model)) {
-      throw new Error(
-        `Invalid model name configured: '${configuredModelName}'. Only alphanumeric characters, hyphens, colons, underscores, and periods are allowed.`
-      );
-    }
+    try {
+      const model = configuredModelName.trim() || 'qwen3-vl:8b';
+      if (!modelNameRegex.test(model)) {
+        throw new Error(
+          `Invalid model name configured: '${configuredModelName}'. Only alphanumeric characters, hyphens, colons, underscores, and periods are allowed.`
+        );
+      }
 
-    const requestBody = {
-      model,
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
+      const requestBody = {
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: buildBugTriagePrompt(payload),
+            images: imageBase64 ? [imageBase64] : undefined
+          }
+        ],
+        options: {
+          num_ctx: 4096,
+          num_predict: 900,
+          temperature: 0.2
         },
-        {
-          role: 'user',
-          content: buildBugTriagePrompt(payload),
-          images: imageBase64 ? [imageBase64] : undefined
-        }
-      ],
-      options: {
-        num_ctx: 4096,
-        num_predict: 900,
-        temperature: 0.2
-      },
-      stream: false
-    };
-    const response = await fetch(ollamaChatUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
+        stream: false
+      };
+      const response = await fetch(ollamaChatUrl, {
+        method: 'POST',
+        signal: requestSignal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
 
-    const body = (await response.json().catch(() => ({}))) as OllamaChatResponse;
-    if (!response.ok) throw new Error(classifyOllamaHttpError(response.status, body.error));
-    if (body.error) throw new Error(classifyOllamaMessage(body.error));
+      const body = (await response.json().catch(() => ({}))) as OllamaChatResponse;
+      if (!response.ok) throw new Error(classifyOllamaHttpError(response.status, body.error));
+      if (body.error) throw new Error(classifyOllamaMessage(body.error));
 
-    return {
-      success: true,
-      model,
-      result: parseTriageJson(body.message?.content ?? '')
-    };
-  } catch (caught) {
-    console.error('[OLLAMA TRIAGE ERROR]', caught instanceof Error ? caught.stack || caught.message : caught);
-    return {
-      success: false,
-      model: 'fallback',
-      error: normalizeOllamaError(caught),
-      result: fallbackTriage(payload)
-    };
-  }
+      return {
+        success: true,
+        model,
+        result: parseTriageJson(body.message?.content ?? '')
+      };
+    } catch (caught) {
+      requestSignal.throwIfAborted();
+      console.error('[OLLAMA TRIAGE ERROR]', caught instanceof Error ? caught.stack || caught.message : caught);
+      return {
+        success: false,
+        model: 'fallback',
+        error: normalizeOllamaError(caught),
+        result: fallbackTriage(payload)
+      };
+    }
+  }, signal);
 }
 
 async function readImageAsBase64(filePath: string): Promise<string> {
