@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -344,7 +345,7 @@ test('restore replaces only manifest-declared attachments and preserves unrelate
   const workspacePath = join(dataDir, 'ws_test.sqlite');
   const backupPath = join(dataDir, 'scoped-attachments.bugpocket');
   const attachmentsDir = join(dataDir, 'attachments');
-  const restoredHash = 'a'.repeat(64);
+  const restoredHash = createHash('sha256').update('restored workspace A attachment').digest('hex');
   const unrelatedHash = 'b'.repeat(64);
   const restoredName = `${restoredHash}.png`;
   const unrelatedName = `${unrelatedHash}.png`;
@@ -394,7 +395,7 @@ test('restore rollback restores touched attachment files and leaves unrelated bl
   const workspacePath = join(dataDir, 'ws_test.sqlite');
   const backupPath = join(dataDir, 'scoped-attachments-rollback.bugpocket');
   const attachmentsDir = join(dataDir, 'attachments');
-  const restoredHash = 'c'.repeat(64);
+  const restoredHash = createHash('sha256').update('replacement restored attachment').digest('hex');
   const unrelatedHash = 'd'.repeat(64);
   const restoredName = `${restoredHash}.webp`;
   const unrelatedName = `${unrelatedHash}.jpg`;
