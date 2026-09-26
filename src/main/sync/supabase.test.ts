@@ -126,6 +126,24 @@ test('schema-install.sql remains repeatable across 100 executions', () => {
   );
 });
 
+test('schema-install.sql assigns issue identity to bugs, applications and members only', () => {
+  const sql = readFileSync(fileURLToPath(new URL('../../../supabase/schema-install.sql', import.meta.url)), 'utf8');
+  const definition = (table: string): string => {
+    const start = sql.indexOf('create table if not exists ' + table + ' (');
+    assert.ok(start >= 0, table + ' must be provisioned');
+    return sql.slice(start, sql.indexOf('\n);', start));
+  };
+  assert.match(definition('applications'), /issue_prefix text not null/);
+  assert.match(definition('workspace_members'), /user_code text null/);
+  for (const column of ['issue_key', 'issue_prefix', 'issue_user_code', 'issue_number']) {
+    assert.ok(sql.includes('alter table bugs add column if not exists ' + column + ' '));
+    assert.ok(!definition('modules').includes(column), column + ' belongs to bugs, not modules');
+    assert.ok(!new RegExp('alter\\s+table\\s+(?:public\\.)?modules\\s+add\\s+(?:column\\s+)?(?:if\\s+not\\s+exists\\s+)?' + column, 'i').test(sql));
+  }
+  // Preserve unknown contents in already-created development schemas.
+  assert.doesNotMatch(sql, /alter\s+table\s+(?:public\.)?modules\s+drop\s+column/i);
+});
+
 const configuredUrl =
   process.env.SUPABASE_LOCAL_URL ||
   process.env.SUPABASE_URL ||

@@ -20,13 +20,20 @@ function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: 
   const [saving, setSaving] = useState(false);
   const [focusToken, setFocusToken] = useState(0);
   const pendingRefresh = useRef(0);
+  const [draftKey, setDraftKey] = useState('');
+  const captureContext = useRef<import('../../shared/types').CaptureContext | null>(null);
   const showToast = useToast();
 
   useEffect(() => {
     let mounted = true;
     const recover = (): void => {
       const request = ++pendingRefresh.current;
-      void window.bugPocket.getPendingCaptures().then(values => {
+      void window.bugPocket.getCaptureContext().then(context => {
+        if (!context || !mounted || request !== pendingRefresh.current) return [];
+        captureContext.current = context;
+        setDraftKey(context.draftId);
+        return window.bugPocket.getPendingCaptures();
+      }).then(values => {
         if (mounted && request === pendingRefresh.current) setAttachments(values);
       }).catch(error => { if (mounted) showToast(String(error), 'error'); });
     };
@@ -45,7 +52,9 @@ function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: 
   const saveDraft = async (draft: QuickCaptureDraft): Promise<void> => {
     setSaving(true);
     try {
+      if (!captureContext.current) throw new Error('Reopen Quick Capture before saving.');
       await window.bugPocket.createQuickBug({
+        capture_context: captureContext.current,
         entry_type: 'Bug',
         application_id: draft.applicationId,
         module_id: draft.moduleId,
@@ -62,6 +71,7 @@ function CaptureRoute({ settings, refresh }: { settings: SettingsData; refresh: 
 
   return (
     <QuickCaptureForm
+      key={draftKey}
       settings={settings}
       attachments={attachments}
       saving={saving}
@@ -263,6 +273,15 @@ function MainShell({ route, navigate, settings, refresh }: { route: string; navi
       />
       <SupportModal mode={supportModalMode} open={isSupportModalOpen} onClose={() => setIsSupportModalOpen(false)} />
       <main className="content">
+        {syncRuntimeStatus?.code === 'SYNC_CONFLICT' && (
+          <div className="sync-paused-banner" role="alert">
+            <AlertTriangle size={20} aria-hidden="true" />
+            <div className="sync-paused-copy">
+              <strong>Newer cloud changes kept</strong>
+              <span>Your conflicting local changes were saved for recovery. They will not overwrite the newer cloud version.</span>
+            </div>
+          </div>
+        )}
         {cloudProjectPaused && (
           <div className="sync-paused-banner" role="alert" aria-live="assertive">
             <AlertTriangle size={20} aria-hidden="true" />

@@ -57,15 +57,17 @@ export function GeneralSettings({
             open={openSettingsCard === 'applications'}
             onToggle={() => toggleSettingsCard('applications')}
             mutationReady={mutationReady}
-            items={settings.applications.map((item) => ({ id: item.id, label: item.name, contextDescription: item.context_description ?? '', isSynced: item.is_synced !== 0 }))}
+            items={settings.applications.map((item) => ({ id: item.id, label: item.name, issuePrefix: item.issue_prefix, contextDescription: item.context_description ?? '', isSynced: item.is_synced !== 0 }))}
             addPlaceholder="Application name"
             addButtonLabel="Add"
             addContextLabel="Application Description"
             addContextRequired={true}
+            addCodeLabel="Issue Prefix"
+            addCodeRequired={true}
             readOnly={taxonomyReadOnly}
             readOnlyMessage={taxonomyReadOnlyMessage}
-            onAdd={async (value, contextDescription = '') => { await window.bugPocket.addApplication(value, contextDescription); await refresh(); }}
-            onUpdate={async (id, value, item) => { await window.bugPocket.updateApplication(id, value, item.contextDescription ?? ''); await refresh(); }}
+            onAdd={async (value, contextDescription = '', issuePrefix = '') => { await window.bugPocket.addApplication(value, contextDescription, issuePrefix); await refresh(); }}
+            onUpdate={async (id, value, item) => { await window.bugPocket.updateApplication(id, value, item.contextDescription ?? '', item.issuePrefix ?? ''); await refresh(); }}
             onUpdateContext={async (id, contextDescription) => { await window.bugPocket.updateApplicationContext(id, contextDescription); await refresh(); }}
             onDelete={async (id) => runPresetLockedDelete(async () => { await window.bugPocket.deleteApplication(id); await refresh(); })}
             onToggleSync={async (id, isSynced) => { await window.bugPocket.updateApplicationSync(id, isSynced); await refresh(); }}

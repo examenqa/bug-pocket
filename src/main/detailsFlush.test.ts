@@ -57,10 +57,13 @@ test('exclusive restore rejects new writes and remains visible to shutdown drain
 
 test('new capture and flush IPC channels enforce exact argument shapes', () => {
   const validators = createIpcArgumentValidators();
-  validators['capture:listPending']([]);
-  validators['capture:discardPending']([]);
+  validators['capture:listPending']([{workspaceId:null,draftId:'draft'}]);
+  validators['capture:discardPending']([{workspaceId:null,draftId:'draft'}]);
   validators['details:flushComplete'](['123', false]);
   assert.throws(() => validators['details:flushComplete']([]));
   assert.throws(() => validators['details:flushComplete'](['123', 'true']));
   assert.throws(() => validators['capture:discardPending']([1]));
+  assert.throws(() => validators['capture:listPending']([]));
+  assert.throws(() => validators['capture:listPending']([{workspaceId:'A',draftId:''}]));
+  assert.throws(() => validators['bugs:createQuick']([{entry_type:'Bug',application_id:null,module_id:null,user_role_id:null,note:'no owner',attachment_ids:[]}]));
 });

@@ -48,6 +48,7 @@ boundaryTest('bug and triage validators accept an unselected environment', () =>
   for (const environment of environmentValues) {
     validators['ai:triageBug']([{ note: 'Fresh installation', environment }]);
     validators['bugs:createQuick']([{
+      capture_context: { workspaceId: null, draftId: 'active-draft' },
       entry_type: 'Bug',
       application_id: null,
       module_id: null,

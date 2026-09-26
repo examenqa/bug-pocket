@@ -291,6 +291,72 @@ test('taxonomy CRUD routes to the active workspace and falls back locally only w
   }
 });
 
+test('allocates provisional local issue keys and canonical workspace keys', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-issue-keys-'));
+  const database = new BugPocketDatabase(dataDir);
+
+  const quickBug = (applicationId: string | number, note: string) => database.createQuickBug({
+    entry_type: 'Bug',
+    application_id: applicationId,
+    module_id: null,
+    environment_id: null,
+    device_id: null,
+    browser_id: null,
+    user_role_id: null,
+    note,
+    attachment_ids: []
+  });
+
+  try {
+    const localApplication = database.addApplication('Customer Portal', 'Local fixture', 'app');
+    assert.equal(localApplication.issue_prefix, 'APP');
+    assert.throws(
+      () => database.addApplication('Another Portal', 'Duplicate prefix fixture', 'APP'),
+      /prefix APP is already in use/i
+    );
+
+    const firstLocalBug = quickBug(localApplication.id, 'First local issue');
+    const secondLocalBug = quickBug(localApplication.id, 'Second local issue');
+    assert.deepEqual(
+      [firstLocalBug.issue_key, secondLocalBug.issue_key],
+      ['APP-1', 'APP-2']
+    );
+    assert.equal(firstLocalBug.issue_user_code, null);
+
+    const workspaceId = '550e8400-e29b-41d4-a716-446655440077';
+    database.connectToWorkspace(workspaceId);
+    const workspaceApplication = database.addApplication('Workspace Portal', 'Cloud fixture', 'WSP');
+    const provisionalWorkspaceBug = quickBug(workspaceApplication.id, 'Created before choosing a code');
+    assert.equal(provisionalWorkspaceBug.issue_key, 'WSP-1');
+
+    database.updateWorkspaceUserCode(workspaceId, 'usr');
+    const promotedWorkspaceBug = database.getBug(provisionalWorkspaceBug.id);
+    const workspaceBug = quickBug(workspaceApplication.id, 'Created after choosing a code');
+
+    assert.equal(database.getSettings().currentWorkspaceUserCode, 'USR');
+    assert.equal(promotedWorkspaceBug?.issue_key, 'WSP-USR-1');
+    assert.equal(promotedWorkspaceBug?.issue_user_code, 'USR');
+    assert.equal(workspaceBug.issue_key, 'WSP-USR-2');
+    assert.equal(workspaceBug.issue_prefix, 'WSP');
+    assert.equal(workspaceBug.issue_user_code, 'USR');
+    assert.equal(workspaceBug.issue_number, 2);
+
+    const remoteId = '550e8400-e29b-41d4-a716-446655440088';
+    database.markRemoteBugIdentity(workspaceBug.id, remoteId, {
+      issue_key: 'WSP-USR-7',
+      issue_prefix: 'WSP',
+      issue_user_code: 'USR',
+      issue_number: 7
+    });
+    const canonicalBug = database.getBug(workspaceBug.id);
+    assert.equal(canonicalBug?.issue_key, 'WSP-USR-7');
+    assert.equal(canonicalBug?.issue_number, 7);
+  } finally {
+    database.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('backup attachment references combine local and active workspace rows but exclude inactive workspaces', () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-backup-attachment-scope-'));
   const database = new BugPocketDatabase(dataDir);

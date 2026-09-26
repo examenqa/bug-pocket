@@ -19,6 +19,7 @@ create table if not exists workspace_members (
   workspace_id uuid not null references workspaces(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   role text not null default 'member',
+  user_code text null,
   created_at timestamptz not null default now(),
   unique (workspace_id, user_id),
   constraint workspace_members_role_check check (char_length(trim(role)) between 1 and 80)
@@ -41,11 +42,18 @@ create table if not exists workspace_invites (
   constraint workspace_invites_role_check check (char_length(trim(role)) between 1 and 80)
 );
 
+alter table public.workspace_members add column if not exists user_code text null;
+
 alter table public.workspace_members
   drop constraint if exists workspace_members_role_check;
 alter table public.workspace_members
   add constraint workspace_members_role_check
   check (char_length(trim(role)) between 1 and 80);
+alter table public.workspace_members
+  drop constraint if exists workspace_members_user_code_check;
+alter table public.workspace_members
+  add constraint workspace_members_user_code_check
+  check (user_code is null or user_code ~ '^[A-Z0-9]{3}$');
 
 -- Workspace-scoped roles make permissions data rather than hardcoded policy
 -- branches. Owner and admin remain built-in control-plane roles; all other
@@ -70,6 +78,7 @@ create table if not exists applications (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references workspaces(id) on delete cascade,
   name text not null,
+  issue_prefix text not null,
   context_description text null,
   is_active boolean not null default true,
   is_synced boolean not null default true,
@@ -77,6 +86,8 @@ create table if not exists applications (
   updated_at timestamptz not null default now()
 );
 
+-- Old development installs may retain unused module issue columns. Do not drop
+-- them automatically: their contents are unknown and the application never uses them.
 create table if not exists modules (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references workspaces(id) on delete cascade,
@@ -165,6 +176,56 @@ create table if not exists attachments (
 alter table bugs add column if not exists deleted_at timestamptz null;
 alter table attachments add column if not exists updated_at timestamptz not null default now();
 alter table attachments add column if not exists deleted_at timestamptz null;
+alter table applications add column if not exists issue_prefix text null;
+alter table bugs add column if not exists issue_key text null;
+alter table bugs add column if not exists issue_prefix text null;
+alter table bugs add column if not exists issue_user_code text null;
+alter table bugs add column if not exists issue_number bigint null;
+
+with normalized as (
+  select
+    id,
+    workspace_id,
+    coalesce(
+      rpad(nullif(left(regexp_replace(upper(name), '[^A-Z0-9]', '', 'g'), 3), ''), 3, 'X'),
+      'APP'
+    ) as base_prefix
+  from public.applications
+  where issue_prefix is null or issue_prefix !~ '^[A-Z0-9]{2,8}$'
+), ranked as (
+  select
+    id,
+    base_prefix,
+    row_number() over (partition by workspace_id, base_prefix order by id) as prefix_rank
+  from normalized
+)
+update public.applications application
+set issue_prefix = case
+  when ranked.prefix_rank = 1 then ranked.base_prefix
+  else ranked.base_prefix || ranked.prefix_rank::text
+end
+from ranked
+where application.id = ranked.id;
+
+alter table public.applications alter column issue_prefix set not null;
+alter table public.applications
+  drop constraint if exists applications_issue_prefix_check;
+alter table public.applications
+  add constraint applications_issue_prefix_check
+  check (issue_prefix ~ '^[A-Z0-9]{2,8}$');
+alter table public.bugs
+  drop constraint if exists bugs_issue_identity_check;
+alter table public.bugs
+  add constraint bugs_issue_identity_check
+  check (
+    (issue_key is null and issue_prefix is null and issue_user_code is null and issue_number is null)
+    or (
+      issue_key is not null
+      and issue_prefix ~ '^[A-Z0-9]{2,8}$'
+      and issue_user_code ~ '^[A-Z0-9]{3}$'
+      and issue_number > 0
+    )
+  );
 
 create table if not exists config_options (
   id uuid primary key default gen_random_uuid(),
@@ -182,6 +243,15 @@ create table if not exists report_templates (
   template_text text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table if not exists bug_issue_counters (
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  issue_prefix text not null check (issue_prefix ~ '^[A-Z0-9]{2,8}$'),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  last_number bigint not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, issue_prefix, user_id)
 );
 
 create table if not exists sync_events (
@@ -203,6 +273,12 @@ create index if not exists idx_workspace_members_user on workspace_members(user_
 create index if not exists idx_workspace_invites_workspace_email on workspace_invites(workspace_id, email);
 create index if not exists idx_roles_permissions_workspace on roles_permissions(workspace_id);
 create index if not exists idx_applications_workspace on applications(workspace_id);
+create unique index if not exists idx_workspace_members_workspace_user_code
+  on workspace_members(workspace_id, user_code) where user_code is not null;
+create unique index if not exists idx_applications_workspace_issue_prefix
+  on applications(workspace_id, issue_prefix);
+create unique index if not exists idx_bugs_workspace_issue_key
+  on bugs(workspace_id, issue_key) where issue_key is not null;
 create index if not exists idx_modules_workspace_app on modules(workspace_id, application_id);
 create index if not exists idx_environments_workspace on environments(workspace_id);
 create index if not exists idx_reference_options_workspace_type on reference_options(workspace_id, type);
@@ -224,6 +300,7 @@ alter table attachments enable row level security;
 alter table config_options enable row level security;
 alter table report_templates enable row level security;
 alter table sync_events enable row level security;
+alter table bug_issue_counters enable row level security;
 
 -- 4. Performance-Optimized RLS Helper Function
 -- SECURITY DEFINER avoids recursive RLS checks on workspace_members.
@@ -393,6 +470,126 @@ begin
   return claimed_workspace_id;
 end;
 $$ language plpgsql security definer set search_path = public, auth;
+
+-- A user code belongs to a workspace membership, never to a device. The
+-- first successful claim is permanent and subsequent devices restore it from
+-- workspace_members during the normal authentication handshake.
+create or replace function public.claim_workspace_user_code(
+  target_workspace_id uuid,
+  requested_code text
+)
+returns text as $$
+declare
+  normalized_code text := upper(trim(requested_code));
+  existing_code text;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication is required to choose an issue user code.' using errcode = '42501';
+  end if;
+  if normalized_code !~ '^[A-Z0-9]{3}$' then
+    raise exception 'User code must be exactly 3 letters or numbers.' using errcode = '22023';
+  end if;
+
+  select user_code into existing_code
+  from public.workspace_members
+  where workspace_id = target_workspace_id and user_id = auth.uid()
+  for update;
+
+  if not found then
+    raise exception 'The current user is not a member of this workspace.' using errcode = '42501';
+  end if;
+  if existing_code is not null and existing_code <> normalized_code then
+    raise exception 'This account already has a permanent user code.' using errcode = '23505';
+  end if;
+
+  update public.workspace_members
+  set user_code = normalized_code
+  where workspace_id = target_workspace_id and user_id = auth.uid();
+
+  return normalized_code;
+exception
+  when unique_violation then
+    raise exception 'That user code is already in use in this workspace.' using errcode = '23505';
+end;
+$$ language plpgsql security definer set search_path = public, auth;
+
+-- Cloud issue numbers are allocated atomically per application and user. Local
+-- keys are provisional; the INSERT trigger is the sole authority for canonical
+-- APP-USR-N keys and therefore prevents duplicate IDs across devices.
+create or replace function public.assign_bug_issue_key()
+returns trigger as $$
+declare
+  actor_id uuid;
+  canonical_prefix text;
+  canonical_user_code text;
+  canonical_number bigint;
+  existing_bug public.bugs%rowtype;
+begin
+  if tg_op = 'UPDATE' and old.issue_key is not null then
+    new.issue_key := old.issue_key;
+    new.issue_prefix := old.issue_prefix;
+    new.issue_user_code := old.issue_user_code;
+    new.issue_number := old.issue_number;
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    select * into existing_bug
+    from public.bugs
+    where id = new.id;
+    if found and existing_bug.issue_key is not null then
+      new.issue_key := existing_bug.issue_key;
+      new.issue_prefix := existing_bug.issue_prefix;
+      new.issue_user_code := existing_bug.issue_user_code;
+      new.issue_number := existing_bug.issue_number;
+      return new;
+    end if;
+  end if;
+
+  actor_id := coalesce(new.created_by, auth.uid());
+  if actor_id is null then
+    raise exception 'An authenticated workspace member is required to allocate an issue key.' using errcode = '42501';
+  end if;
+  if new.application_id is null then
+    canonical_prefix := 'BUG';
+  else
+    select application.issue_prefix into canonical_prefix
+    from public.applications application
+    where application.id = new.application_id
+      and application.workspace_id = new.workspace_id;
+    if canonical_prefix is null then
+      raise exception 'The selected application has no valid issue prefix.' using errcode = '23503';
+    end if;
+  end if;
+
+  select member.user_code into canonical_user_code
+  from public.workspace_members member
+  where member.workspace_id = new.workspace_id
+    and member.user_id = actor_id;
+  if canonical_user_code is null then
+    raise exception 'Choose a permanent 3-character user code before syncing issues.' using errcode = '23502';
+  end if;
+
+  insert into public.bug_issue_counters (workspace_id, issue_prefix, user_id, last_number)
+  values (new.workspace_id, canonical_prefix, actor_id, 1)
+  on conflict (workspace_id, issue_prefix, user_id) do update
+    set last_number = public.bug_issue_counters.last_number + 1,
+        updated_at = now()
+  returning last_number into canonical_number;
+
+  new.issue_prefix := canonical_prefix;
+  new.issue_user_code := canonical_user_code;
+  new.issue_number := canonical_number;
+  new.issue_key := canonical_prefix || '-' || canonical_user_code || '-' || canonical_number;
+  new.created_by := actor_id;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public, auth;
+
+drop trigger if exists assign_bug_issue_key on public.bugs;
+create trigger assign_bug_issue_key
+  before insert or update on public.bugs
+  for each row execute function public.assign_bug_issue_key();
 
 -- 5. RLS Policies
 -- PostgreSQL has no CREATE POLICY IF NOT EXISTS. Install missing policies from a
@@ -567,14 +764,15 @@ begin
   end loop;
 end $$;
 
--- TODO: Drain local SQLite sync_queue into sync_events after login.
--- TODO: Resolve conflicts using updated_at plus deterministic client_id/local_seq/op_id.
 
 -- 7. Base Role Privileges
 -- Ensures PostgREST can access the public schema before RLS is evaluated.
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to anon, authenticated;
 alter default privileges in schema public grant select, insert, update, delete on tables to anon, authenticated;
+
+-- The counter is internal trigger state, not a client-facing table.
+revoke all on table public.bug_issue_counters from public, anon, authenticated;
 
 -- Defense in depth: workspace membership is an authorization boundary. Do not
 -- rely on a missing RLS policy alone; deny PostgREST roles table mutations so a
@@ -585,6 +783,9 @@ revoke execute on function public.invite_user_to_workspace(uuid, text, text) fro
 grant execute on function public.invite_user_to_workspace(uuid, text, text) to authenticated;
 revoke execute on function public.claim_pending_invite() from public, anon;
 grant execute on function public.claim_pending_invite() to authenticated;
+revoke execute on function public.claim_workspace_user_code(uuid, text) from public, anon;
+grant execute on function public.claim_workspace_user_code(uuid, text) to authenticated;
+revoke execute on function public.assign_bug_issue_key() from public, anon, authenticated;
 
 -- 8. Auth Onboarding Workflow
 -- Automatically provisions a personal workspace for every new signup. Pending
@@ -666,3 +867,169 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user_onboarding();
+
+
+-- 10. Versioned offline sync protocol. Direct writes by old clients fail closed.
+alter table public.applications add column if not exists revision bigint not null default 1;
+alter table public.applications add column if not exists deleted_at timestamptz null;
+alter table public.modules add column if not exists revision bigint not null default 1;
+alter table public.modules add column if not exists deleted_at timestamptz null;
+alter table public.environments add column if not exists revision bigint not null default 1;
+alter table public.environments add column if not exists deleted_at timestamptz null;
+alter table public.reference_options add column if not exists revision bigint not null default 1;
+alter table public.reference_options add column if not exists deleted_at timestamptz null;
+alter table public.bugs add column if not exists revision bigint not null default 1;
+alter table public.attachments add column if not exists revision bigint not null default 1;
+
+create table if not exists public.sync_entity_state (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  entity_kind text not null, entity_id uuid not null,
+  revision bigint not null, last_operation uuid, deleted boolean not null default false,
+  primary key(workspace_id, entity_kind, entity_id)
+);
+create table if not exists public.sync_operation_receipts (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  operation_id uuid not null, entity_kind text not null, entity_id uuid not null,
+  applied boolean not null,
+  primary key(workspace_id, operation_id)
+);
+alter table public.sync_entity_state enable row level security;
+alter table public.sync_operation_receipts enable row level security;
+
+create or replace function public.apply_sync_mutation(
+  target_workspace uuid, entity_kind text, entity_uuid uuid, operation_uuid uuid,
+  expected_revision bigint, predecessor_uuid uuid, mutation text, body jsonb
+) returns jsonb
+language plpgsql security definer set search_path = pg_catalog, public
+as $protocol$
+declare
+  target_table text;
+  current_row jsonb;
+  next_row jsonb;
+  state public.sync_entity_state%rowtype;
+  receipt public.sync_operation_receipts%rowtype;
+  columns_sql text;
+  values_sql text;
+  updates_sql text;
+  reference_key text;
+  reference_table text;
+  reference_workspace uuid;
+  accepted boolean;
+  child record;
+begin
+  if auth.uid() is null or not public.is_workspace_writer(target_workspace) then
+    raise exception 'Workspace write access required' using errcode = '42501';
+  end if;
+  target_table := case entity_kind
+    when 'bug' then 'bugs' when 'attachment' then 'attachments'
+    when 'application' then 'applications' when 'module' then 'modules'
+    when 'environment' then 'environments' when 'reference' then 'reference_options'
+    else null end;
+  if target_workspace is null or expected_revision is null or body is null or jsonb_typeof(body) <> 'object'
+    or target_table is null or mutation is null or mutation not in ('INSERT','UPDATE','DELETE')
+    or operation_uuid is null or entity_uuid is null or expected_revision < 0 then
+    raise exception 'Invalid sync mutation' using errcode = '22023';
+  end if;
+  -- Serializes even concurrent first inserts, which do not yet have a row to lock.
+  perform pg_advisory_xact_lock(hashtextextended(target_workspace::text || entity_kind || entity_uuid::text, 0));
+  execute format('select to_jsonb(t) from public.%I t where id=$1 and workspace_id=$2 for update', target_table)
+    into current_row using entity_uuid,target_workspace;
+  -- A UUID already belonging to another workspace cannot be repurposed.
+  if current_row is null then
+    execute format('select workspace_id from public.%I where id=$1', target_table)
+      into reference_workspace using entity_uuid;
+    if reference_workspace is not null then raise exception 'Entity belongs to another workspace' using errcode='42501'; end if;
+  end if;
+  insert into public.sync_entity_state(workspace_id,entity_kind,entity_id,revision,deleted)
+    values(target_workspace,entity_kind,entity_uuid,coalesce((current_row->>'revision')::bigint,0),
+      current_row->>'deleted_at' is not null)
+    on conflict do nothing;
+  select * into state from public.sync_entity_state s
+    where s.workspace_id=target_workspace and s.entity_kind=apply_sync_mutation.entity_kind and s.entity_id=entity_uuid for update;
+  select * into receipt from public.sync_operation_receipts r
+    where r.workspace_id=target_workspace and r.operation_id=operation_uuid;
+  if found then
+    if receipt.entity_kind <> entity_kind or receipt.entity_id <> entity_uuid then
+      raise exception 'Operation identity reused for another entity' using errcode='22023';
+    end if;
+    -- Always reconcile to current state, even when another client wrote after this receipt.
+    return jsonb_build_object('applied',receipt.applied,'row',coalesce(current_row,
+      jsonb_build_object('id',entity_uuid,'revision',state.revision,'deleted_at',case when state.deleted then '1970-01-01T00:00:00Z' end)));
+  end if;
+  accepted := not state.deleted and (
+    state.revision=expected_revision or
+    (predecessor_uuid is not null and state.last_operation=predecessor_uuid)
+  );
+  if accepted then
+    if entity_kind='attachment' and exists(select 1 from public.bugs
+      where id=(body->>'bug_id')::uuid and workspace_id=target_workspace and deleted_at is not null) then
+      mutation := 'DELETE';
+    end if;
+    if mutation='DELETE' then
+      if entity_kind='bug' then
+        -- A report tombstone is authoritative for its attachment subtree too.
+        for child in select id,revision from public.attachments
+          where workspace_id=target_workspace and bug_id=entity_uuid and deleted_at is null for update
+        loop
+          update public.attachments set deleted_at=clock_timestamp(),updated_at=clock_timestamp(),revision=child.revision+1 where id=child.id;
+          insert into public.sync_entity_state(workspace_id,entity_kind,entity_id,revision,deleted)
+            values(target_workspace,'attachment',child.id,child.revision+1,true)
+            on conflict on constraint sync_entity_state_pkey do update
+              set revision=excluded.revision,deleted=true,last_operation=null;
+        end loop;
+      end if;
+      if current_row is not null then
+        execute format('update public.%I set deleted_at=clock_timestamp(),updated_at=clock_timestamp(),revision=$3 where id=$1 and workspace_id=$2 returning to_jsonb(%I)',target_table,target_table)
+          into current_row using entity_uuid,target_workspace,state.revision+1;
+      else
+        current_row := jsonb_build_object('id',entity_uuid,'workspace_id',target_workspace,'revision',state.revision+1,'deleted_at',clock_timestamp());
+      end if;
+    else
+      -- Clients supply business fields only; ownership, clocks and revisions are server-owned.
+      next_row := coalesce(body,'{}'::jsonb) - array['id','workspace_id','revision','created_at','updated_at','deleted_at','created_by','issue_key','issue_number','issue_user_code'];
+      if entity_kind='bug' then next_row := next_row - 'issue_prefix'; end if;
+      next_row := next_row || jsonb_build_object('id',entity_uuid,'workspace_id',target_workspace,
+        'revision',state.revision+1,'updated_at',clock_timestamp(),'deleted_at',null);
+      if current_row is null then next_row := next_row || jsonb_build_object('created_at',clock_timestamp()); end if;
+      if entity_kind in ('bug','attachment') and current_row is null then
+        next_row := next_row || jsonb_build_object('created_by',auth.uid());
+      end if;
+      -- SECURITY DEFINER must validate every foreign workspace reference as well as the target.
+      for reference_key,reference_table in select * from (values
+        ('application_id','applications'),('module_id','modules'),('environment_id','environments'),
+        ('bug_id','bugs'),('parent_id','attachments'),('device_id','reference_options'),
+        ('browser_id','reference_options'),('user_role_id','reference_options')) refs(k,t)
+      loop
+        if next_row->>reference_key is not null then
+          execute format('select workspace_id from public.%I where id=$1 and deleted_at is null for share',reference_table)
+            into reference_workspace using (next_row->>reference_key)::uuid;
+          if reference_workspace is distinct from target_workspace then
+            raise exception 'Invalid cross-workspace or deleted reference' using errcode='42501';
+          end if;
+        end if;
+      end loop;
+      -- Use only actual columns; JSON values are typed by PostgreSQL, never interpolated SQL.
+      select string_agg(format('%I',a.attname),','),
+             string_agg(format('p.%I',a.attname),','),
+             string_agg(format('%I=excluded.%I',a.attname,a.attname),',')
+        into columns_sql,values_sql,updates_sql
+        from pg_attribute a where a.attrelid=format('public.%I',target_table)::regclass
+          and a.attnum>0 and not a.attisdropped and next_row ? a.attname;
+      execute format('insert into public.%I (%s) select %s from jsonb_populate_record(null::public.%I,$1) p on conflict(id) do update set %s returning to_jsonb(%I)',
+        target_table,columns_sql,values_sql,target_table,updates_sql,target_table)
+        into current_row using next_row;
+    end if;
+    update public.sync_entity_state s set revision=state.revision+1,last_operation=operation_uuid,deleted=(mutation='DELETE')
+      where s.workspace_id=target_workspace and s.entity_kind=apply_sync_mutation.entity_kind and s.entity_id=entity_uuid;
+  end if;
+  insert into public.sync_operation_receipts values(target_workspace,operation_uuid,entity_kind,entity_uuid,accepted);
+  return jsonb_build_object('applied',accepted,'row',coalesce(current_row,
+    jsonb_build_object('id',entity_uuid,'revision',state.revision,'deleted_at',case when state.deleted then '1970-01-01T00:00:00Z' end)));
+end;
+$protocol$;
+
+revoke all on table public.sync_entity_state, public.sync_operation_receipts from public, anon, authenticated;
+revoke insert,update,delete on table public.applications,public.modules,public.environments,
+  public.reference_options,public.bugs,public.attachments from public,anon,authenticated;
+revoke all on function public.apply_sync_mutation(uuid,text,uuid,uuid,bigint,uuid,text,jsonb) from public,anon;
+grant execute on function public.apply_sync_mutation(uuid,text,uuid,uuid,bigint,uuid,text,jsonb) to authenticated;

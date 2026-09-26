@@ -252,6 +252,7 @@ export function BugDetailsView({
       <header className="page-header">
         <div>
           <button className="text-button" onClick={() => void backToDashboard()}>Back to dashboard</button>
+          <span className="issue-key detail-issue-key">{bug.issue_key || `BUG-${bug.id}`}</span>
           <h1>{entryDisplay.title}</h1>
           {entryDisplay.preview && <p className="detail-title-preview">{entryDisplay.preview}</p>}
           <p>{bug.entry_type || 'Bug'} / {bug.environment || 'No environment'} / {bug.user_role || 'No role'} / {bug.device || 'No device'} / {bug.browser || 'No browser'} / <SyncBadge status={bug.sync_status} cloudSyncActive={cloudSyncActive} /> / Created {formatDate(bug.created_at)} / Updated {formatDate(bug.updated_at)}</p>

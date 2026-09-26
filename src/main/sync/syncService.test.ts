@@ -607,14 +607,9 @@ test('a missing local upload never creates dangling remote attachment metadata',
           };
         }
       },
-      from: (table: string) => {
-        assert.equal(table, 'attachments');
-        return {
-          upsert: async () => {
-            metadataUpserts += 1;
-            return { data: null, error: null };
-          }
-        };
+      rpc: async () => {
+        metadataUpserts += 1;
+        return { data: null, error: null };
       }
     };
     const syncEngine = new SyncEngine(database) as unknown as {
@@ -643,7 +638,8 @@ test('a missing local upload never creates dangling remote attachment metadata',
         content_hash: contentHash,
         file_extension: '.png',
         mime_type: 'image/png',
-        source_type: 'snip'
+        source_type: 'snip',
+        _sync: {id:'00000000-0000-4000-8000-000000000999',revision:0,predecessor:null,references:{}}
       }),
       /binary is missing locally and does not exist remotely.*metadata was not created/i
     );
@@ -798,11 +794,7 @@ test('translates a Supabase 503 into PROJECT_PAUSED and halts automatic retries'
   const dataDir = mkdtempSync(join(tmpdir(), 'bug-pocket-paused-project-'));
   const database = new BugPocketDatabase(dataDir);
   const capturedErrors: unknown[][] = [];
-  const emittedStatuses: Array<{
-    status: 'error';
-    code: 'PROJECT_PAUSED';
-    message: 'Supabase project is paused';
-  } | null> = [];
+  const emittedStatuses: Array<import('../../shared/types').SyncRuntimeStatus | null> = [];
   const originalConsoleError = console.error;
   let restRequestCount = 0;
   let serviceRestored = false;

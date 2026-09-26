@@ -51,6 +51,8 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
   const [inviteCode, setInviteCode] = useState('');
   const [joinPassphrase, setJoinPassphrase] = useState('');
   const [pendingInvite, setPendingInvite] = useState<TeamInvitePayload | null>(null);
+  const [issueUserCodeDraft, setIssueUserCodeDraft] = useState('');
+  const [claimingIssueUserCode, setClaimingIssueUserCode] = useState(false);
 
   useEffect(() => {
     setProjectUrl(settings.supabaseProjectUrl ?? '');
@@ -255,6 +257,25 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
       showToast(caught instanceof Error ? caught.message : 'Could not update workspace name.', 'error');
     } finally {
       setSavingWorkspaceName(false);
+    }
+  };
+
+  const claimIssueUserCode = async (): Promise<void> => {
+    if (!/^[A-Z0-9]{3}$/.test(issueUserCodeDraft)) {
+      showToast('Choose exactly 3 letters or numbers for your issue user code.', 'error');
+      return;
+    }
+    setClaimingIssueUserCode(true);
+    try {
+      const claimed = await window.bugPocket.claimIssueUserCode(issueUserCodeDraft);
+      showToast(`Issue user code ${claimed} is now linked to your workspace account.`);
+      setIssueUserCodeDraft('');
+      await refresh();
+      await loadSession();
+    } catch (caught) {
+      showToast(caught instanceof Error ? caught.message : 'Could not claim the issue user code.', 'error');
+    } finally {
+      setClaimingIssueUserCode(false);
     }
   };
 
@@ -469,6 +490,7 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
   const shortWorkspaceId = activeWorkspaceId ? `${activeWorkspaceId.slice(0, 8)}...${activeWorkspaceId.slice(-4)}` : 'Not assigned';
   const canSwitchWorkspace = Boolean(selectedWorkspaceId.trim() && selectedWorkspaceId.trim() !== activeWorkspaceId);
   const canGenerateInvite = settings.currentWorkspaceRole === 'owner' || settings.currentWorkspaceRole === 'admin';
+  const activeIssueUserCode = session.workspaceUserCode || settings.currentWorkspaceUserCode || '';
 
   return (
     <div className="settings-tab-stack">
@@ -651,6 +673,40 @@ export function SyncSettings({ settings, mutationReady, refresh, showToast }: Sy
                 </button>
               </div>
               <p className="settings-helper">Switching workspaces opens a separate local workspace database so team data stays isolated without deleting existing local files.</p>
+            </div>
+
+            <div className="sync-issue-code-section">
+              <div>
+                <strong>Issue User Code</strong>
+                <p className="settings-helper">
+                  {activeIssueUserCode
+                    ? `Your reports use ${activeIssueUserCode} on every device in this workspace.`
+                    : 'Choose a permanent 3-character code before syncing new reports. It cannot be changed later.'}
+                </p>
+              </div>
+              {activeIssueUserCode ? (
+                <span className="sync-issue-code-value">{activeIssueUserCode}</span>
+              ) : (
+                <div className="sync-issue-code-claim">
+                  <input
+                    value={issueUserCodeDraft}
+                    maxLength={3}
+                    aria-label="Issue user code"
+                    placeholder="USR"
+                    disabled={claimingIssueUserCode || !activeWorkspaceId}
+                    onChange={(event) => setIssueUserCodeDraft(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                    onKeyDown={(event) => { if (event.key === 'Enter') void claimIssueUserCode(); }}
+                  />
+                  <button
+                    type="button"
+                    className="primary compact"
+                    disabled={claimingIssueUserCode || issueUserCodeDraft.length !== 3 || !activeWorkspaceId}
+                    onClick={() => void claimIssueUserCode()}
+                  >
+                    {claimingIssueUserCode ? 'Claiming...' : 'Claim Code'}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="sync-profile-actions">

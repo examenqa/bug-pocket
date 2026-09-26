@@ -1,3 +1,4 @@
+import type { CaptureContext } from '../shared/types';
 import { DetailsFlushGate } from './detailsFlush';
 import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog, safeStorage } from 'electron';
 import log from 'electron-log/main';
@@ -54,6 +55,7 @@ let gracefulShutdownComplete = false;
 let gracefulShutdownPromise: Promise<void> | null = null;
 let currentScreenshotSource: Buffer | null = null;
 let pendingQuickScreenshotDataUrl = '';
+let screenshotStarting = false;
 let screenshotBugId: number | null = null;
 let mainWasVisibleBeforeSnip = false;
 let shortcutRegistrationErrors: Partial<Record<ShortcutAction, string>> = {};
@@ -112,7 +114,7 @@ async function gracefulShutdown(): Promise<void> {
     disconnectWorkspace: async () => {
       if (db?.isOpen()) {
         db.checkpoint();
-        await Promise.resolve(db.disconnectWorkspace());
+        await Promise.resolve(db.disconnectWorkspace(true));
         db.close();
       }
     }
@@ -300,8 +302,11 @@ async function withFlushedDetails<T>(action: () => T | Promise<T>): Promise<T> {
   }
 }
 
-function discardQuickCaptures(): void {
+function discardQuickCaptures(finish = true): void {
+  const context = db.beginCapture();
+  db.assertCaptureContext(context);
   db.discardPendingCaptures();
+  if (finish) db.finishCapture(context);
   pendingQuickScreenshotDataUrl = '';
   restoreQuickCaptureCompactSize();
 }
@@ -353,6 +358,8 @@ async function ensureQuickWindowReady(): Promise<void> {
 }
 
 async function openQuickCapture(): Promise<void> {
+  assertAppAcceptingMutations();
+  db.beginCapture();
   if (!quickWindow) createQuickWindow();
   if (!pendingQuickScreenshotDataUrl) restoreQuickCaptureCompactSize();
   quickWindow?.show();
@@ -491,6 +498,7 @@ function assertAppAcceptingMutations(): void {
 }
 
 async function runDestructiveDatabaseOperation<T>(operation: () => Promise<T>): Promise<T> {
+  assertCaptureTransition();
   return withFlushedDetails(() => runDestructiveMaintenance({
     barrier: operationBarrier,
     stopAndDrain: () => syncEngine.stopAndDrain(),
@@ -561,6 +569,7 @@ async function chooseBackupDirectory(): Promise<string | null> {
 }
 
 async function importBackup(): Promise<BackupImportResult> {
+  assertCaptureTransition();
   const openResult = mainWindow
     ? await dialog.showOpenDialog(mainWindow, {
         title: 'Import Bug Pocket Backup',
@@ -743,6 +752,9 @@ function createTray(): void {
 }
 
 async function startScreenshotCapture(bugId?: number): Promise<void> {
+  assertAppAcceptingMutations();
+  if (!bugId) db.beginCapture();
+  if (screenshotStarting) return;
   if (snipWindow) {
     snipWindow.focus();
     return;
@@ -752,49 +764,54 @@ async function startScreenshotCapture(bugId?: number): Promise<void> {
     quickWindow?.webContents.send('quickScreenshot:reviewReady');
     return;
   }
-  screenshotBugId = typeof bugId === 'number' ? bugId : null;
-  mainWasVisibleBeforeSnip = !!mainWindow?.isVisible();
-  quickWindow?.hide();
-  mainWindow?.hide();
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.size;
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: { width, height }
-  });
-  const source = sources.find((candidate) => candidate.display_id === String(primaryDisplay.id)) ?? sources[0];
-  if (!source) throw new Error('No screen source available.');
-  currentScreenshotSource = source.thumbnail.toPNG();
-  snipWindow = new BrowserWindow({
-    x: primaryDisplay.bounds.x,
-    y: primaryDisplay.bounds.y,
-    width: primaryDisplay.bounds.width,
-    height: primaryDisplay.bounds.height,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    fullscreen: true,
-    skipTaskbar: true,
-    webPreferences: {
-      preload: preloadPath(),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true
-    }
-  });
-  hardenRendererWindow(snipWindow);
-  snipWindow.webContents.once('did-finish-load', () => {
-    snipWindow?.webContents.send('screenshot:source', currentScreenshotSource);
-    snipWindow?.focus();
-  });
-  snipWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'Escape' && input.type === 'keyDown') {
-      event.preventDefault();
-      void cancelScreenshotCapture();
-    }
-  });
-  await snipWindow.loadURL(rendererUrl('/snip'));
+  screenshotStarting = true;
+  try {
+    screenshotBugId = typeof bugId === 'number' ? bugId : null;
+    mainWasVisibleBeforeSnip = !!mainWindow?.isVisible();
+    quickWindow?.hide();
+    mainWindow?.hide();
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.size;
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width, height }
+    });
+    const source = sources.find((candidate) => candidate.display_id === String(primaryDisplay.id)) ?? sources[0];
+    if (!source) throw new Error('No screen source available.');
+    currentScreenshotSource = source.thumbnail.toPNG();
+    snipWindow = new BrowserWindow({
+      x: primaryDisplay.bounds.x,
+      y: primaryDisplay.bounds.y,
+      width: primaryDisplay.bounds.width,
+      height: primaryDisplay.bounds.height,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      fullscreen: true,
+      skipTaskbar: true,
+      webPreferences: {
+        preload: preloadPath(),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        webSecurity: true
+      }
+    });
+    hardenRendererWindow(snipWindow);
+    snipWindow.webContents.once('did-finish-load', () => {
+      snipWindow?.webContents.send('screenshot:source', currentScreenshotSource);
+      snipWindow?.focus();
+    });
+    snipWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'Escape' && input.type === 'keyDown') {
+        event.preventDefault();
+        void cancelScreenshotCapture();
+      }
+    });
+    await snipWindow.loadURL(rendererUrl('/snip'));
+  } finally {
+    screenshotStarting = false;
+  }
 }
 
 function persistScreenshotDataUrl(dataUrl: string): { id: number; fileName: string; contentHash: string } {
@@ -922,6 +939,16 @@ function normalizeOllamaTriageResult(result: AiTriageResult): Record<string, str
   };
 }
 
+function requireCapture(context: CaptureContext | null): void {
+  if (!context) throw new Error('Reopen Quick Capture to continue this draft.');
+  db.assertCaptureContext(context);
+}
+
+function assertCaptureTransition(): void {
+  db.assertCaptureTransition();
+  if (screenshotStarting || snipWindow || pendingQuickScreenshotDataUrl) throw new Error('Finish or cancel the screenshot before changing workspace.');
+}
+
 function registerIpc(): void {
   const secureIpc = createSecureIpcRegistrar(
     ipcMain,
@@ -929,12 +956,15 @@ function registerIpc(): void {
     (event) => Boolean(event.senderFrame && !event.senderFrame.parent && isTrustedRendererUrl(event.senderFrame.url))
   );
   secureIpc.handle('window:openQuickCapture', () => openQuickCapture());
-  secureIpc.handle('capture:listPending', () => {
+  secureIpc.handle('capture:context', () => db.getCaptureContext());
+  secureIpc.handle('capture:listPending', (_event, context: CaptureContext | null) => {
+    requireCapture(context);
     if (!shutdownInProgress && !operationBarrier.isInMaintenance) db.cleanupExpiredCaptures();
     return db.listPendingCaptures();
   });
-  secureIpc.handle('capture:discardPending', () => { assertAppAcceptingMutations(); discardQuickCaptures(); });
-  secureIpc.handle('window:hideQuickCapture', () => {
+  secureIpc.handle('capture:discardPending', (_event, context: CaptureContext | null) => { requireCapture(context); assertAppAcceptingMutations(); discardQuickCaptures(false); });
+  secureIpc.handle('window:hideQuickCapture', (_event, context: CaptureContext | null) => {
+    requireCapture(context);
     assertAppAcceptingMutations();
     discardQuickCaptures();
     quickWindow?.hide();
@@ -944,8 +974,8 @@ function registerIpc(): void {
   secureIpc.handle('window:openMain', (_event, route = DASHBOARD_ROUTE) => openMainWindow(route));
   secureIpc.handle('window:openSettings', (_event, section?: string) => openSettings(section));
   secureIpc.handle('settings:get', () => settingsWithShortcutStatus());
-  secureIpc.handle('settings:addApplication', (_event, name: string, contextDescription?: string | null) => mutateWorkspaceSettings(() => db.addApplication(name, contextDescription ?? '')));
-  secureIpc.handle('settings:updateApplication', (_event, id: TaxonomyId, name: string, contextDescription = '') => mutateWorkspaceSettings(() => db.updateApplication(id, name, contextDescription)));
+  secureIpc.handle('settings:addApplication', (_event, name: string, contextDescription?: string | null, issuePrefix = '') => mutateWorkspaceSettings(() => db.addApplication(name, contextDescription ?? '', issuePrefix)));
+  secureIpc.handle('settings:updateApplication', (_event, id: TaxonomyId, name: string, contextDescription = '', issuePrefix = '') => mutateWorkspaceSettings(() => db.updateApplication(id, name, contextDescription, issuePrefix)));
   secureIpc.handle('settings:updateApplicationContext', (_event, id: TaxonomyId, contextDescription: string) => mutateWorkspaceSettings(() => db.updateApplicationContext(id, contextDescription)));
   secureIpc.handle('settings:updateApplicationSync', (_event, id: TaxonomyId, isSynced: boolean) => mutateWorkspaceSettings(() => db.updateApplicationSync(id, isSynced)));
   secureIpc.handle('settings:deleteApplication', (_event, id: TaxonomyId) => mutateWorkspaceSettings(() => db.deleteApplication(id)));
@@ -980,6 +1010,7 @@ function registerIpc(): void {
   secureIpc.handle('settings:updateSupabaseSettings', async (_event, projectUrl: string, anonKey: string, inviteEmail?: string) =>
     withFlushedDetails(() => operationBarrier.acquire(async () => {
       assertAppAcceptingMutations();
+      assertCaptureTransition();
       // Validate first so an accidental typo cannot disconnect a working project.
       if (projectUrl.trim() || anonKey.trim()) normalizeSupabaseCredentials(projectUrl, anonKey);
 
@@ -1020,7 +1051,11 @@ function registerIpc(): void {
   secureIpc.handle('bugs:statusCounts', () => db.getBugStatusCounts());
   secureIpc.handle('bugs:get', (_event, id: number) => db.getBug(id));
   secureIpc.handle('bugs:createQuick', (_event, input) => {
+    if (screenshotStarting || snipWindow || pendingQuickScreenshotDataUrl) throw new Error('Finish or cancel the screenshot before saving.');
+    if (!input.capture_context) throw new Error('Capture context is required. Reopen Quick Capture.');
+    db.assertCaptureContext(input.capture_context);
     const bug = mutateWorkspace(() => db.createQuickBug(input));
+    db.finishCapture(input.capture_context);
     quickWindow?.hide();
     mainWindow?.webContents.send('bugs:changed');
     notifySaved('Capture saved locally.');
@@ -1081,13 +1116,16 @@ function registerIpc(): void {
   secureIpc.handle('details:flushComplete', (event, requestId: string, success: boolean) => {
     if (event.sender === mainWindow?.webContents) detailsFlushGate.complete(requestId, success);
   });
-  secureIpc.handle('screenshot:start', (_event, bugId?: number) => mutateWorkspace(() => startScreenshotCapture(bugId)));
+  secureIpc.handle('screenshot:start', (event, bugId: number | undefined, context: CaptureContext | null) => {
+    if (event.sender === quickWindow?.webContents) requireCapture(context);
+    return mutateWorkspace(() => startScreenshotCapture(bugId));
+  });
   secureIpc.handle('screenshot:getSource', () => currentScreenshotSource);
   secureIpc.handle('screenshot:complete', (_event, dataUrl: string) => mutateWorkspace(() => saveScreenshot(dataUrl)));
   secureIpc.handle('screenshot:cancel', () => cancelScreenshotCapture());
-  secureIpc.handle('quickScreenshot:getPending', () => pendingQuickScreenshotDataUrl);
-  secureIpc.handle('quickScreenshot:attachPending', (_event, dataUrl: string) => mutateWorkspace(() => attachPendingQuickScreenshot(dataUrl)));
-  secureIpc.handle('quickScreenshot:discardPending', () => discardPendingQuickScreenshot());
+  secureIpc.handle('quickScreenshot:getPending', (_event, context: CaptureContext | null) => { if (pendingQuickScreenshotDataUrl) requireCapture(context); return pendingQuickScreenshotDataUrl; });
+  secureIpc.handle('quickScreenshot:attachPending', (_event, dataUrl: string, context: CaptureContext | null) => { requireCapture(context); return mutateWorkspace(() => attachPendingQuickScreenshot(dataUrl)); });
+  secureIpc.handle('quickScreenshot:discardPending', (_event, context: CaptureContext | null) => { requireCapture(context); return discardPendingQuickScreenshot(); });
   secureIpc.handle('backup:export', () => exportBackup());
   secureIpc.handle('backup:import', () => withFlushedDetails(() => importBackup()));
   secureIpc.handle('backup:chooseDirectory', () => chooseBackupDirectory());
@@ -1104,8 +1142,8 @@ function registerIpc(): void {
     return { success: true };
   });
   secureIpc.handle('sync:testConnection', () => syncEngine.testConnection());
-  secureIpc.handle('sync:authSignIn', (_event, email: string, password: string) => withFlushedDetails(() => operationBarrier.acquire(() => syncEngine.authSignIn(email, password))));
-  secureIpc.handle('sync:authSignUp', (_event, email: string, password: string, setup: SyncAccountSetup) => withFlushedDetails(() => operationBarrier.acquire(() => syncEngine.authSignUp(email, password, setup))));
+  secureIpc.handle('sync:authSignIn', (_event, email: string, password: string) => withFlushedDetails(() => operationBarrier.acquire(() => { assertCaptureTransition(); return syncEngine.authSignIn(email, password); })));
+  secureIpc.handle('sync:authSignUp', (_event, email: string, password: string, setup: SyncAccountSetup) => withFlushedDetails(() => operationBarrier.acquire(() => { assertCaptureTransition(); return syncEngine.authSignUp(email, password, setup); })));
   secureIpc.handle('sync:generateInvite', async (_event, passphrase: string, targetEmail: string, targetRole: string) => {
     const workspaceId = db.getCurrentWorkspaceId();
     const projectUrl = db.getSupabaseProjectUrl();
@@ -1117,6 +1155,7 @@ function registerIpc(): void {
   });
   secureIpc.handle('sync:decodeInvite', (_event, token: string, passphrase: string) => decodeInviteCode(token, passphrase));
   secureIpc.handle('sync:authSignOut', () => withFlushedDetails(() => operationBarrier.acquire(async () => {
+    assertCaptureTransition();
     const result = await syncEngine.authSignOut();
     mainWindow?.webContents.send('bugs:changed');
     return result;
@@ -1125,6 +1164,11 @@ function registerIpc(): void {
   secureIpc.handle('sync:listWorkspaces', () => operationBarrier.acquire(() => syncEngine.listWorkspaceMemberships()));
   secureIpc.handle('sync:updateWorkspaceName', (_event, workspaceId: string, name: string) => mutateWorkspace(() => syncEngine.updateWorkspaceName(workspaceId, name)));
   secureIpc.handle('sync:getWorkspaceRole', (_event, workspaceId: string | null) => db.getWorkspaceRole(workspaceId));
+  secureIpc.handle('sync:claimIssueUserCode', async (_event, userCode: string) => {
+    const claimedCode = await operationBarrier.acquire(() => syncEngine.claimIssueUserCode(userCode));
+    notifySettingsChanged();
+    return claimedCode;
+  });
   secureIpc.handle('sync:getDiagnostics', () => db.getSyncDiagnostics());
   secureIpc.handle('sync:getRuntimeStatus', () => syncEngine.getRuntimeStatus());
   secureIpc.handle('sync:retryNow', async () => {
@@ -1140,6 +1184,7 @@ function registerIpc(): void {
     return db.getSyncDiagnostics();
   });
   secureIpc.handle('sync:switchWorkspace', async (_event, workspaceId: string) => withFlushedDetails(async () => {
+    assertCaptureTransition();
     const result = await syncEngine.switchWorkspace(workspaceId);
     if (result.success) mainWindow?.webContents.send('bugs:changed');
     return result;
