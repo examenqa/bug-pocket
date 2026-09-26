@@ -1149,38 +1149,25 @@ export class SyncEngine {
   }
 
   private serializeBugPayload(workspaceId: string, id: string, payload: SyncPayload): SyncPayload {
-    return {
-      id,
-      workspace_id: workspaceId,
-      application_id: this.eventIdentity(payload).references.application_id ?? null,
-      issue_key: String(payload.issue_key ?? ''),
-      issue_prefix: String(payload.issue_prefix ?? 'BUG'),
-      issue_user_code: this.stringOrNull(payload.issue_user_code),
-      issue_number: Number(payload.issue_number ?? 0) || null,
-      module_id: this.eventIdentity(payload).references.module_id ?? null,
-      environment_id: this.eventIdentity(payload).references.environment_id ?? null,
-      device_id: null,
-      browser_id: null,
-      user_role_id: null,
-      entry_type: String(payload.entry_type ?? 'Bug'),
-      title: String(payload.title ?? ''),
-      note: String(payload.note ?? ''),
-      other_details: String(payload.other_details ?? ''),
-      steps_to_reproduce: String(payload.steps_to_reproduce ?? ''),
-      expected_result: String(payload.expected_result ?? ''),
-      actual_result: String(payload.actual_result ?? ''),
-      status: String(payload.status ?? 'Draft'),
-      severity: String(payload.severity ?? 'Medium'),
-      reported: Boolean(Number(payload.reported ?? 0)),
-      issue_platform: String(payload.issue_platform ?? ''),
-      issue_id: String(payload.issue_id ?? ''),
-      issue_url: String(payload.issue_url ?? ''),
-      tags: String(payload.tags ?? ''),
-      sync_status: 'Synced',
-      deleted_at: null,
-      created_at: String(payload.created_at ?? new Date().toISOString()),
-      updated_at: String(payload.updated_at ?? new Date().toISOString())
-    };
+    const record: SyncPayload = { id, workspace_id: workspaceId, sync_status: 'Synced' };
+    const supplied = (field: string): boolean => Object.prototype.hasOwnProperty.call(payload, field) && payload[field] !== undefined;
+    const references = this.eventIdentity(payload).references;
+    for (const field of ['application_id', 'module_id', 'environment_id']) {
+      if (!supplied(field)) continue;
+      if (payload[field] === null || payload[field] === '') record[field] = null;
+      else {
+        if (!references[field]) throw new Error('Missing durable sync reference for ' + field + '. Queued changes have been retained.');
+        record[field] = references[field];
+      }
+    }
+    // Only supplied, client-owned fields participate in the revision-checked patch.
+    // Device/browser/user-role are local-only. Issue identity and clocks are server-owned.
+    for (const field of ['entry_type', 'title', 'note', 'other_details', 'steps_to_reproduce',
+      'expected_result', 'actual_result', 'status', 'severity', 'issue_platform', 'issue_id', 'issue_url', 'tags']) {
+      if (supplied(field)) record[field] = String(payload[field] ?? '');
+    }
+    if (supplied('reported')) record.reported = Boolean(Number(payload.reported));
+    return record;
   }
 
   private serializeAttachmentPayload(workspaceId: string, id: string, storageKey: string | null, payload: SyncPayload): SyncPayload {

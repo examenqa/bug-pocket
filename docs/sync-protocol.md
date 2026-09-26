@@ -56,3 +56,30 @@ actual installer/RPC twice with authenticated/anonymous roles. Auth/storage boot
 objects emulate Supabase plumbing; this does not replace a hosted Supabase rollout test.
 Apply schema-install.sql to each cloud project before deploying the upgraded client.
 Older clients must upgrade because direct writes now fail closed.
+
+## Report field ownership and patches
+
+Report mutations include only supplied client-owned fields. Omitted or undefined
+fields mean no change, not a clear. Full local queue snapshots still carry all known
+supported fields and are subject to the same server revision/predecessor check.
+Sparse snapshots use the RPC's existing per-key update semantics. No schema change
+or client-clock conflict resolution is required.
+
+- Client-owned text: entry_type, title, note, other_details, steps_to_reproduce,
+  expected_result, actual_result, status, severity, issue_platform, issue_id,
+  issue_url, tags. An explicit empty string clears text where the schema permits it.
+- Client-owned boolean: reported; explicit false clears the flag.
+- Synced references: application_id, module_id, environment_id. Explicit null (or an
+  empty selection) clears the reference. Nonempty values require the immutable
+  event's durable UUID mapping; missing mappings retain the event with an error.
+- Local-only selections: device_id, browser_id, user_role_id. They are omitted even
+  when present locally, and remote acknowledgements/pulls preserve existing local
+  selections. New pulled reports have no local selections. Existing cloud values
+  from other clients remain untouched; this does not add reference-option sync.
+- Server-owned: issue_key, issue_prefix, issue_user_code, issue_number, revisions,
+  created_by, created_at, updated_at, deleted_at. The server assigns identity/clocks;
+  only the DELETE operation requests a tombstone. The mutation envelope owns id and
+  workspace_id. sync_status/last_sync_at are bookkeeping, not user report fields.
+
+Unknown keys and joined display names are never serialized. Pull/ack rows are full
+canonical server records for synced fields; they are not partial renderer drafts.

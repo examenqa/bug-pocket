@@ -258,3 +258,46 @@ test('migration retains deleted legacy references without preventing the workspa
     assert.equal(retained.payload,JSON.stringify(payload));assert.match(retained.last_error,/references need review/);
   } finally {f.close();}
 });
+
+test('two clients preserve cloud and local metadata through title updates, acknowledgements and pulls', async () => {
+  const a = fixture(), b = fixture(), cloud = server();
+  try {
+    a.db.connectToWorkspace('metadata'); b.db.connectToWorkspace('metadata');
+    const report = a.db.createQuickBug(input('Keep this note'));
+    native(a.db).prepare('UPDATE bugs SET device_id=101,browser_id=102,user_role_id=103 WHERE id=?').run(report.id);
+    await engine(a.db).drainSyncQueue(cloud, 'metadata');
+    const uuid = a.db.getSyncIdentity('bug', report.id);
+    const metadata = { device_id: randomUUID(), browser_id: randomUUID(), user_role_id: randomUUID() };
+    cloud.rows.set(uuid, { ...cloud.rows.get(uuid), ...metadata, revision: 2, last_operation: randomUUID() });
+    b.db.upsertRemoteBug(cloud.rows.get(uuid)!);
+    const other = native(b.db).prepare('SELECT id FROM bugs WHERE remote_id=?').get(uuid) as {id:number};
+    native(b.db).prepare('UPDATE bugs SET device_id=201,browser_id=202,user_role_id=203 WHERE id=?').run(other.id);
+    b.db.updateBug(other.id, { ...b.db.getBug(other.id)!, title: 'Updated on B' } as unknown as BugUpdateInput);
+    await engine(b.db).drainSyncQueue(cloud, 'metadata');
+    const remote = cloud.rows.get(uuid)!;
+    assert.equal(remote.title, 'Updated on B'); assert.equal(remote.note, 'Keep this note');
+    for (const [field, value] of Object.entries(metadata)) assert.equal(remote[field], value);
+    a.db.upsertRemoteBug(remote); b.db.upsertRemoteBug(remote);
+    assert.deepEqual(native(a.db).prepare('SELECT device_id,browser_id,user_role_id FROM bugs WHERE id=?').get(report.id), {device_id:101,browser_id:102,user_role_id:103});
+    assert.deepEqual(native(b.db).prepare('SELECT device_id,browser_id,user_role_id FROM bugs WHERE id=?').get(other.id), {device_id:201,browser_id:202,user_role_id:203});
+    edit(b.db, other.id, ''); await engine(b.db).drainSyncQueue(cloud, 'metadata');
+    assert.equal(cloud.rows.get(uuid)?.note, '');
+    assert.equal(cloud.rows.get(uuid)?.device_id, metadata.device_id);
+  } finally { a.close(); b.close(); }
+});
+
+test('report serializer omits all absent fields and distinguishes explicit clears from missing identities', () => {
+  const f = fixture();
+  try {
+    const worker = new SyncEngine(f.db, () => {}) as unknown as {serializeBugPayload(ws:string,id:string,payload:Record<string,unknown>):Record<string,unknown>};
+    const identity = {id:randomUUID(),revision:1,predecessor:null,references:{}};
+    const serialize = (body:Record<string,unknown>) => worker.serializeBugPayload('ws',identity.id,{_sync:identity,...body});
+    assert.deepEqual(serialize({title:'Only title'}),{id:identity.id,workspace_id:'ws',sync_status:'Synced',title:'Only title'});
+    assert.deepEqual(serialize({title:undefined,device_id:null,browser_id:4,user_role_id:7,issue_key:'untrusted',created_at:'1900',deleted_at:'2026',unknown:'ignored'}), {id:identity.id,workspace_id:'ws',sync_status:'Synced'});
+    const cleared=serialize({note:'',environment_id:null,reported:false});
+    assert.equal(cleared.note,''); assert.equal(cleared.environment_id,null); assert.equal(cleared.reported,false);
+    assert.throws(()=>serialize({application_id:'unmapped'}),/Missing durable sync reference/);
+    const uuid=randomUUID();
+    assert.equal(serialize({_sync:{...identity,references:{application_id:uuid}},application_id:42}).application_id,uuid);
+  } finally { f.close(); }
+});
