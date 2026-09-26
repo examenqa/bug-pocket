@@ -111,8 +111,14 @@ const api = {
       ipcRenderer.removeListener('sync-status', listener);
     };
   },
-  triageBug: (bugData: unknown) => ipcRenderer.invoke('ai:triageBug', bugData),
-  processIssueWithByokAi: (payload: AiIssueProcessPayload) => ipcRenderer.invoke('ai:processIssueWithByok', payload),
+  triageBug: (bugData: unknown, requestId: string): Promise<import('../shared/aiRequest').AiRequestResult<string>> => ipcRenderer.invoke('ai:triageBug', bugData, requestId),
+  processIssueWithByokAi: (payload: AiIssueProcessPayload, requestId: string): Promise<import('../shared/aiRequest').AiRequestResult<import('../shared/types').AiIssueProcessResult>> => ipcRenderer.invoke('ai:processIssueWithByok', payload, requestId),
+  cancelAiRequest: (requestId: string): Promise<void> => ipcRenderer.invoke('ai:cancel', requestId),
+  onAppShutdownStarted: (callback: () => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('app:shutdown-started', listener);
+    return () => ipcRenderer.removeListener('app:shutdown-started', listener);
+  },
   onQuickScreenshotReviewReady: (callback: () => void) => {
     const listener = (): void => callback();
     ipcRenderer.on('quickScreenshot:reviewReady', listener);

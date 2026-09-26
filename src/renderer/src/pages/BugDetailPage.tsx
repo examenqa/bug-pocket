@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Camera, Check, ChevronLeft, ChevronRight, Clipboard, Download, Gauge, Save, Trash2, X } from 'lucide-react';
-import type { AiByokConfig, AiIssueProcessResult, AttachmentDownloadResult, BugDetails, CaptureStatus, SettingsData, TaxonomyId } from '../../../shared/types';
+import type { AttachmentDownloadResult, BugDetails, CaptureStatus, SettingsData, TaxonomyId } from '../../../shared/types';
 import { Badge, SyncBadge } from '../components/shared/Badge';
 import { PillDropdown } from '../components/shared/PillDropdown';
 import { useToast } from '../components/shared/ToastContext';
 import { OptionSelect, ReferenceSelect } from '../components/shared/OptionSelect';
 import { ScreenshotAnnotator } from '../components/ScreenshotAnnotator';
-import { formatDate, generateReport, buildIssueDeepLink, IssuePlatformLink } from '../services/reports';
+import { formatDate, generateReport, openTrackerIssue, IssuePlatformLink } from '../services/reports';
 import {
   getEntryDisplay,
   isCloudSyncActive,
@@ -62,6 +62,8 @@ export function BugDetailsView({
     spotlight
   } = useAttachmentSpotlight({ bugId, bug, setBug });
   const {
+    cancelAi,
+    noteUserEdit,
     aiStatus,
     aiRefinementNote,
     aiTriageDisabled,
@@ -116,6 +118,7 @@ export function BugDetailsView({
 
   const updateField = (key: keyof BugDetails, value: string | number | boolean | null, options: { trackStatus?: boolean; autoSave?: boolean } = {}): void => {
     if (developerReadOnly) return;
+    if (bugRef.current?.[key] !== value) noteUserEdit(key);
     setBug((current) => {
       if (!current || current[key] === value) return current;
       const nextBug = { ...current, [key]: value };
@@ -158,39 +161,10 @@ export function BugDetailsView({
     setTimeout(() => setCopied(''), 1200);
   };
   const openIssuePlatform = async (platform: IssuePlatformLink): Promise<void> => {
-    const templateName = `${platform} Format`;
-    let issueBody = report(templateName);
-    const aiConfig = (await window.bugPocket.getAiConfig()) as AiByokConfig;
-    if (aiConfig.hasApiKey) {
-      showDetailsToast(`Formatting ${platform} issue with ${aiConfig.provider}...`, 'info');
-      const aiResult = (await window.bugPocket.processIssueWithByokAi({
-        rawInput: issueBody,
-        taxonomy: {
-          application: reportBug.application_name ?? undefined,
-          module: reportBug.module_name ?? undefined,
-          environment: reportBug.environment || undefined,
-          user_role: reportBug.user_role || undefined,
-          device: reportBug.device || undefined,
-          browser: reportBug.browser || undefined,
-          entry_type: reportBug.entry_type || undefined,
-          severity: reportBug.severity || undefined
-        }
-      })) as AiIssueProcessResult;
-      if (aiResult.success && aiResult.output?.trim()) {
-        issueBody = aiResult.output.trim();
-      } else if (aiResult.error) {
-        showDetailsToast(`AI formatting skipped: ${aiResult.error}`, 'error');
-      }
-    }
-    const url = buildIssueDeepLink(platform, reportBug, issueBody, { jiraWorkspaceUrl: settings.jiraWorkspaceUrl });
-    if (!url) {
-      showDetailsToast('Configure your Jira workspace URL in Settings before opening Jira.', 'error');
-      return;
-    }
-    await window.bugPocket.openExternalUrl(url);
-    if (aiConfig.hasApiKey) {
-      showDetailsToast(`${platform} issue opened with AI-formatted content.`);
-    }
+    try {
+      await openTrackerIssue(platform, reportBug, settings.reportTemplates.find(template => template.name === `${platform} Format`),
+        { jiraWorkspaceUrl: settings.jiraWorkspaceUrl }, window.bugPocket);
+    } catch (error) { showDetailsToast(error instanceof Error ? error.message : String(error), 'error'); }
   };
   const openTicketUrl = async (): Promise<void> => {
     const url = bug.issue_url.trim();
@@ -380,6 +354,7 @@ export function BugDetailsView({
             <div className="copy-grid">
               {!developerReadOnly && (
                 <div className="ai-triage-panel">
+                  {triaging && <button type="button" onClick={cancelAi}>Cancel AI</button>}
                   {aiStatus !== 'completed' ? (
                     <button className="ai-triage-button" disabled={aiTriageDisabled} onClick={() => void triageWithLocalAi()}>
                       <Gauge size={16} /> {triaging ? 'Triaging...' : 'AI Triage'}

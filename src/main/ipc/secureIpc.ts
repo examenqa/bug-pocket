@@ -388,8 +388,9 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   validators['sync:getWorkspaceRole'] = args(nullable(nonEmptyString(128)));
   validators['sync:claimIssueUserCode'] = args(nonEmptyString(3));
   validators['sync:switchWorkspace'] = args(nonEmptyString(128));
-  validators['ai:triageBug'] = args(aiTriagePayload);
-  validators['ai:processIssueWithByok'] = args(aiIssuePayload);
+  validators['ai:triageBug'] = args(aiTriagePayload, nonEmptyString(128));
+  validators['ai:processIssueWithByok'] = args(aiIssuePayload, nonEmptyString(128));
+  validators['ai:cancel'] = args(nonEmptyString(128));
   return validators;
 }
 

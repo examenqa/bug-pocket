@@ -1,20 +1,10 @@
-import { Dispatch, MutableRefObject, SetStateAction, useEffect, useState } from 'react';
+import { Dispatch, MutableRefObject, SetStateAction, useEffect, useRef, useState } from 'react';
 import type { AiByokConfig, BugDetails, SettingsData } from '../../../shared/types';
-import { formatStepsAsNumberedList } from '../utils/formatSteps';
+import { abortable } from '../../../shared/aiRequest';
+import { LatestAiRequest, aiPatch, mergeAiPatch, type AiField, type AiFieldVersions } from '../utils/aiDraft';
 import { parseErrorForUI } from '../utils/errors';
 import { getEntryDisplay } from '../utils/display';
 import type { AiTriageStatus } from '../utils/bugUpdate';
-
-function aiTextField(value: unknown): string {
-  if (typeof value === 'string') return value.trim();
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter(Boolean)
-      .join('\n');
-  }
-  return '';
-}
 
 interface UseAiTriageOptions {
   bug: BugDetails | null;
@@ -39,6 +29,22 @@ export function useAiTriage({
   const [byokAiReady, setByokAiReady] = useState(false);
   const [showAiRefinement, setShowAiRefinement] = useState(false);
   const [aiRefinementNote, setAiRefinementNote] = useState('');
+  const requests = useRef(new LatestAiRequest(id => { void window.bugPocket.cancelAiRequest(id).catch(() => {}); }));
+  const fieldVersions = useRef<AiFieldVersions>({});
+  const cancelAi = (): void => { requests.current.cancel(); setAiStatus('idle'); };
+  const noteUserEdit = (field: keyof BugDetails): void => {
+    fieldVersions.current[field as AiField] = (fieldVersions.current[field as AiField] ?? 0) + 1;
+  };
+  useEffect(() => {
+    setAiStatus('idle');
+    return () => requests.current.cancel();
+  }, [bug?.id, settings.currentWorkspaceId]);
+  useEffect(() => {
+    const cancel = () => { requests.current.cancel(); setAiStatus('idle'); };
+    const stopShutdown = window.bugPocket.onAppShutdownStarted(cancel);
+    const stopDeparture = window.bugPocket.onDetailsFlushRequest(cancel);
+    return () => { stopShutdown(); stopDeparture(); };
+  }, []);
   const triaging = aiStatus === 'loading';
   const aiTriageDisabled = developerReadOnly || triaging || !byokAiReady;
 
@@ -59,29 +65,27 @@ export function useAiTriage({
   }, []);
 
   const triageWithLocalAi = async (refinementNote = ''): Promise<void> => {
-    if (developerReadOnly || triaging) return;
+    if (developerReadOnly) return;
     const currentBug = bugRef.current ?? bug;
     if (!currentBug) return;
+    const request = requests.current.start();
+    const signal = request.controller.signal;
+    const versionsAtStart = { ...fieldVersions.current };
+    setAiStatus('loading');
     const currentEntryDisplay = getEntryDisplay(currentBug);
     const currentApplication = settings.applications.find((application) => application.id === currentBug.application_id);
     const currentModule = settings.modules.find((module) => module.id === currentBug.module_id);
-    let aiConfig: AiByokConfig;
     try {
-      aiConfig = await window.bugPocket.getAiConfig() as AiByokConfig;
-    } catch (caught) {
-      showToast(parseErrorForUI(caught), 'error');
-      return;
-    }
-    const apiKeyReady = Boolean(aiConfig?.hasApiKey);
-    setByokAiReady(apiKeyReady);
-    if (!apiKeyReady) {
-      setAiStatus('idle');
-      showToast('Please configure your AI API key in Settings.', 'error');
-      return;
-    }
-    setAiStatus('loading');
-    try {
-      const triageText = String(await window.bugPocket.triageBug({
+      const aiConfig = await abortable(window.bugPocket.getAiConfig(), signal) as AiByokConfig;
+      if (!requests.current.isCurrent(request)) return;
+      const apiKeyReady = Boolean(aiConfig?.hasApiKey);
+      setByokAiReady(apiKeyReady);
+      if (!apiKeyReady) {
+        setAiStatus('idle');
+        showToast('Please configure your AI API key in Settings.', 'error');
+        return;
+      }
+      const result = await abortable(window.bugPocket.triageBug({
         id: currentBug.id,
         title: currentEntryDisplay.title,
         note: currentBug.note,
@@ -102,45 +106,35 @@ export function useAiTriage({
         status: currentBug.status,
         attachment_id: currentBug.attachments[0] ? String(currentBug.attachments[0].id) : undefined,
         refinement_note: refinementNote.trim() || undefined
-      })).trim();
+      }, request.id), signal);
+      if (!requests.current.isCurrent(request)) return;
+      if (result.status === 'cancelled') { setAiStatus('idle'); return; }
+      if (result.status === 'timed_out') { setAiStatus('idle'); showToast(result.message, 'error'); return; }
+      if (result.status !== 'completed') throw new Error(result.message);
+      const triageText = result.value.trim();
       if (!triageText) throw new Error('AI triage returned an empty response.');
-      const cleanJsonString = triageText.match(/\{[\s\S]*\}/)?.[0] || triageText;
-      let aiAppliedBug: BugDetails = currentBug;
-      try {
-        const triageData = JSON.parse(cleanJsonString) as Partial<Record<'title' | 'bugNote' | 'stepsToReproduce' | 'expectedResult' | 'actualResult', unknown>>;
-        const title = aiTextField(triageData.title);
-        const bugNote = aiTextField(triageData.bugNote);
-        const stepsToReproduce = aiTextField(triageData.stepsToReproduce);
-        const expectedResult = aiTextField(triageData.expectedResult);
-        const actualResult = aiTextField(triageData.actualResult);
-        aiAppliedBug = {
-          ...currentBug,
-          ...(title ? { title } : {}),
-          ...(bugNote ? { note: bugNote } : {}),
-          ...(stepsToReproduce ? { steps_to_reproduce: formatStepsAsNumberedList(stepsToReproduce) } : {}),
-          ...(expectedResult ? { expected_result: expectedResult } : {}),
-          ...(actualResult ? { actual_result: actualResult } : {})
-        };
-      } catch (error) {
-        console.error('AI returned malformed JSON', error);
-        const fallbackNote = [currentBug.note.trim(), cleanJsonString].filter(Boolean).join('\n\n');
-        aiAppliedBug = { ...currentBug, note: fallbackNote };
-      }
-
-      setBug(aiAppliedBug);
-      bugRef.current = aiAppliedBug;
-      markDirty();
+      const patch = aiPatch(triageText, currentBug);
+      setBug(current => {
+        if (!current || !requests.current.isCurrent(request)) return current;
+        const merged = mergeAiPatch(currentBug, current, patch, versionsAtStart, fieldVersions.current);
+        bugRef.current = merged.bug;
+        if (merged.changed) markDirty();
+        return merged.bug;
+      });
       setAiStatus('completed');
       setShowAiRefinement(false);
       setAiRefinementNote('');
-      showToast('AI Triage applied. Review the generated fields before saving.');
+      showToast('AI suggestions merged. Fields you edited during generation were kept. Review before saving.');
     } catch (caught) {
+      if (!requests.current.isCurrent(request)) return;
       setAiStatus('idle');
       showToast(parseErrorForUI(caught), 'error');
     }
   };
 
   return {
+    cancelAi,
+    noteUserEdit,
     aiStatus,
     aiRefinementNote,
     aiTriageDisabled,
