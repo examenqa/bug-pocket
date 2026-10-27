@@ -4,40 +4,29 @@
 // Both launches use current source code and a disposable synthetic profile.
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
-const { existsSync, mkdtempSync, readFileSync, rmSync } = require('node:fs');
+const { existsSync, mkdtempSync, readFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
+const { runHarnessChild, withProfileCleanup } = require('./runtime-compatibility-driver.cjs');
 const root = resolve(__dirname, '..');
 const sessionKey = 'runtime-compatibility-session';
 const sessionValue = JSON.stringify({ access_token: 'synthetic-runtime-session', refresh_token: 'synthetic-refresh' });
 const apiKey = 'synthetic-runtime-api-key';
 
 async function runChild(executable, profile, phase) {
-  return new Promise((resolveChild, reject) => {
-    const env = { ...process.env, BUG_POCKET_COMPAT_PROFILE: profile, BUG_POCKET_COMPAT_PHASE: phase };
-    delete env.ELECTRON_RUN_AS_NODE;
-    const child = spawn(executable, [__filename], { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    let output = '';
-    child.stdout.on('data', chunk => { output += chunk; process.stdout.write(chunk); });
-    child.stderr.on('data', chunk => { output += chunk; process.stderr.write(chunk); });
-    const timeout = setTimeout(() => { child.kill(); reject(new Error(`Runtime compatibility ${phase} timed out`)); }, 60_000);
-    child.once('error', error => { clearTimeout(timeout); reject(error); });
-    child.once('close', code => {
-      clearTimeout(timeout);
-      try {
-        assert.equal(code, 0, `Runtime compatibility ${phase} failed\n${output}`);
-        assert.ok(output.includes(`[runtime-compatibility] ${phase} passed`), 'Child did not confirm all checks');
-        resolveChild();
-      } catch (error) { reject(error); }
-    });
-  });
+  const env = { ...process.env, BUG_POCKET_COMPAT_PROFILE: profile, BUG_POCKET_COMPAT_PHASE: phase };
+  delete env.ELECTRON_RUN_AS_NODE;
+  await runHarnessChild(
+    () => spawn(executable, [__filename], { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }),
+    { phase }
+  );
 }
 
 async function runDriver() {
   assert.equal(process.platform, 'win32', 'These checks target Windows DPAPI and desktop integrations');
   assert.ok(existsSync(join(root, 'out/preload/index.mjs')), 'Run npm run build first');
   const profile = mkdtempSync(join(tmpdir(), 'bug-pocket-runtime-compat-'));
-  try {
+  await withProfileCleanup(profile, async () => {
     const executable = require('electron');
     const configuredWriter = process.env.BUG_POCKET_COMPAT_WRITE_EXE?.trim();
     const writeExecutable = configuredWriter ? resolve(configuredWriter) : executable;
@@ -55,9 +44,7 @@ async function runDriver() {
     }
     await runChild(executable, profile, 'read');
     console.log('[runtime-compatibility] two-process persistence and native component checks passed');
-  } finally {
-    rmSync(profile, { recursive: true, force: true });
-  }
+  });
 }
 
 async function runElectron() {
@@ -163,4 +150,9 @@ async function runElectron() {
   } catch (error) { fail(error); }
 }
 
-(process.versions.electron ? runElectron() : runDriver()).catch(error => { console.error(error.stack || error); process.exitCode = 1; });
+(process.versions.electron ? runElectron() : runDriver()).catch(error => {
+  console.error(error.stack || error);
+  for (const diagnostic of error.diagnostics ?? []) console.error(diagnostic);
+  if (error.output) console.error(error.output);
+  process.exitCode = 1;
+});

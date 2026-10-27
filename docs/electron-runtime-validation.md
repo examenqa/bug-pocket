@@ -1,5 +1,12 @@
 # Electron runtime validation — EXA-66
 
+> Historical 43.8.3 evidence from commit `e92e69b060eb868a95d85159863a07a32fba2060`.
+> Results and version-dependent metadata below describe that earlier snapshot.
+> The [28 October review follow-up](electron-runtime-review-followup.md) records
+> the current 43.8.4 selection, bundled Node/Chromium security disposition,
+> timeout fix and revalidation. This earlier Electron advisory scan alone did
+> not establish bundled Node security coverage.
+
 Reviewed on 27 October 2026. This is evidence for independent review of the
 runtime update, not release or installed-package acceptance.
 
