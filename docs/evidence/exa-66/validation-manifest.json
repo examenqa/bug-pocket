@@ -1,0 +1,67 @@
+{
+  "capturedAtUtc": "2026-10-27T14:49:36.8098514Z",
+  "baseline": "3ee28728b4e9522e182d43c025652a5d8f441c8b",
+  "branch": "fix/exa-66-electron-runtime",
+  "electron": "43.8.3",
+  "architecture": "x64",
+  "hostNode": "24.13.1",
+  "npm": "11.8.0",
+  "windows": "10.0.26300.9711",
+  "testResults": {
+    "nodeElectronTests": 144,
+    "passed": 144,
+    "failed": 0,
+    "skipped": 0,
+    "rendererChecks": 21,
+    "schemaPatternExcludesRlsTest": true
+  },
+  "artifacts": [
+    {
+      "path": "package-lock.json",
+      "sha256": "ce60ace46d6d357492ec913c9913111f6f3abf31d16407851cff701ae89466b4"
+    },
+    {
+      "path": "node_modules/electron/dist/electron.exe",
+      "sha256": "6fd8d202acc5c4064eacdcbfc319d12e72a5a0b5bb35122940995b09e54bc481"
+    },
+    {
+      "path": "release-build/win-unpacked/Bug Pocket.exe",
+      "sha256": "aae71c8a6a63247b8c8014bc3595c5f32b4691ff49904d9caa660f120ce75b5c"
+    },
+    {
+      "path": "release-build/win-unpacked/resources/app.asar",
+      "sha256": "9734b54b6a1f355464518be5ce6219e6a109af171a1b11aa44665a3129f31f00"
+    },
+    {
+      "path": "release-build/win-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+      "sha256": "b094e3eef5670412dcc84bb95db8952683236754490718da0697f0053b2ce985"
+    }
+  ],
+  "rawLocalLogHashes": [
+    {
+      "path": "npm-ci.log",
+      "sha256": "7a8c5a35f444e12610e88eb3afbaa621f987e2d97b24e1f6bb8bf4226072363b"
+    },
+    {
+      "path": "tests.log",
+      "sha256": "11732aa3eb5ef32946d6d9aae8ae223a036bbb72c6dedfdc415f43000669a23d"
+    },
+    {
+      "path": "build.log",
+      "sha256": "3f5218af51de6fa7450563db322fba0517138c0bf49189982d3105281f2daec8"
+    },
+    {
+      "path": "packaged-smoke-build-final.log",
+      "sha256": "fcc384590b80364247ee242eeec85665e82bb339f6fcfcbd116a9b13168c1eff"
+    },
+    {
+      "path": "runtime-compatibility.log",
+      "sha256": "93418c3941ed7f42490824e2ef77ff357b1c3660a31d4d2d5541d43d12047e57"
+    },
+    {
+      "path": "runtime-upgrade-compatibility.log",
+      "sha256": "92c73743ac73c5384ead74655ef64318eaf94a8eae1063da800d047b45473a9a"
+    }
+  ],
+  "note": "Commit identity and CI results recorded in PR/Linear. Artifact hashes identify local generated files; no installed package or release acceptance."
+}
