@@ -2813,7 +2813,7 @@ Attachments:
 
   getByokAiProvider(): AiProvider {
     const value = this.getSetting('byok_ai_provider').trim();
-    if (value === 'Grok' || value === 'OpenRouter' || value === 'Gemini' || value === 'Custom/Local') return value;
+    if (value === 'OpenAI' || value === 'Grok' || value === 'OpenRouter' || value === 'Gemini' || value === 'Custom/Local') return value;
     return 'OpenRouter';
   }
 
@@ -2849,6 +2849,17 @@ Attachments:
     return this.getEncryptedByokAiApiKeyMap();
   }
 
+  clearByokAiApiKey(provider: AiProvider): void {
+    this.localDb.transaction(() => {
+      const keyMap = this.getEncryptedByokAiApiKeyMap();
+      delete keyMap[provider];
+      this.setSetting('byok_ai_api_keys_encrypted', JSON.stringify(keyMap));
+      // The old single-key setting must not reappear when the modern map is empty.
+      // Any retained legacy key has already been copied into keyMap above.
+      this.setSetting('byok_ai_api_key_encrypted', '');
+    })();
+  }
+
   getByokAiCustomSystemPrompt(): string {
     return this.getSetting('byok_ai_custom_system_prompt');
   }
@@ -2860,16 +2871,20 @@ Attachments:
     encryptedApiKey: string | null | undefined,
     customSystemPrompt: string
   ): void {
-    this.setSetting('byok_ai_provider', provider);
-    this.setSetting('byok_ai_base_url', baseUrl.trim());
-    this.setSetting('byok_ai_model_id', modelId.trim());
-    if (encryptedApiKey !== undefined) {
+    this.localDb.transaction(() => {
+      // Resolve a legacy key against its saved provider before changing selection.
       const keyMap = this.getEncryptedByokAiApiKeyMap();
-      if (encryptedApiKey) keyMap[provider] = encryptedApiKey;
-      else delete keyMap[provider];
+      if (encryptedApiKey !== undefined) {
+        if (encryptedApiKey) keyMap[provider] = encryptedApiKey;
+        else delete keyMap[provider];
+      }
+      this.setSetting('byok_ai_provider', provider);
+      this.setSetting('byok_ai_base_url', baseUrl.trim());
+      this.setSetting('byok_ai_model_id', modelId.trim());
       this.setSetting('byok_ai_api_keys_encrypted', JSON.stringify(keyMap));
-    }
-    this.setSetting('byok_ai_custom_system_prompt', customSystemPrompt);
+      this.setSetting('byok_ai_api_key_encrypted', '');
+      this.setSetting('byok_ai_custom_system_prompt', customSystemPrompt);
+    })();
   }
 
   getPendingAttachmentDownloads(limit = 25, maxRetries = 5): AttachmentDownloadQueueItem[] {

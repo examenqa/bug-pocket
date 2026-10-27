@@ -19,11 +19,13 @@ The public repository is intentionally decoupled from Examen QA release infrastr
 
 Bug Pocket saves captures immediately to the user's machine:
 
-- `bug-pocket.sqlite` stores bugs, taxonomy, settings, shortcuts, templates, and sync metadata.
+- `local.sqlite` stores local data, app settings, shortcuts, presets, templates, and encrypted configuration. A connected cloud workspace uses its own `ws_<workspace-id>.sqlite` database.
 - `attachments/` stores screenshot and attachment files by content hash.
-- Backups export the SQLite database and attachment directory into `.bugpocket` archives.
+- Backups export the local database, the active workspace database when connected, and their referenced attachments into `.bugpocket` archives. They do not include every inactive workspace database.
 
-Cloud Sync and support telemetry scaffolding exist in the codebase, but Cloud Sync is hidden in production builds while it remains under development. A normal local build does not require Supabase, S3, Vercel, or any hosted service.
+Optional Bring Your Own Cloud (BYOC) Sync is available through a user-configured Supabase project. Configured sessions can reconnect and sync in the background. Support feedback is sent to Examen QA only when the user submits the support form. Local capture does not require a cloud account or a hosted service.
+
+BYOK AI requests use HTTPS for remote providers. HTTP is supported only for localhost and loopback IP addresses used by local AI servers. Redirects are rejected; configure the provider's final API base URL directly.
 
 ## Main Architecture
 
@@ -42,7 +44,7 @@ npm install
 npm run dev
 ```
 
-`npm install` runs `electron-rebuild` so `better-sqlite3` is compiled against the bundled Electron runtime.
+`npm install` runs `electron-builder install-app-deps` so `better-sqlite3` is rebuilt against the bundled Electron runtime.
 
 For a production-style local build:
 

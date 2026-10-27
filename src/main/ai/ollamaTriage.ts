@@ -57,6 +57,8 @@ export async function triageBugWithOllama(
       };
       const response = await fetch(ollamaChatUrl, {
         method: 'POST',
+        // Local AI must not redirect captured evidence to another endpoint.
+        redirect: 'error',
         signal: requestSignal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)

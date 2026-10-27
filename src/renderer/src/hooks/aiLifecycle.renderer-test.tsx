@@ -1,7 +1,8 @@
 import React, { act, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useAiTriage } from './useAiTriage';
-import type { BugDetails, SettingsData } from '../../../shared/types';
+import { AiSettings } from '../components/settings/AiSettings';
+import type { AiByokConfig, AiConfigSaveInput, BugDetails, SettingsData } from '../../../shared/types';
 import type { AiRequestResult } from '../../../shared/aiRequest';
 declare global { interface Window { aiLifecycleResult?: { passed:string[];error?:string }; } }
 (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
@@ -15,6 +16,38 @@ let api!:ReturnType<typeof useAiTriage>, current:BugDetails|null=initial, setRep
 let ref!:React.MutableRefObject<BugDetails|null>,toasts:string[]=[],dirty=0,cancelled:string[]=[],pending:Array<ReturnType<typeof deferred<AiRequestResult<string>>>>=[];
 window.bugPocket={onAppShutdownStarted:(callback:()=>void)=>{shutdown=callback;return ()=>{shutdown=undefined;};},onDetailsFlushRequest:()=>()=>{},getAiConfig:async()=>({hasApiKey:true}),cancelAiRequest:async(id:string)=>{cancelled.push(id);},triageBug:async()=>{const item=deferred<AiRequestResult<string>>();pending.push(item);return item.promise;}} as unknown as typeof window.bugPocket;
 function Host(){const [bug,setBug]=useState<BugDetails|null>(initial);ref=useRef(bug);current=bug;setReport=setBug;api=useAiTriage({bug,bugRef:ref,settings,developerReadOnly:false,setBug,markDirty:()=>{dirty++;},showToast:message=>{toasts.push(message);}});return <span>{bug?.title}</span>;}
+async function verifyCredentialRemoval() {
+ const container = document.createElement('div'); document.body.append(container);
+ for (const scenario of ['insecure legacy', 'empty', 'overlong']) {
+  const saved: AiByokConfig = { provider: 'Custom/Local', baseUrl: 'http://remote.example.test/v1', modelId: 'saved-model', customSystemPrompt: 'saved prompt', hasApiKey: true, configuredProviders: { 'Custom/Local': true, OpenAI: true, OpenRouter: false, Gemini: false, Grok: false } };
+  const calls: AiConfigSaveInput[] = []; let refreshes = 0;
+  window.bugPocket = { getAiConfig: async () => saved, saveAiConfig: async (input: AiConfigSaveInput) => { calls.push(input); return { ...saved, hasApiKey: false, configuredProviders: { ...saved.configuredProviders, 'Custom/Local': false } }; } } as unknown as typeof window.bugPocket;
+  const root = createRoot(container);
+  try {
+   await act(async () => root.render(<AiSettings mutationReady refresh={async () => { refreshes++; }} />));
+   const inputs = container.querySelectorAll<HTMLInputElement>('.ai-processing-grid input');
+   await act(async () => {
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    setValue.call(inputs[0], scenario === 'empty' ? '' : scenario === 'overlong' ? 'x'.repeat(2049) : 'http://remote.example.test/v1'); inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+    setValue.call(inputs[1], scenario === 'overlong' ? 'x'.repeat(501) : ''); inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+   });
+   const clear = Array.from(container.querySelectorAll('button')).find(button => button.textContent?.includes('Clear'));
+   if (!clear || clear.disabled) throw new Error('Credential removal must remain available');
+   await act(async () => clear.click());
+   equal(calls.length, 1, 'clear reaches main process despite invalid fields');
+   equal(calls[0].apiKeyOperation, { action: 'clear' }, 'explicit clear operation');
+   equal(calls[0].baseUrl, '', 'clear omits irrelevant endpoint edits');
+   equal(calls[0].modelId, '', 'clear omits irrelevant model edits');
+   equal(calls[0].customSystemPrompt, '', 'clear omits irrelevant prompt edits');
+   equal(refreshes, 1, 'successful clear refreshes settings');
+   equal(inputs[0].value, saved.baseUrl, 'saved endpoint remains after clear');
+   equal(inputs[1].value, saved.modelId, 'saved model remains after clear');
+   equal(container.textContent?.includes('API key cleared.'), true, 'clear success is visible');
+   passed.push(`AI settings clears credentials with ${scenario} endpoint/model fields`);
+  } finally { await act(async () => root.unmount()); }
+ }
+ container.remove();
+}
 async function run(){
  const container=document.createElement('div');document.body.append(container);let root=createRoot(container);
  async function reset(){await act(async()=>root.unmount());root=createRoot(container);pending=[];toasts=[];dirty=0;cancelled=[];await act(async()=>root.render(<Host/>));}
@@ -32,5 +65,6 @@ async function run(){
  await reset();await start();await act(async()=>setReport({...initial,id:2}));await complete(0,{title:'old report'});equal(current?.id,2,'navigation id');equal(current?.title,'original','navigation ignores result');passed.push('report navigation invalidates pending AI');
  await reset();await start();await act(async()=>shutdown?.());await complete(0,{title:'after shutdown'});equal(current?.title,'original','shutdown ignores late result');equal(api.triaging,false,'shutdown clears busy state');passed.push('shutdown invalidates renderer result before draft flush');
  await reset();await start();const before=dirty;await act(async()=>root.unmount());await complete(0,{title:'unmounted'});equal(dirty,before,'unmount no mutation');equal(cancelled.length,1,'unmount cancels transport');passed.push('unmount cancels AI and blocks late mutation');
+ await verifyCredentialRemoval();
 }
 void run().then(()=>{window.aiLifecycleResult={passed};}).catch(error=>{window.aiLifecycleResult={passed,error:error.stack||String(error)};});
