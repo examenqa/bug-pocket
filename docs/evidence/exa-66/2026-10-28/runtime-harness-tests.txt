@@ -1,0 +1,23 @@
+> bug-pocket@0.9.9 test:runtime-harness
+> node --test scripts/runtime-compatibility-driver.test.cjs
+
+✔ timeout keeps the profile until delayed child close, even after exit or a pass marker (3.5533ms)
+✔ unconfirmed termination is bounded and retains the profile with path diagnostics (0.3629ms)
+✔ kill failure does not replace timeout and cannot authorize profile deletion (0.1884ms)
+✔ Windows cleanup retries after close preserve the original timeout error (0.2569ms)
+✔ exhausted cleanup retries retain the profile without replacing the original failure (0.2828ms)
+✔ permanent cleanup errors are not retried or silently accepted after child success (0.2128ms)
+✔ asynchronous spawn failure waits for close and preserves the spawn error (1.7647ms)
+✔ spawn error without close is bounded and retains the profile (0.2094ms)
+✔ synchronous spawn throw has no child to wait for and preserves failure through cleanup (0.1504ms)
+✔ ordinary marker and zero exit (0.1846ms)
+✔ nonzero exit despite marker (0.5841ms)
+✔ zero exit without marker (0.111ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 68.0825

@@ -1,0 +1,19 @@
+
+> bug-pocket@0.9.9 test:runtime-compatibility
+> node scripts/runtime-compatibility.cjs
+
+[runtime-compatibility] synthetic profile writer: C:\Users\vali2\OneDrive\My Apps\Bug Pocket\exa-66-runtime\node_modules\electron\dist\electron.exe
+[runtime-compatibility] synthetic profile reader: C:\Users\vali2\OneDrive\My Apps\Bug Pocket\exa-66-runtime\node_modules\electron\dist\electron.exe
+
+[runtime-compatibility] write: SQLite + Windows safeStorage session/BYOK persistence
+[runtime-compatibility] built sandboxed preload + isolated IPC round-trip
+[runtime-compatibility] desktop capture thumbnail + PNG/JPEG + tray + shortcut + startup settings read
+[runtime-compatibility] versions {"electron":"43.8.3","chrome":"150.0.7871.250","node":"24.22.0","v8":"15.0.245.31-electron.0","modules":"148","arch":"x64"}
+[runtime-compatibility] write passed
+
+[runtime-compatibility] read: SQLite + Windows safeStorage session/BYOK persistence
+[runtime-compatibility] built sandboxed preload + isolated IPC round-trip
+[runtime-compatibility] desktop capture thumbnail + PNG/JPEG + tray + shortcut + startup settings read
+[runtime-compatibility] versions {"electron":"43.8.3","chrome":"150.0.7871.250","node":"24.22.0","v8":"15.0.245.31-electron.0","modules":"148","arch":"x64"}
+[runtime-compatibility] read passed
+[runtime-compatibility] two-process persistence and native component checks passed

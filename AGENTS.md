@@ -19,7 +19,7 @@ Non-negotiable product rules:
 ## Current Runtime
 
 - App version: `0.9.9`
-- Electron: `^43.1.0`
+- Electron: `43.8.4` (exact pin; EXA-66)
 - React: `18.3`
 - TypeScript: `5.9`
 - SQLite: `better-sqlite3@12.11.1`
@@ -334,6 +334,13 @@ For native, asset, database, preload, or packaging changes also run:
 ```powershell
 npm run test:packaged-smoke:build
 ```
+
+For Electron runtime updates, also run `npm run test:runtime-compatibility` after
+`npm run build` on Windows. This checks native components and encrypted
+persistence across two Electron launches; it does not replace full interactive
+or installed-package acceptance. See `docs/electron-runtime-review-followup.md`
+for the current runtime, security dispositions and remaining checks. The earlier
+`docs/electron-runtime-validation.md` is the historical 43.8.3 snapshot.
 
 ## Repository Hygiene
 
