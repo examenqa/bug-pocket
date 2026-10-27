@@ -4,6 +4,7 @@ import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiIssuePro
 import type { BugPocketDatabase } from '../database';
 import { buildRendererByokAiConfig, decryptStoredApiKey } from './byokConfigResponse';
 import { resolveVerifiedTriageAttachmentPath } from './triageAttachment';
+import { normalizeByokBaseUrl } from './byokEndpoint';
 
 const legacyDefaultSystemPrompts = [
   'You are a Senior QA Engineer. Analyze the user\'s text and the provided Base64 screenshot. Identify exact UI elements, button states, and error messages. You MUST generate the following details as a strict JSON object with exactly these keys:\n\ntitle: A strict limit of 50 characters maximum (5-7 words). Do not include error codes or lengthy descriptions here.\n\nbugNote: A highly detailed description of the failure and visual UI state.\n\nstepsToReproduce: You MUST write 3 to 5 numbered steps reverse-engineered from the visual context. NEVER leave this blank and NEVER use placeholders. Assume the logical journey required to reach the screen.\n\nexpectedResult: What should have happened.\n\nactualResult: What actually happened.\nDo not output any markdown outside this JSON object.',
@@ -52,15 +53,23 @@ export function saveByokAiConfig(
   database: BugPocketDatabase,
   input: AiConfigSaveInput
 ): AiByokConfig {
+  // Credential removal must work even when legacy endpoint settings are invalid.
+  if (input.apiKeyOperation?.action === 'clear') {
+    database.clearByokAiApiKey(input.provider);
+    return getByokAiConfig(database);
+  }
+  const baseUrl = normalizeByokBaseUrl(input.baseUrl);
+  const modelId = input.modelId.trim();
+  if (!baseUrl) throw new Error('AI Base URL is required.');
+  if (!modelId) throw new Error('AI Model ID is required.');
   let encryptedApiKey: string | null | undefined;
-  if (input.apiKeyOperation?.action === 'clear') encryptedApiKey = '';
-  else if (input.apiKeyOperation?.action === 'replace') {
+  if (input.apiKeyOperation?.action === 'replace') {
     const replacementKey = input.apiKeyOperation.value.trim();
     if (!replacementKey) throw new Error('Replacement API key cannot be empty.');
     encryptedApiKey = encryptApiKey(replacementKey);
   }
 
-  database.updateByokAiConfig(input.provider, normalizeBaseUrl(input.baseUrl), input.modelId.trim(), encryptedApiKey, input.customSystemPrompt);
+  database.updateByokAiConfig(input.provider, baseUrl, modelId, encryptedApiKey, input.customSystemPrompt);
   return getByokAiConfig(database);
 }
 
@@ -69,7 +78,7 @@ export async function processIssueWithByokAi(database: BugPocketDatabase, payloa
   const apiKey = decryptStoredApiKey(database.getEncryptedByokAiApiKey(config.provider), safeStorage);
   if (!apiKey) return { success: false, provider: config.provider, error: 'AI API key is not configured.' };
 
-  const baseUrl = normalizeBaseUrl(config.baseUrl);
+  const baseUrl = normalizeByokBaseUrl(config.baseUrl);
   const modelId = config.modelId.trim() || (config.provider === 'Gemini' ? GEMINI_MODEL_CASCADE[0] : '');
   if (!baseUrl) return { success: false, provider: config.provider, error: 'AI Base URL is not configured.' };
   if (!modelId) return { success: false, provider: config.provider, error: 'AI Model ID is not configured.' };
@@ -97,7 +106,7 @@ export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: 
   const apiKey = decryptStoredApiKey(database.getEncryptedByokAiApiKey(config.provider), safeStorage);
   if (!apiKey) throw new Error('AI API key is not configured. Add one in Settings > AI Processing.');
 
-  const baseUrl = normalizeBaseUrl(config.baseUrl);
+  const baseUrl = normalizeByokBaseUrl(config.baseUrl);
   const modelId = config.modelId.trim() || (config.provider === 'Gemini' ? GEMINI_MODEL_CASCADE[0] : '');
   if (!baseUrl) throw new Error('AI Base URL is not configured.');
   if (!modelId) throw new Error('AI Model ID is not configured.');
@@ -112,10 +121,6 @@ export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: 
 function encryptApiKey(apiKey: string): string {
   if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure key storage is not available on this Windows profile.');
   return safeStorage.encryptString(apiKey).toString('base64');
-}
-
-function normalizeBaseUrl(value: string): string {
-  return value.trim().replace(/\/+$/, '');
 }
 
 function normalizeSystemPrompt(value: string): string {
@@ -253,6 +258,8 @@ async function callOpenAiCompatibleChat(input: {
   imageDataUrl?: string;
   signal?: AbortSignal;
 }): Promise<string> {
+  const baseUrl = normalizeByokBaseUrl(input.baseUrl);
+  if (!baseUrl) throw new Error('AI Base URL is not configured.');
   const headers: Record<string, string> = {
     Authorization: `Bearer ${input.apiKey}`,
     'Content-Type': 'application/json'
@@ -263,8 +270,10 @@ async function callOpenAiCompatibleChat(input: {
     headers['X-Title'] = 'Bug Pocket';
   }
 
-  const response = await fetch(`${input.baseUrl}/chat/completions`, {
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
+    // A redirect must never forward captured evidence to a different endpoint.
+    redirect: 'error',
     signal: input.signal,
     headers,
     body: JSON.stringify({

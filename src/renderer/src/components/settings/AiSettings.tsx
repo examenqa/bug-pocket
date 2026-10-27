@@ -120,8 +120,8 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
     try {
       const cleanedBaseUrl = baseUrl.trim().replace(/\/+$/, '');
       const cleanedModelId = modelId.trim();
-      if (!cleanedBaseUrl) throw new Error('Base URL is required.');
-      if (!cleanedModelId) throw new Error('Model ID is required.');
+      if (!clearApiKey && !cleanedBaseUrl) throw new Error('Base URL is required.');
+      if (!clearApiKey && !cleanedModelId) throw new Error('Model ID is required.');
       const replacementKey = apiKey.trim();
       const apiKeyOperation: AiConfigSaveInput['apiKeyOperation'] = clearApiKey
         ? { action: 'clear' }
@@ -130,19 +130,22 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
           : undefined;
       const config = (await window.bugPocket.saveAiConfig({
         provider,
-        baseUrl: cleanedBaseUrl,
-        modelId: cleanedModelId,
+        baseUrl: clearApiKey ? '' : cleanedBaseUrl,
+        modelId: clearApiKey ? '' : cleanedModelId,
         apiKeyOperation,
-        customSystemPrompt: customSystemPrompt.trim() || defaultPrompt
+        customSystemPrompt: clearApiKey ? '' : customSystemPrompt.trim() || defaultPrompt
       })) as AiByokConfig;
-      setProvider(config.provider);
-      setBaseUrl(config.baseUrl || cleanedBaseUrl);
-      setModelId(config.modelId || cleanedModelId);
       setConfiguredProviders(config.configuredProviders);
-      const normalizedPrompt = normalizePrompt(config.customSystemPrompt);
-      setCustomSystemPrompt(normalizedPrompt);
-      setPromptBeforeEdit(normalizedPrompt);
-      setIsEditingPrompt(false);
+      // Clear returns the persisted active configuration, not this provider's draft.
+      if (!clearApiKey) {
+        setProvider(config.provider);
+        setBaseUrl(config.baseUrl || cleanedBaseUrl);
+        setModelId(config.modelId || cleanedModelId);
+        const normalizedPrompt = normalizePrompt(config.customSystemPrompt);
+        setCustomSystemPrompt(normalizedPrompt);
+        setPromptBeforeEdit(normalizedPrompt);
+        setIsEditingPrompt(false);
+      }
       setApiKey('');
       await refresh();
       setStatus(clearApiKey ? `${provider} API key cleared.` : 'AI processing settings saved.');
@@ -193,6 +196,7 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
           <label>
             <span>Base URL</span>
             <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} disabled={saving || !mutationReady} placeholder="https://api.openai.com/v1" />
+            <span className="settings-helper">Remote providers require HTTPS. HTTP is supported for local AI on localhost or a loopback IP address.</span>
           </label>
           <label>
             <span>Model ID</span>
