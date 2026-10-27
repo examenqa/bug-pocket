@@ -135,14 +135,17 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
         apiKeyOperation,
         customSystemPrompt: clearApiKey ? '' : customSystemPrompt.trim() || defaultPrompt
       })) as AiByokConfig;
-      setProvider(config.provider);
-      setBaseUrl(config.baseUrl || cleanedBaseUrl);
-      setModelId(config.modelId || cleanedModelId);
       setConfiguredProviders(config.configuredProviders);
-      const normalizedPrompt = normalizePrompt(config.customSystemPrompt);
-      setCustomSystemPrompt(normalizedPrompt);
-      setPromptBeforeEdit(normalizedPrompt);
-      setIsEditingPrompt(false);
+      // Clear returns the persisted active configuration, not this provider's draft.
+      if (!clearApiKey) {
+        setProvider(config.provider);
+        setBaseUrl(config.baseUrl || cleanedBaseUrl);
+        setModelId(config.modelId || cleanedModelId);
+        const normalizedPrompt = normalizePrompt(config.customSystemPrompt);
+        setCustomSystemPrompt(normalizedPrompt);
+        setPromptBeforeEdit(normalizedPrompt);
+        setIsEditingPrompt(false);
+      }
       setApiKey('');
       await refresh();
       setStatus(clearApiKey ? `${provider} API key cleared.` : 'AI processing settings saved.');
