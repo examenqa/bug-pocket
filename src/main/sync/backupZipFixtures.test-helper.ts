@@ -154,3 +154,32 @@ export function zip64Fixture(name: string, bytes: Buffer): Buffer {
   end.writeUInt32LE(0xffffffff, 16);
   return Buffer.concat([localBytes, centralBytes, end64, locator, end]);
 }
+
+// A multi-entry archive with a ZIP64 directory envelope. Local records keep
+// their ordinary small sizes; the ZIP64 EOCD and locator are real binary records.
+export function zip64DirectoryFixture(entries: ZipFixtureEntry[]): Buffer {
+  const ordinary = zipFixture(entries);
+  const endOffset = ordinary.length - 22;
+  const centralSize = ordinary.readUInt32LE(endOffset + 12);
+  const centralOffset = ordinary.readUInt32LE(endOffset + 16);
+  const end64 = Buffer.alloc(56);
+  end64.writeUInt32LE(0x06064b50);
+  end64.writeBigUInt64LE(44n, 4);
+  end64.writeUInt16LE(45, 12);
+  end64.writeUInt16LE(45, 14);
+  end64.writeBigUInt64LE(BigInt(entries.length), 24);
+  end64.writeBigUInt64LE(BigInt(entries.length), 32);
+  end64.writeBigUInt64LE(BigInt(centralSize), 40);
+  end64.writeBigUInt64LE(BigInt(centralOffset), 48);
+  const locator = Buffer.alloc(20);
+  locator.writeUInt32LE(0x07064b50);
+  locator.writeBigUInt64LE(BigInt(endOffset), 8);
+  locator.writeUInt32LE(1, 16);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50);
+  end.writeUInt16LE(0xffff, 8);
+  end.writeUInt16LE(0xffff, 10);
+  end.writeUInt32LE(0xffffffff, 12);
+  end.writeUInt32LE(0xffffffff, 16);
+  return Buffer.concat([ordinary.subarray(0, endOffset), end64, locator, end]);
+}

@@ -11,7 +11,7 @@
     "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder --win nsis",
     "test": "npm run test:dependency-constraints && npm run test:backup-extraction && npm run test:navigation && npm run test:workspace-selection && npm run test:keep-alive && npm run test:invite-token && npm run test:support-feedback && npm run test:lifecycle && npm run test:security:supabase-schema-repeatability && npm run test:security:phase1 && npm run test:security:logout-db-handle && npm run test:security:destructive-backup-restore && npm run test:regression:taxonomy-uuid && npm run test:ai-fallback && npm run test:ai-error-ui && npm run test:phase1 && npm run test:sync-protocol && npm run test:ai-integrity && npm run test:restore-integrity",
     "test:dependency-constraints": "node scripts/test-dependency-constraints.cjs",
-    "test:backup-extraction": "node --import tsx --test src/main/sync/backupExtraction.test.ts && node scripts/run-electron-test.cjs src/main/sync/backupRecovery.test.ts",
+    "test:backup-extraction": "node --import tsx --test src/main/sync/backupArchiveReader.test.ts src/main/sync/backupExtraction.test.ts && node scripts/run-electron-test.cjs src/main/sync/backupRecovery.test.ts src/main/sync/backupZip64.test.ts",
     "test:packaged-smoke": "node scripts/smoke-test.cjs",
     "test:packaged-smoke:build": "npm run build && electron-builder --win --dir && npm run test:packaged-smoke",
     "test:navigation": "node --import tsx --test src/shared/navigation.test.ts",

@@ -1,9 +1,10 @@
-import { close, open, type BigIntStats } from 'node:fs';
+import type { BigIntStats } from 'node:fs';
 import { lstat, mkdir, mkdtemp, open as openOutput, readdir, realpath, rmdir, type FileHandle } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { Transform, Writable, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import * as yauzl from 'yauzl';
+import { BoundedZipReader } from './backupArchiveReader';
 
 export interface ExtractionLimits {
   maxEntries: number;
@@ -267,7 +268,7 @@ export async function extractBackupArchive(
   aborted(options.signal);
   await assertDirectoryAncestors(root, identities);
   if ((await readdir(root)).length) throw new Error('Backup staging directory must be empty.');
-  let rawFd = await new Promise<number>((resolveFd, reject) => open(backupPath, 'r', (error, fd) => error ? reject(error) : resolveFd(fd)));
+  const input = await openOutput(backupPath, 'r');
   let zip: yauzl.ZipFile | undefined;
   let currentSource: Readable | undefined;
   let archiveError: Error | undefined;
@@ -277,8 +278,13 @@ export async function extractBackupArchive(
   const closed = new Promise<Error | undefined>(resolveClosed => { finishClose = resolveClosed; });
   try {
     aborted(options.signal);
-    zip = await yauzl.fromFdPromise(rawFd, { autoClose: false, lazyEntries: true, decodeStrings: true, validateEntrySizes: true, strictFileNames: false });
-    rawFd = -1; // ZipFile now owns and closes the archive descriptor.
+    const inputStat = await input.stat();
+    if (!inputStat.isFile() || !Number.isSafeInteger(inputStat.size) || inputStat.size < 0
+      || inputStat.size > limits.maxArchiveBytes) throw new Error('Backup archive exceeds its input size limit or is not a regular file.');
+    const reader = new BoundedZipReader(input, inputStat.size);
+    zip = await yauzl.fromRandomAccessReaderPromise(reader, inputStat.size, {
+      autoClose: false, lazyEntries: true, decodeStrings: true, validateEntrySizes: true, strictFileNames: false
+    });
     zip.once('close', () => finishClose());
     zip.on('error', (error: Error) => {
       archiveError = error;
@@ -372,13 +378,17 @@ export async function extractBackupArchive(
     failure = error;
     throw error;
   } finally {
-    if (zip) {
-      closing = true;
-      zip.close();
-      const closeError = await closed;
-      if (closeError && !failure) throw closeError;
-    } else if (rawFd !== -1) {
-      await new Promise<void>((resolveClose, reject) => close(rawFd, error => error ? reject(error) : resolveClose()));
+    try {
+      if (zip) {
+        closing = true;
+        zip.close();
+        const closeError = await closed;
+        if (closeError && !failure) throw closeError;
+      }
+    } finally {
+      // The reader borrows this handle even when opening the ZIP rejects.
+      // FileHandle.close also waits for any in-flight handle reads to finish.
+      await input.close();
     }
   }
 }
