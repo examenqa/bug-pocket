@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-10-28T00:42:49.975Z",
+  "capturedAt": "2026-10-28T00:52:11.089Z",
   "base": "3ee28728b4e9522e182d43c025652a5d8f441c8b",
   "branch": "fix/exa-67-archive-remediation",
   "environment": {
@@ -82,18 +82,31 @@
   "checks": {
     "cleanNpmCi": "passed (required postinstall executed)",
     "fullTests": {
-      "tests": 269,
-      "passed": 269,
+      "tests": 277,
+      "passed": 277,
       "failed": 0,
       "skippedReportedByRunner": 0,
       "rendererPasses": 21
     },
     "retainedBackupRegressions": 32,
-    "extractionTests": 118,
+    "extractionTests": 126,
     "recoveryTests": 7,
     "build": "passed",
     "unpackedSmoke": "passed",
     "shippedDependencyInventory": "passed"
+  },
+  "priorCiAttempt": {
+    "runId": 40610621151,
+    "head": "2a2b087f9eec28dd19801e0c791bd73d2e2a39f9",
+    "conclusion": "failure",
+    "cleanInstall": "passed",
+    "extraction": {
+      "passed": 104,
+      "failed": 14,
+      "skipped": 0
+    },
+    "buildAndSmoke": "skipped",
+    "cause": "Legitimate Windows8.3 RUNNER~1 root spelling was rejected as a link; addressed with filesystem identity checks and real generated8.3 regressions. Archive short-name alias candidates rejected before writes."
   },
   "audit": {
     "full": {
@@ -129,9 +142,9 @@
   ],
   "evidenceFiles": {
     "npm-ci.log": "89b8181638a83d768e3f19b9942fe9a6bb891470a9669ce484285738a340851d",
-    "npm-test-final.log": "06da4ff02b82da91daa62c160ce980d0c9401058c342bf64ec32a9f3215eca90",
-    "build.log": "c8b52d50d6a7ca740e88e6326b3d905c946be5e537a166b62f1b9a5c4a21c837",
-    "unpacked-smoke.log": "ff52f9e3b907f26a30cdc0cc942ba4256fcf39710871fc36df84c6c788657c65",
+    "npm-test-final.log": "efa0ea7beb6d1b3c017b621368ab5ef5674325fa8c5577ad76f31125d56defa0",
+    "build.log": "29e9bae6ff1b4b94ae36db45dd8e2c4932e0bac2cebfb1e82a2ab7404d6040a4",
+    "unpacked-smoke.log": "7f9d833b17b59f6fe75e000e7ef3669b10c64271f1658f02dd20bcd1d93f70a3",
     "audit-after-full.json": "6ca71d3ca31e6cdcbe5a07335e774541a6c061423610507585410dfbde6faad3",
     "audit-after-production.json": "3163dd4438ab27179e59fb80feb25c16aa2f19600ffb1f329a7bc2a99f8502c2",
     "recovery-review-before-fixes.log": "f9e31d43047f5a87bc0092d89afee33420783c172f5dde7eeb31c1cc73236398",

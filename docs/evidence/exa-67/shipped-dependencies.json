@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-28T00:42:49.946Z",
+  "capturedAt": "2026-10-28T00:52:11.060Z",
   "artifact": "release-build/win-unpacked/resources/app.asar",
-  "sha256": "e8d025c0b5dae6f3d444dcb21dc6e676226fe4d50e25c0b23e8a843dd94e75de",
+  "sha256": "f557bf432a3954e460e47185be213ce0b27bbe52aae21c466c0840df628e955a",
   "fileCount": 5254,
   "extractZipPresent": false,
   "builtMainLoadsYauzl": true,

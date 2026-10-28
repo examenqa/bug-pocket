@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, closeSync,
   readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test, { type TestContext } from 'node:test';
 import { createBackupStagingDirectory, extractBackupArchive, type ExtractionLimits } from './backupExtraction';
@@ -168,6 +169,7 @@ test('duplicates and Windows or Unicode aliases are rejected across the whole in
     ['attachments/', 'attachments/'],
     ['local.sqlite', 'LOCAL.SQLITE'],
     ['attachments/image.png', 'attachments\\image.png'],
+    ['long-filename.txt', 'LONG-F~1.TXT'],
     ['café.txt', 'café.txt'],
     ['K.txt', '\u212a.txt'],
     ['safe.txt', '\uff53\uff41\uff46\uff45.txt']
@@ -198,6 +200,7 @@ test('unsafe paths, ADS, devices and Win32 ambiguous names fail before output wr
     'double//name.txt', 'dot/./name.txt', 'null\0name.txt', 'local.sqlite:payload', 'nested/file:payload',
     'CON', 'con.txt', 'NUL', 'AUX.png', 'PRN', 'COM1.log', 'LPT9', 'COM\u00b9.txt',
     'trailing.', 'trailing ', 'nested./file.txt', 'nested /file.txt',
+    'LONG-F~1.TXT', 'attachments/IMAGE~2.PNG', 'SHORT~12.TXT',
     '\uff0e\uff0e/outside-canary.txt', 'nested/\uff1apayload', 'bad<name.txt', 'bad|name.txt'
   ];
   for (const name of names) await t.test(JSON.stringify(name), t => rejectInventory(t, [{ name }]));
@@ -317,6 +320,85 @@ test('each restore receives a distinct fresh staging directory under its request
     assert.equal(lstatSync(staging).isSymbolicLink(), false);
     assert.deepEqual(readdirSync(staging), []);
   }
+});
+
+function windowsPathAliases(directory: string): { shortPath: string; longPath: string } {
+  // Pass the fixture path through the child environment, never through generated
+  // shell code. GetShortPathName exercises a real filesystem alias, not a mock.
+  const script = `
+Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+using System.Text;
+public static class BackupFixtureShortPath {
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  public static extern uint GetShortPathName(string path, StringBuilder result, uint capacity);
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  public static extern uint GetLongPathName(string path, StringBuilder result, uint capacity);
+}
+'@
+$buffer = [System.Text.StringBuilder]::new(32768)
+$length = [BackupFixtureShortPath]::GetShortPathName($env:BUG_POCKET_SHORT_PATH_FIXTURE, $buffer, [uint32]$buffer.Capacity)
+if ($length -eq 0 -or $length -ge $buffer.Capacity) { throw 'GetShortPathName failed for disposable fixture.' }
+$longBuffer = [System.Text.StringBuilder]::new(32768)
+$longLength = [BackupFixtureShortPath]::GetLongPathName($buffer.ToString(), $longBuffer, [uint32]$longBuffer.Capacity)
+if ($longLength -eq 0 -or $longLength -ge $longBuffer.Capacity) { throw 'GetLongPathName failed for disposable fixture.' }
+$aliases = [pscustomobject]@{ shortPath = $buffer.ToString(); longPath = $longBuffer.ToString() } | ConvertTo-Json -Compress
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::Out.Write($aliases)
+`;
+  const powershell = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const result = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 30_000,
+    env: { ...process.env, BUG_POCKET_SHORT_PATH_FIXTURE: directory }
+  });
+  if (result.error) throw result.error;
+  assert.equal(result.status, 0, `GetShortPathName fixture helper failed: ${result.stderr}`);
+  return JSON.parse(result.stdout.trim()) as { shortPath: string; longPath: string };
+}
+
+test('Windows 8.3 aliases permit extraction while linked roots remain refused', { skip: process.platform !== 'win32' }, async (t) => {
+  const paths = fixture(t);
+  const longRoot = join(paths.root, 'Backup extraction directory with a long name');
+  mkdirSync(longRoot);
+  const aliases = windowsPathAliases(longRoot);
+  const shortRoot = aliases.shortPath;
+  if (shortRoot.toLowerCase() === aliases.longPath.toLowerCase()) {
+    t.skip('This filesystem supplies no 8.3 alias for the generated directory or its existing ancestors.');
+    return;
+  }
+  assert.equal(lstatSync(shortRoot).isSymbolicLink(), false);
+  writeFileSync(paths.archive, zipFixture([{ name: 'local.sqlite', bytes: 'bytes through a legitimate alias' }]));
+
+  await t.test('new private staging under a short alias', async () => {
+    const staging = await createBackupStagingDirectory(shortRoot);
+    const visibleFromLongPath = join(longRoot, basename(staging));
+    assert.ok(lstatSync(visibleFromLongPath).isDirectory());
+    await extractBackupArchive(paths.archive, staging);
+    assert.equal(readFileSync(join(staging, 'local.sqlite'), 'utf8'), 'bytes through a legitimate alias');
+    assert.equal(readFileSync(join(visibleFromLongPath, 'local.sqlite'), 'utf8'), 'bytes through a legitimate alias');
+  });
+
+  await t.test('existing empty staging with a short ancestor', async () => {
+    const staging = join(shortRoot, 'existing-staging');
+    mkdirSync(staging);
+    await extractBackupArchive(paths.archive, staging);
+    assert.equal(readFileSync(join(staging, 'local.sqlite'), 'utf8'), 'bytes through a legitimate alias');
+  });
+
+  await t.test('junction below the same short alias is refused', async (t) => {
+    const outside = join(paths.root, 'outside');
+    mkdirSync(outside);
+    writeFileSync(join(outside, 'canary.txt'), 'UNCHANGED');
+    const linked = join(shortRoot, 'linked-root');
+    if (!createLinkOrSkip(t, outside, linked, 'junction')) return;
+    await assert.rejects(createBackupStagingDirectory(linked));
+    await assert.rejects(extractBackupArchive(paths.archive, linked));
+    assert.deepEqual(readdirSync(outside), ['canary.txt']);
+    assert.equal(readFileSync(join(outside, 'canary.txt'), 'utf8'), 'UNCHANGED');
+  });
+  archiveCanBeRemoved(paths.archive);
 });
 
 function createLinkOrSkip(t: TestContext, target: string, link: string, type: 'file' | 'dir' | 'junction'): boolean {

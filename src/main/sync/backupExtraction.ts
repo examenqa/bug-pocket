@@ -55,15 +55,14 @@ function sameFile(left: BigIntStats, right: BigIntStats): boolean {
   return left.dev === right.dev && left.ino === right.ino && left.birthtimeNs === right.birthtimeNs;
 }
 
-function physicalPathIdentity(path: string): string {
-  const absolute = resolve(path);
-  return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
-}
-
 async function assertDirectory(path: string, identities: DirectoryIdentities): Promise<void> {
   const stat = await lstat(path, { bigint: true });
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`Backup staging contains an unsafe directory: '${path}'.`);
-  if (physicalPathIdentity(await realpath(path)) !== physicalPathIdentity(path)) {
+  // Windows realpath expands legitimate 8.3 names (for example RUNNER~1).
+  // Compare filesystem identities, while checking every lexical ancestor for
+  // links, rather than treating a different spelling as proof of redirection.
+  const physical = await lstat(await realpath(path), { bigint: true });
+  if (!physical.isDirectory() || physical.isSymbolicLink() || !sameFile(stat, physical)) {
     throw new Error(`Backup staging directory resolves through a link: '${path}'.`);
   }
   const previous = identities.get(path);
@@ -133,7 +132,10 @@ function safeName(raw: string, limits: ExtractionLimits): { path: string; direct
     const canonical = part.normalize('NFKC');
     const device = canonical.split('.')[0].replace(/[ .]+$/g, '');
     if (!part || canonical === '.' || canonical === '..' || /[\\/<>:"|?*\x00-\x1f\x7f]/.test(canonical)
-      || /[ .]$/.test(canonical) || Buffer.byteLength(part, 'utf8') > 255
+      // NTFS can generate short names only after creating the long entry. The
+      // managed backup names never need tilde-digit components; refusing them
+      // keeps possible 8.3 aliases out of the inventory before any entry writes.
+      || /~[0-9]/.test(canonical) || /[ .]$/.test(canonical) || Buffer.byteLength(part, 'utf8') > 255
       || /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$)$/i.test(device)) {
       throw new Error(`Backup archive contains an unsafe Windows path: '${raw}'.`);
     }
