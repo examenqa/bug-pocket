@@ -1,0 +1,173 @@
+{
+  "ghsa_id": "GHSA-fx2h-pf6j-xcff",
+  "cve_id": "CVE-2026-53571",
+  "url": "https://api.github.com/advisories/GHSA-fx2h-pf6j-xcff",
+  "html_url": "https://github.com/advisories/GHSA-fx2h-pf6j-xcff",
+  "summary": "vite: `server.fs.deny` bypass on Windows alternate paths",
+  "description": "### Summary\n\nThe contents of files that are specified by [`server.fs.deny`](https://vite.dev/config/server-options#server-fs-deny) can be returned to the browser on Windows.\n\n### Impact\n\nOnly apps that match the following conditions are affected:\n\n- explicitly exposes the Vite dev server to the network (using `--host` or [`server.host` config option](https://vitejs.dev/config/server-options.html#server-host))\n- the sensitive file exists in the allowed directories specified by [`server.fs.allow`](https://vite.dev/config/server-options#server-fs-allow)\n- either of:\n  - the sensitive file exists in an NTFS volume\n  - the dev server is running on Windows and the sensitive file exists in a volume that 8.3 short name generation is enabled (it is enabled by default on system volumes)\n\n### Details\n\nVite’s dev server denies direct access to sensitive files through `server.fs.deny`, including entries such as `.env`, `.env.*`, and `*.{crt,pem}`. However, on Windows, the deny logic does not correctly normalize NTFS ADS path forms before access checks are applied.\nBecause of this, requests such as `/.env::$DATA?raw` are treated as allowed paths, while Windows resolves them to the original file's default data stream.\n\nSimilar to that, Windows allows accessing a file using a different name with the 8.3 short name compatibility feature. Vite did not reject accessing files via them.\n\n### PoC\n```bash\n$ npm create vite@latest\n$ cd vite-project/\n$ npm install\n$ npm run dev\n```\nAccess via browser at `http://localhost:5173/.env::$DATA?raw`\n<img width=\"388\" height=\"129\" alt=\"deecc1315123883cfd0f9c26a002845a\" src=\"https://github.com/user-attachments/assets/895c6012-4e2e-4a35-babb-69bbf3ee7170\" />\n\nExample expected result:\n- `/.env::$DATA?raw` returns the contents of `.env`\n- `/tls.pem::$DATA?raw` returns the contents of `tls.pem`",
+  "type": "reviewed",
+  "severity": "medium",
+  "repository_advisory_url": "https://api.github.com/repos/vitejs/vite/security-advisories/GHSA-fx2h-pf6j-xcff",
+  "source_code_location": "https://github.com/vitejs/vite",
+  "identifiers": [
+    {
+      "value": "GHSA-fx2h-pf6j-xcff",
+      "type": "GHSA"
+    },
+    {
+      "value": "CVE-2026-53571",
+      "type": "CVE"
+    }
+  ],
+  "references": [
+    "https://github.com/vitejs/vite/security/advisories/GHSA-fx2h-pf6j-xcff",
+    "https://nvd.nist.gov/vuln/detail/CVE-2026-53571",
+    "https://github.com/advisories/GHSA-fx2h-pf6j-xcff"
+  ],
+  "published_at": "2026-06-15T17:17:45Z",
+  "updated_at": "2026-10-27T14:58:31Z",
+  "github_reviewed_at": "2026-06-15T17:17:45Z",
+  "nvd_published_at": "2026-06-22T18:16:44Z",
+  "withdrawn_at": null,
+  "vulnerabilities": [
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": ">= 8.0.0, <= 8.0.15",
+      "first_patched_version": "8.0.16",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": ">= 7.0.0, <= 7.3.4",
+      "first_patched_version": "7.3.5",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": "<= 6.4.2",
+      "first_patched_version": "6.4.3",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite-plus"
+      },
+      "vulnerable_version_range": "<= 0.1.23",
+      "first_patched_version": "0.1.24",
+      "vulnerable_functions": []
+    }
+  ],
+  "cvss_severities": {
+    "cvss_v3": {
+      "vector_string": null,
+      "score": 0.0
+    },
+    "cvss_v4": {
+      "vector_string": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:L/VI:N/VA:N/SC:H/SI:N/SA:N",
+      "score": 6.9
+    }
+  },
+  "cwes": [
+    {
+      "cwe_id": "CWE-22",
+      "name": "Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+    },
+    {
+      "cwe_id": "CWE-200",
+      "name": "Exposure of Sensitive Information to an Unauthorized Actor"
+    }
+  ],
+  "credits": [
+    {
+      "user": {
+        "login": "TazmiDev",
+        "id": 152580586,
+        "node_id": "U_kgDOCRgx6g",
+        "avatar_url": "https://avatars.githubusercontent.com/u/152580586?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/TazmiDev",
+        "html_url": "https://github.com/TazmiDev",
+        "followers_url": "https://api.github.com/users/TazmiDev/followers",
+        "following_url": "https://api.github.com/users/TazmiDev/following{/other_user}",
+        "gists_url": "https://api.github.com/users/TazmiDev/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/TazmiDev/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/TazmiDev/subscriptions",
+        "organizations_url": "https://api.github.com/users/TazmiDev/orgs",
+        "repos_url": "https://api.github.com/users/TazmiDev/repos",
+        "events_url": "https://api.github.com/users/TazmiDev/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/TazmiDev/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "reporter"
+    },
+    {
+      "user": {
+        "login": "332QAQ",
+        "id": 90317242,
+        "node_id": "MDQ6VXNlcjkwMzE3MjQy",
+        "avatar_url": "https://avatars.githubusercontent.com/u/90317242?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/332QAQ",
+        "html_url": "https://github.com/332QAQ",
+        "followers_url": "https://api.github.com/users/332QAQ/followers",
+        "following_url": "https://api.github.com/users/332QAQ/following{/other_user}",
+        "gists_url": "https://api.github.com/users/332QAQ/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/332QAQ/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/332QAQ/subscriptions",
+        "organizations_url": "https://api.github.com/users/332QAQ/orgs",
+        "repos_url": "https://api.github.com/users/332QAQ/repos",
+        "events_url": "https://api.github.com/users/332QAQ/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/332QAQ/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "reporter"
+    },
+    {
+      "user": {
+        "login": "ArnaudBarre",
+        "id": 14235743,
+        "node_id": "MDQ6VXNlcjE0MjM1NzQz",
+        "avatar_url": "https://avatars.githubusercontent.com/u/14235743?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/ArnaudBarre",
+        "html_url": "https://github.com/ArnaudBarre",
+        "followers_url": "https://api.github.com/users/ArnaudBarre/followers",
+        "following_url": "https://api.github.com/users/ArnaudBarre/following{/other_user}",
+        "gists_url": "https://api.github.com/users/ArnaudBarre/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/ArnaudBarre/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/ArnaudBarre/subscriptions",
+        "organizations_url": "https://api.github.com/users/ArnaudBarre/orgs",
+        "repos_url": "https://api.github.com/users/ArnaudBarre/repos",
+        "events_url": "https://api.github.com/users/ArnaudBarre/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/ArnaudBarre/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "remediation_reviewer"
+    }
+  ],
+  "comments": 2,
+  "cvss": {
+    "vector_string": null,
+    "score": null
+  },
+  "epss": {
+    "percentage": 0.00577,
+    "percentile": 0.46727
+  }
+}

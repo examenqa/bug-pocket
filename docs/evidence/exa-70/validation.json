@@ -1,0 +1,160 @@
+{
+  "issue": "EXA-70",
+  "capturedOn": "2026-10-28",
+  "baselineCommit": "2ef9a0fe89b8bc5f06a30a0ead931e842815792b",
+  "environment": {
+    "platform": "win32",
+    "arch": "x64",
+    "windows": "10.0.26300",
+    "hostNode": "v24.22.1",
+    "npm": "11.19.1",
+    "nodeZipSha256": "d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5"
+  },
+  "versions": {
+    "vite": "6.4.5",
+    "electronVite": "6.0.0",
+    "pluginReact": "5.2.0",
+    "viteEsbuild": "0.25.12",
+    "tsxEsbuildUnchanged": "0.28.1",
+    "electronUnchanged": "43.1.0",
+    "builderUnchanged": "26.18.1",
+    "reactUnchanged": "18.3.1"
+  },
+  "checks": [
+    {
+      "command": "npm ci",
+      "exit": 0,
+      "log": "npm-ci-final.log",
+      "cleanWindowsInstall": true,
+      "nativeRebuild": true,
+      "buildFromSource": false
+    },
+    {
+      "command": "npm test",
+      "exit": 0,
+      "log": "test-final.log",
+      "counts": {
+        "nodeElectronTests": 327,
+        "passed": 327,
+        "failed": 0,
+        "runnerReportedSkipped": 0,
+        "rendererChecks": 21,
+        "toolchainSecurityGroups": 10
+      }
+    },
+    {
+      "command": "npm run test:toolchain-security",
+      "exit": 0,
+      "log": "security-ephemeral-final.log",
+      "groups": 10
+    },
+    {
+      "command": "npm run test:packaged-smoke:build",
+      "exit": 0,
+      "log": "packaged-smoke-final.log",
+      "includesTypeScriptAndViteBuild": true,
+      "target": "--win --dir",
+      "nativeSQLiteTrayAndPreloadSmoke": true
+    },
+    {
+      "command": "npm run test:toolchain-startup -- --output=../reports/exa-70/startup/normal-startup-final.json",
+      "exit": 0,
+      "log": "startup/normal-startup-final.log",
+      "modes": [
+        "dev",
+        "start",
+        "packaged"
+      ],
+      "acceptedBenignIpc": [
+        "settings:get",
+        "bugs:count"
+      ],
+      "invalidIpcRejected": "bugs:get(-1)",
+      "isolatedSyntheticProfiles": true,
+      "devReactFastRefresh": true,
+      "devCssHmr": true
+    }
+  ],
+  "embeddedNativeProbe": {
+    "versions": {
+      "node": "24.18.0",
+      "acorn": "8.16.0",
+      "ada": "3.4.4",
+      "amaro": "1.1.9",
+      "ares": "1.34.6",
+      "brotli": "1.2.0",
+      "cldr": "48.0",
+      "icu": "78.2",
+      "llhttp": "9.4.2",
+      "merve": "1.2.2",
+      "modules": "148",
+      "napi": "10",
+      "nbytes": "0.1.4",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.69.0",
+      "nghttp3": "",
+      "ngtcp2": "",
+      "openssl": "0.0.0",
+      "simdjson": "4.6.4",
+      "simdutf": "7.7.0",
+      "sqlite": "3.53.1",
+      "tz": "2025c",
+      "undici": "7.28.0",
+      "unicode": "17.0",
+      "uv": "1.52.1",
+      "uvwasi": "0.0.23",
+      "v8": "15.0.245.13-electron.0",
+      "zlib": "1.3.2.1-motley",
+      "zstd": "1.6.0",
+      "electron": "43.1.0",
+      "chrome": "150.0.7871.47"
+    },
+    "sqlite": {
+      "version": "3.53.2"
+    }
+  },
+  "packagedPreload": {
+    "jsSha256": "26aa66f3eaf24635d108c7ee8e56b15c73a996ed810e796002a5ae466ed20a6c",
+    "mjsSha256": "26aa66f3eaf24635d108c7ee8e56b15c73a996ed810e796002a5ae466ed20a6c",
+    "identicalCommonJsBytes": true,
+    "normalPackagedRealIpcVerifiedSeparately": true
+  },
+  "warnings": [
+    "npm11 unknown build-from-source configuration warning; native rebuild reports buildFromSource=false and succeeds.",
+    "Inherited inflight/rimraf/glob/prebuild-install/boolean deprecations and npm11 install-script policy notices remain unsuppressed.",
+    "Local clean install emits upstream native-rebuild path-with-spaces diagnostic; install exits0, native probe/tests and unpacked smoke pass.",
+    "Builder reports duplicate dependency references and signAndEditExecutable=false; existing explicit afterPack icon editing and assets retained.",
+    "CSP frame-ancestors is ignored in meta delivery, observed in all three startup modes; CSP content is unchanged.",
+    "Dev debugger startup emits Electron sandbox_bundle startupData-null diagnostic; actual loaded sandboxed preload, real IPC, renderer and HMR assertions pass. Start/packaged do not emit it. Cause not established and no Electron runtime clearance is inferred.",
+    "Invalid bugs:get payload deliberately logs TypeError in each mode; this is an expected negative assertion."
+  ],
+  "exclusions": [
+    "Existing schema-install test filter leaves the Supabase boundary test unexecuted despite zero runner-reported skips.",
+    "Live Supabase/provider acceptance, installed NSIS/migration, Store package/install and WACK remain unexecuted.",
+    "Editor and UNC tests execute actual bundled code with inert filesystem/child-process doubles; no real shell editor, SMB/NTLM or WSL process is executed.",
+    "No actual NTFS8.3 aliases generated; existing synthetic tilde-path fixture exercises rejection.",
+    "GHSA-rq7h non-Windows runtime reproduction unexecuted; official Windows exclusion and fixed resolvedId source independently recorded.",
+    "Normal startup harness intercepts only Windows login Run registry writes; OS startup-registration acceptance remains excluded.",
+    "CDP/inspector instrumentation is limited to these synthetic loopback test processes; ordinary debugger-free interactive/manual acceptance is not claimed."
+  ],
+  "preservation": {
+    "protectedExa67AgentsSha256": "020ccf9be53fc4b377600076ab70976ad5ad3293916094dcebb791fc75b3f02b",
+    "previousCheckoutsAndBranchRefsPreserved": true,
+    "prs6And7Preserved": true,
+    "historicalExa68EvidenceUnchanged": true,
+    "disputedCacheClassificationUnchanged": "audit-range removal; upstream-disputed report"
+  },
+  "ci": {
+    "location": "Final PR-head Windows CI is recorded after pushing in the PR and the existing Linear execution checkpoint; not inferred from local checks."
+  },
+  "readiness": {
+    "implemented": true,
+    "windowsLocalVerified": true,
+    "externalFinalReview": "pending",
+    "maintainerApproval": "pending",
+    "issueStatus": "In Progress",
+    "mergeReady": false,
+    "releaseReady": false,
+    "electronRuntimeHold": "EXA-66 remains separate"
+  }
+}

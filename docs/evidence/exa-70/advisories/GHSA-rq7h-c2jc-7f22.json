@@ -1,0 +1,245 @@
+{
+  "ghsa_id": "GHSA-rq7h-c2jc-7f22",
+  "cve_id": "CVE-2026-112946",
+  "url": "https://api.github.com/advisories/GHSA-rq7h-c2jc-7f22",
+  "html_url": "https://github.com/advisories/GHSA-rq7h-c2jc-7f22",
+  "summary": "Vite: Files outside `server.fs.allow` could be served when project paths match system paths on non-Windows machine",
+  "description": "### Summary\n\nThe content of files outside `server.fs` setting can be returned to the browser if the project imports a file path concatenated with the `root`. For example, if the project references `<path-to-project-root>/etc/hosts`, the content of `/etc/hosts` was possible to be returned.\n\nThe content of files outside the `server.fs.allow` option can be returned to the browser when a project imports a file whose root-relative path matches an absolute path on the host. For example, referencing `<project-root>/etc/hosts` could make Vite return the host's `/etc/hosts` file.\n\n### Impact\n\nOnly apps that meet all of the following conditions are affected:\n\n- explicitly expose the Vite dev server to the network (using `--host` or the [`server.host` option](https://vite.dev/config/server-options#server-host))\n- contain an imported file whose root-relative browser URL is also the absolute path of a readable file on the host\n- The sensitive file is not matched by [`server.fs.deny`](https://vite.dev/config/server-options#server-fs-deny)\n- the dev server is not running on Windows\n\n### Details\n\nWhen Vite analyzes an in-root import, it rewrites the resolved module ID to a browser URL such as `/etc/hostname`. In affected versions, Vite converts that URL with `fsPathFromUrl` and adds the result to `safeModulePaths`. Because `fsPathFromUrl` ensures a leading slash without resolving the URL against the project root, the project URL `/etc/hostname` is recorded as if it were the absolute filesystem path `/etc/hostname`.\n\nFor a later request to `/@fs/etc/hostname`, the raw-filesystem middleware interprets `/etc/hostname` as an absolute path. The access check applies `server.fs.deny`, then accepts paths present in `safeModulePaths` before checking `server.fs.allow`. As a result, the request can return the host file instead of the project file that originally populated `safeModulePaths`.\n\n### PoC\nThe following example requires Linux with a readable `/etc/hostname`:\n```bash\n$ mkdir vite-safe-module-path-poc\n$ cd vite-safe-module-path-poc\n$ npm init -y\n$ npm install vite@8.3.1\n$ mkdir -p etc\n$ echo 'PROJECT-DECOY\\n' > etc/hostname\n$ echo 'import \"./etc/hostname\"\\n' > main.js\n$ npx vite --host 127.0.0.1\n```\n\nIn another terminal:\n```bash\n$ curl -o /dev/null -s -w '%{http_code}\\n' http://127.0.0.1:5173/main.js\n200\n$ curl -sS -o response -w '%{http_code}\\n' http://127.0.0.1:5173/@fs/etc/hostname\n200\n$ cmp -s response /etc/hostname && echo 'response matches host file'\nresponse matches host file\n```",
+  "type": "reviewed",
+  "severity": "medium",
+  "repository_advisory_url": "https://api.github.com/repos/vitejs/vite/security-advisories/GHSA-rq7h-c2jc-7f22",
+  "source_code_location": "https://github.com/vitejs/vite",
+  "identifiers": [
+    {
+      "value": "GHSA-rq7h-c2jc-7f22",
+      "type": "GHSA"
+    },
+    {
+      "value": "CVE-2026-112946",
+      "type": "CVE"
+    }
+  ],
+  "references": [
+    "https://github.com/vitejs/vite/security/advisories/GHSA-rq7h-c2jc-7f22",
+    "https://nvd.nist.gov/vuln/detail/CVE-2026-112946",
+    "https://github.com/vitejs/vite/pull/23656",
+    "https://github.com/vitejs/vite/commit/170b92791421bcd484f7325936d989a82d6bd4aa",
+    "https://github.com/vitejs/vite/commit/45c0e3392a298626955a0ab93a8e51232daac721",
+    "https://github.com/vitejs/vite/commit/c3e06f92e969952466b4e2f5801e85e1e00cd905",
+    "https://github.com/vitejs/vite/commit/e570d8d016096b5f8f6f09808376ca6cf73f27d0",
+    "https://github.com/vitejs/vite/commit/f0d76c7da13d5e794807b82f0b86c1931a8438e3",
+    "https://github.com/advisories/GHSA-rq7h-c2jc-7f22"
+  ],
+  "published_at": "2026-10-21T16:47:42Z",
+  "updated_at": "2026-10-21T16:47:43Z",
+  "github_reviewed_at": "2026-10-21T16:47:42Z",
+  "nvd_published_at": "2026-10-20T16:17:05Z",
+  "withdrawn_at": null,
+  "vulnerabilities": [
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": ">= 8.3.0, <= 8.3.2",
+      "first_patched_version": "8.3.3",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": ">= 8.2.0, <= 8.2.3",
+      "first_patched_version": "8.2.4",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": ">= 8.0.0, <= 8.1.5",
+      "first_patched_version": "8.1.6",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": ">= 7.0.0, <= 7.3.6",
+      "first_patched_version": "7.3.7",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": "<= 6.4.3",
+      "first_patched_version": "6.4.4",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite-plus"
+      },
+      "vulnerable_version_range": "<= 1.0.0",
+      "first_patched_version": "1.1.0",
+      "vulnerable_functions": []
+    }
+  ],
+  "cvss_severities": {
+    "cvss_v3": {
+      "vector_string": null,
+      "score": 0.0
+    },
+    "cvss_v4": {
+      "vector_string": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+      "score": 6.3
+    }
+  },
+  "cwes": [
+    {
+      "cwe_id": "CWE-22",
+      "name": "Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+    },
+    {
+      "cwe_id": "CWE-284",
+      "name": "Improper Access Control"
+    }
+  ],
+  "credits": [
+    {
+      "user": {
+        "login": "Kushalkhemka",
+        "id": 72255307,
+        "node_id": "MDQ6VXNlcjcyMjU1MzA3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/72255307?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Kushalkhemka",
+        "html_url": "https://github.com/Kushalkhemka",
+        "followers_url": "https://api.github.com/users/Kushalkhemka/followers",
+        "following_url": "https://api.github.com/users/Kushalkhemka/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Kushalkhemka/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Kushalkhemka/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Kushalkhemka/subscriptions",
+        "organizations_url": "https://api.github.com/users/Kushalkhemka/orgs",
+        "repos_url": "https://api.github.com/users/Kushalkhemka/repos",
+        "events_url": "https://api.github.com/users/Kushalkhemka/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Kushalkhemka/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "finder"
+    },
+    {
+      "user": {
+        "login": "bluwy",
+        "id": 34116392,
+        "node_id": "MDQ6VXNlcjM0MTE2Mzky",
+        "avatar_url": "https://avatars.githubusercontent.com/u/34116392?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/bluwy",
+        "html_url": "https://github.com/bluwy",
+        "followers_url": "https://api.github.com/users/bluwy/followers",
+        "following_url": "https://api.github.com/users/bluwy/following{/other_user}",
+        "gists_url": "https://api.github.com/users/bluwy/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/bluwy/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/bluwy/subscriptions",
+        "organizations_url": "https://api.github.com/users/bluwy/orgs",
+        "repos_url": "https://api.github.com/users/bluwy/repos",
+        "events_url": "https://api.github.com/users/bluwy/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/bluwy/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "remediation_reviewer"
+    },
+    {
+      "user": {
+        "login": "mayank-jangid-moon",
+        "id": 175295782,
+        "node_id": "U_kgDOCnLNJg",
+        "avatar_url": "https://avatars.githubusercontent.com/u/175295782?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/mayank-jangid-moon",
+        "html_url": "https://github.com/mayank-jangid-moon",
+        "followers_url": "https://api.github.com/users/mayank-jangid-moon/followers",
+        "following_url": "https://api.github.com/users/mayank-jangid-moon/following{/other_user}",
+        "gists_url": "https://api.github.com/users/mayank-jangid-moon/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/mayank-jangid-moon/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/mayank-jangid-moon/subscriptions",
+        "organizations_url": "https://api.github.com/users/mayank-jangid-moon/orgs",
+        "repos_url": "https://api.github.com/users/mayank-jangid-moon/repos",
+        "events_url": "https://api.github.com/users/mayank-jangid-moon/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/mayank-jangid-moon/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "finder"
+    },
+    {
+      "user": {
+        "login": "skigeek16",
+        "id": 177405396,
+        "node_id": "U_kgDOCpL91A",
+        "avatar_url": "https://avatars.githubusercontent.com/u/177405396?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/skigeek16",
+        "html_url": "https://github.com/skigeek16",
+        "followers_url": "https://api.github.com/users/skigeek16/followers",
+        "following_url": "https://api.github.com/users/skigeek16/following{/other_user}",
+        "gists_url": "https://api.github.com/users/skigeek16/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/skigeek16/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/skigeek16/subscriptions",
+        "organizations_url": "https://api.github.com/users/skigeek16/orgs",
+        "repos_url": "https://api.github.com/users/skigeek16/repos",
+        "events_url": "https://api.github.com/users/skigeek16/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/skigeek16/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "finder"
+    },
+    {
+      "user": {
+        "login": "opensec-intelligence",
+        "id": 323596076,
+        "node_id": "U_kgDOE0mvLA",
+        "avatar_url": "https://avatars.githubusercontent.com/u/323596076?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/opensec-intelligence",
+        "html_url": "https://github.com/opensec-intelligence",
+        "followers_url": "https://api.github.com/users/opensec-intelligence/followers",
+        "following_url": "https://api.github.com/users/opensec-intelligence/following{/other_user}",
+        "gists_url": "https://api.github.com/users/opensec-intelligence/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/opensec-intelligence/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/opensec-intelligence/subscriptions",
+        "organizations_url": "https://api.github.com/users/opensec-intelligence/orgs",
+        "repos_url": "https://api.github.com/users/opensec-intelligence/repos",
+        "events_url": "https://api.github.com/users/opensec-intelligence/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/opensec-intelligence/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "tool"
+    }
+  ],
+  "comments": 4,
+  "cvss": {
+    "vector_string": null,
+    "score": null
+  },
+  "epss": {
+    "percentage": 0.00852,
+    "percentile": 0.57986
+  }
+}

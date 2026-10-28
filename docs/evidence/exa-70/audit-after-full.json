@@ -1,0 +1,231 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "electron": {
+      "name": "electron",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1239975,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: Windows opened from a sandboxed top-level document do not inherit its sandbox restrictions",
+          "url": "https://github.com/advisories/GHSA-gr2m-v5gq-v685",
+          "severity": "high",
+          "cwe": [
+            "CWE-266",
+            "CWE-693"
+          ],
+          "cvss": {
+            "score": 8.2,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N"
+          },
+          "range": ">=43.0.0-alpha.1 <43.4.1"
+        },
+        {
+          "source": 1239979,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: File and HTTP protocol handlers allow cross-origin reads without corsEnabled",
+          "url": "https://github.com/advisories/GHSA-j84w-jfhq-vhvj",
+          "severity": "high",
+          "cwe": [
+            "CWE-346"
+          ],
+          "cvss": {
+            "score": 7.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:N/A:N"
+          },
+          "range": ">=43.0.0-alpha.1 <43.4.1"
+        },
+        {
+          "source": 1239987,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: Sandboxed preload code cache can be poisoned by a compromised renderer",
+          "url": "https://github.com/advisories/GHSA-qmv3-fv6v-rmhq",
+          "severity": "high",
+          "cwe": [
+            "CWE-20",
+            "CWE-345"
+          ],
+          "cvss": {
+            "score": 7.8,
+            "vectorString": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:C/C:H/I:H/A:H"
+          },
+          "range": ">=43.0.0-beta.1 <43.5.0"
+        },
+        {
+          "source": 1241655,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: <webview> can enable Node.js integration in Web Workers despite embedder restrictions",
+          "url": "https://github.com/advisories/GHSA-9qh4-3jw8-366w",
+          "severity": "high",
+          "cwe": [
+            "CWE-269",
+            "CWE-1188"
+          ],
+          "cvss": {
+            "score": 8.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:H/A:H"
+          },
+          "range": ">=43.0.0-alpha.1 <43.4.1"
+        },
+        {
+          "source": 1242757,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: HID and USB permission checks can be attributed to the wrong origin",
+          "url": "https://github.com/advisories/GHSA-fw47-9c62-h3vw",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-346"
+          ],
+          "cvss": {
+            "score": 5.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:L/I:L/A:N"
+          },
+          "range": ">=43.0.0-alpha.1 <43.7.0"
+        },
+        {
+          "source": 1242836,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: SameSite cookie restrictions are not applied to windows opened from links",
+          "url": "https://github.com/advisories/GHSA-2p8c-gr87-2676",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-352"
+          ],
+          "cvss": {
+            "score": 4.2,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N"
+          },
+          "range": ">=43.0.0-alpha.1 <43.7.0"
+        },
+        {
+          "source": 1242840,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: Pointer lock permission requests can be attributed to the wrong frame",
+          "url": "https://github.com/advisories/GHSA-x562-297c-g43g",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-346"
+          ],
+          "cvss": {
+            "score": 5.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:L"
+          },
+          "range": ">=43.0.0-alpha.1 <43.7.6"
+        },
+        {
+          "source": 1242844,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: Extension tabs.query returns tab URLs and titles without the tabs permission",
+          "url": "https://github.com/advisories/GHSA-98mx-cjp9-gchm",
+          "severity": "low",
+          "cwe": [
+            "CWE-862"
+          ],
+          "cvss": {
+            "score": 3.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N"
+          },
+          "range": ">=43.0.0-alpha.1 <43.5.1"
+        },
+        {
+          "source": 1242849,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: Frame subscription trusts GPU-supplied frame geometry",
+          "url": "https://github.com/advisories/GHSA-3qxv-5xgr-q7w9",
+          "severity": "low",
+          "cwe": [
+            "CWE-125"
+          ],
+          "cvss": {
+            "score": 3.9,
+            "vectorString": "CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:C/C:L/I:N/A:L"
+          },
+          "range": ">=43.0.0-alpha.1 <43.7.3"
+        },
+        {
+          "source": 1242853,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: Off-screen rendering on macOS trusts GPU-supplied frame geometry",
+          "url": "https://github.com/advisories/GHSA-h3v5-h239-pg29",
+          "severity": "low",
+          "cwe": [
+            "CWE-125"
+          ],
+          "cvss": {
+            "score": 3.9,
+            "vectorString": "CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:C/C:L/I:N/A:L"
+          },
+          "range": ">=43.0.0-alpha.1 <43.7.3"
+        },
+        {
+          "source": 1242857,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: openExternal permission requests can be attributed to the wrong origin",
+          "url": "https://github.com/advisories/GHSA-997q-gvvc-jwmx",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-346"
+          ],
+          "cvss": {
+            "score": 5.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:L/I:L/A:N"
+          },
+          "range": ">=43.0.0-alpha.1 <43.7.0"
+        },
+        {
+          "source": 1243070,
+          "name": "electron",
+          "dependency": "electron",
+          "title": "Electron: Mitigation for compromised eMudhra intermediate certificates",
+          "url": "https://github.com/advisories/GHSA-jr5w-w6x2-84p9",
+          "severity": "high",
+          "cwe": [
+            "CWE-299"
+          ],
+          "cvss": {
+            "score": 7.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+          },
+          "range": ">=43.0.0-alpha.1 <43.8.1"
+        }
+      ],
+      "effects": [],
+      "range": "43.0.0-alpha.1 - 43.8.0",
+      "nodes": [
+        "node_modules/electron"
+      ],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 1,
+      "critical": 0,
+      "total": 1
+    },
+    "dependencies": {
+      "prod": 99,
+      "dev": 431,
+      "optional": 117,
+      "peer": 13,
+      "peerOptional": 0,
+      "total": 529
+    }
+  }
+}

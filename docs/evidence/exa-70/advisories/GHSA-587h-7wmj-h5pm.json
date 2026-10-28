@@ -1,0 +1,174 @@
+{
+  "ghsa_id": "GHSA-587h-7wmj-h5pm",
+  "cve_id": "CVE-2026-112942",
+  "url": "https://api.github.com/advisories/GHSA-587h-7wmj-h5pm",
+  "html_url": "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
+  "summary": "launch-editor: `fs.existsSync()` existence check can be bypassed on Windows",
+  "description": "### Summary\n\n`launch-editor` checked `fs.existsSync(fileName)` before passing a supplied path to an editor command. On Windows, an attacker can bypass this check with a crafted path ending in `\\\\..:line:column`. This removes the requirement that the attacker be able to place a file with a malicious filename.\n\nCombined with the `%` escaping issue described in [GHSA-698v-4r3x-3vcv](https://github.com/vitejs/launch-editor/security/advisories/GHSA-698v-4r3x-3vcv), this bypass can lead to OS command injection when an attacker controls the file argument.\n\n### Impact\n\nOnly apps that runs on Windows is affected.\n\n### Details\n\nThe earlier advisory assumed that `fs.existsSync()` required an attacker-controlled filename to exist. This advisory covers a bypass of that requirement.\n\nA crafted value ending in `\\\\..:1:1` is interpreted differently by `launch-editor-middleware`, `launch-editor`, and Windows:\n\n1. `launch-editor-middleware` calls `path.resolve()` while the final path component is `..:1:1`, so it is not treated as a parent-directory component.\n2. `launch-editor` treats `:1:1` as a line-and-column suffix and removes it, leaving a path ending in `\\\\..`.\n3. On Windows, `fs.existsSync()` accepts the resulting path as the existing parent directory even though the attacker-controlled preceding component does not exist.\n4. Because the existence check passes, the crafted filename reaches the Windows shell command.",
+  "type": "reviewed",
+  "severity": "high",
+  "repository_advisory_url": "https://api.github.com/repos/vitejs/launch-editor/security-advisories/GHSA-587h-7wmj-h5pm",
+  "source_code_location": "https://github.com/vitejs/launch-editor",
+  "identifiers": [
+    {
+      "value": "GHSA-587h-7wmj-h5pm",
+      "type": "GHSA"
+    },
+    {
+      "value": "CVE-2026-112942",
+      "type": "CVE"
+    }
+  ],
+  "references": [
+    "https://github.com/vitejs/launch-editor/security/advisories/GHSA-587h-7wmj-h5pm",
+    "https://nvd.nist.gov/vuln/detail/CVE-2026-112942",
+    "https://github.com/vitejs/launch-editor/commit/f13cd835d4b8e860b1d4d080ad8a490cc2463679",
+    "https://github.com/vitejs/launch-editor/releases/tag/v2.14.2",
+    "https://github.com/advisories/GHSA-587h-7wmj-h5pm"
+  ],
+  "published_at": "2026-10-20T19:48:25Z",
+  "updated_at": "2026-10-20T19:48:26Z",
+  "github_reviewed_at": "2026-10-20T19:48:25Z",
+  "nvd_published_at": "2026-10-20T15:17:17Z",
+  "withdrawn_at": null,
+  "vulnerabilities": [
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "launch-editor"
+      },
+      "vulnerable_version_range": "<= 2.14.1",
+      "first_patched_version": "2.14.2",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": ">= 8.3.0, <= 8.3.2",
+      "first_patched_version": "8.3.3",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": ">= 8.2.0, <= 8.2.3",
+      "first_patched_version": "8.2.4",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": ">= 8.0.0, <= 8.1.5",
+      "first_patched_version": "8.1.6",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": ">= 7.0.0, <= 7.3.6",
+      "first_patched_version": "7.3.7",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite"
+      },
+      "vulnerable_version_range": "<= 6.4.3",
+      "first_patched_version": "6.4.4",
+      "vulnerable_functions": []
+    },
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "vite-plus"
+      },
+      "vulnerable_version_range": "<= 1.0.0",
+      "first_patched_version": "1.1.0",
+      "vulnerable_functions": []
+    }
+  ],
+  "cvss_severities": {
+    "cvss_v3": {
+      "vector_string": null,
+      "score": 0.0
+    },
+    "cvss_v4": {
+      "vector_string": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:A/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+      "score": 7.5
+    }
+  },
+  "cwes": [
+    {
+      "cwe_id": "CWE-77",
+      "name": "Improper Neutralization of Special Elements used in a Command ('Command Injection')"
+    }
+  ],
+  "credits": [
+    {
+      "user": {
+        "login": "hutsbotnet",
+        "id": 215170620,
+        "node_id": "U_kgDODNM-PA",
+        "avatar_url": "https://avatars.githubusercontent.com/u/215170620?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/hutsbotnet",
+        "html_url": "https://github.com/hutsbotnet",
+        "followers_url": "https://api.github.com/users/hutsbotnet/followers",
+        "following_url": "https://api.github.com/users/hutsbotnet/following{/other_user}",
+        "gists_url": "https://api.github.com/users/hutsbotnet/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/hutsbotnet/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/hutsbotnet/subscriptions",
+        "organizations_url": "https://api.github.com/users/hutsbotnet/orgs",
+        "repos_url": "https://api.github.com/users/hutsbotnet/repos",
+        "events_url": "https://api.github.com/users/hutsbotnet/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/hutsbotnet/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "reporter"
+    },
+    {
+      "user": {
+        "login": "bluwy",
+        "id": 34116392,
+        "node_id": "MDQ6VXNlcjM0MTE2Mzky",
+        "avatar_url": "https://avatars.githubusercontent.com/u/34116392?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/bluwy",
+        "html_url": "https://github.com/bluwy",
+        "followers_url": "https://api.github.com/users/bluwy/followers",
+        "following_url": "https://api.github.com/users/bluwy/following{/other_user}",
+        "gists_url": "https://api.github.com/users/bluwy/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/bluwy/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/bluwy/subscriptions",
+        "organizations_url": "https://api.github.com/users/bluwy/orgs",
+        "repos_url": "https://api.github.com/users/bluwy/repos",
+        "events_url": "https://api.github.com/users/bluwy/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/bluwy/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "remediation_reviewer"
+    }
+  ],
+  "comments": 2,
+  "cvss": {
+    "vector_string": null,
+    "score": null
+  },
+  "epss": {
+    "percentage": 0.01344,
+    "percentile": 0.71192
+  }
+}
