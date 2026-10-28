@@ -45,7 +45,7 @@
     {
       "command": "npm run test:toolchain-security",
       "exit": 0,
-      "log": "security-short-temp-after.log",
+      "log": "security-drive-canonical-final.log",
       "groups": 10,
       "actual8dot3TempAliasRedGreenRegression": "short-temp-regression.json"
     },
@@ -152,6 +152,13 @@
       "head": "4e420d772536e294183cf8ab9ec4b713bb6da01b",
       "conclusion": "failure",
       "observed": "Synthetic positive main.js returned403 before full tests; fixture canonicalization correction demonstrated with actual local8.3 temp alias red/green. First CI temp spelling was not captured; cause remains inference until subsequent CI path evidence."
+    },
+    "secondRun": {
+      "url": "https://github.com/examenqa/bug-pocket/actions/runs/40641773413",
+      "head": "1a130b822a88d744d44240ffed7ae261fb67ed9a",
+      "conclusion": "failure",
+      "observed": "Runner logs show raw RUNNER~1 expanded to runneradmin; ordinary/CORS/ADS checks passed. Direct outside request returned404 instead of required403 because Vite raw-/@fs strips drive and process cwd was D: while temp fixture was C:.",
+      "correction": "Run disposable check process from canonical fixture drive and restore cwd before cleanup. Added /@fs allowed-file200, actual outside-file existence/bytes and public loading-guard true/false controls; outside403 remains mandatory. All10 focused local groups passed; next final-head CI must validate cross-drive environment."
     }
   },
   "readiness": {

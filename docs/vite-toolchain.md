@@ -143,6 +143,17 @@ all deny/strict controls remain enabled. The first CI run did not record its
 temp spelling, so attribution to that runner's alias is an inference. The
 subsequent run prints both raw and canonical paths. See `short-temp-regression.json`.
 
+The [second CI run](https://github.com/examenqa/bug-pocket/actions/runs/40641773413)
+recorded `RUNNER~1` expanding to `runneradmin` and passed the ordinary-file,
+CORS and Windows alternate-path controls. It then exposed a separate fixture
+assumption: temp was on C: while the checkout/process cwd was D:. Vite 6's
+Windows raw `/@fs` middleware strips the URL drive and serves relative to `/`,
+so the outside-file request reached a nonexistent D: path and returned 404.
+The disposable check process now changes into its canonical fixture directory
+and restores cwd before cleanup. An actual allowed raw-file 200, real outside
+file bytes and public allow/deny API assertions precede the still-required
+outside-file 403. No denial assertion or application configuration was weakened.
+
 Unsuppressed npm configuration/install-script notices, inherited transitive
 deprecations, the local path-with-spaces rebuild diagnostic and builder duplicate
 reference/resource-editing notices are recorded. The unchanged meta CSP emits

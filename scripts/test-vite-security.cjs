@@ -146,6 +146,7 @@ async function serverChecks(vite, fixture) {
   fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({ name: 'exa70-benign-fixture', version: '1.0.0' }));
   fs.writeFileSync(path.join(project, 'index.html'), '<div id="app">EXA70_SYNTHETIC_PUBLIC</div><script type="module" src="/main.js"></script>');
   fs.writeFileSync(path.join(project, 'main.js'), 'export const synthetic = "EXA70_SYNTHETIC_PUBLIC";');
+  fs.writeFileSync(path.join(project, 'public-file.txt'), 'EXA70_SYNTHETIC_PUBLIC_RAW');
   const dependency = path.join(project, 'node_modules/exa70-fixture');
   fs.mkdirSync(dependency, { recursive: true });
   fs.writeFileSync(path.join(dependency, 'package.json'), JSON.stringify({ name: 'exa70-fixture', version: '1.0.0', main: 'index.js' }));
@@ -179,9 +180,18 @@ async function serverChecks(vite, fixture) {
     record('GHSA-fx2h-pf6j-xcff Windows ADS and tilde alternate-path rejection', { deniedRequests: 6, realNtfsShortAliasGeneration: false, note: 'Existing tilde fixture checks unconditional short-path rejection without depending on volume 8.3 settings' });
 
     const slash = value => value.replaceAll('\\', '/');
+    const allowedRawFile = path.join(project, 'public-file.txt');
+    assert.ok(fs.statSync(outside).isFile(), 'The denied outside map must really exist');
+    assert.equal(fs.readFileSync(outside, 'utf8'), JSON.stringify(map));
+    assert.equal(vite.isFileLoadingAllowed(server.config, slash(allowedRawFile)), true);
+    assert.equal(vite.isFileLoadingAllowed(server.config, slash(outside)), false);
+    const rawPositive = await request(port, `/@fs/${slash(allowedRawFile)}`);
+    assert.equal(rawPositive.status, 200, `Raw /@fs fixture routing must resolve the real allowed file; cwd=${process.cwd()}, path=${allowedRawFile}, body=${rawPositive.body.slice(0, 600)}`);
+    assert.equal(rawPositive.body, 'EXA70_SYNTHETIC_PUBLIC_RAW');
     const outsideRequest = `/@fs/${slash(outside)}`;
     const direct = await request(port, outsideRequest);
-    assert.equal(direct.status, 403);
+    assert.equal(direct.status, 403, `Existing outside map must be denied, rather than misrouted; cwd=${process.cwd()}, request=${outsideRequest}, body=${direct.body.slice(0, 600)}`);
+    assert.ok(!direct.body.includes('EXA70_SYNTHETIC_OUTSIDE_MAP'));
     // The optimized-deps loader awaits its processing promise. Finish the real
     // synthetic prebundle before adding the map fixture, so a slow optimizer
     // cannot replace the cache directory while this check is reading it.
@@ -209,7 +219,7 @@ async function serverChecks(vite, fixture) {
     assert.equal(encodedSlash.status, 200);
     assert.deepEqual(JSON.parse(encodedSlash.body).sourcesContent, []);
     assert.ok(!encodedSlash.body.includes('EXA70_SYNTHETIC_OUTSIDE_MAP'));
-    record('GHSA-4w7w-66w2-5vf9 optimized sourcemap traversal', { directOutsideStatus: direct.status, legitimateOptimizedMapStatus: allowed.status, traversalStatuses, encodedSlashResult: 'Empty dummy map, no synthetic outside content' });
+    record('GHSA-4w7w-66w2-5vf9 optimized sourcemap traversal', { rawFsPositiveStatus: rawPositive.status, fileGuardAllowedPositive: true, fileGuardOutsideDenied: true, directOutsideStatus: direct.status, legitimateOptimizedMapStatus: allowed.status, traversalStatuses, encodedSlashResult: 'Empty dummy map, no synthetic outside content' });
 
     // Exercise the actual public API with the advisory's custom-middleware URL;
     // no attacker server or payload script is needed to inspect generated src.
@@ -269,17 +279,25 @@ async function main() {
   const requestedTemp = os.tmpdir();
   const canonicalTemp = fs.realpathSync.native(requestedTemp);
   const fixture = fs.mkdtempSync(path.join(canonicalTemp, 'bug-pocket-exa70-security-'));
-  console.log(`Security fixture isolation ${JSON.stringify({ requestedTemp, canonicalTemp, fixture })}`);
+  const originalCwd = process.cwd();
+  let fixtureCwd;
   try {
+    // Vite 6's Windows raw-/@fs sirv route strips the URL drive and serves from
+    // '/'. Keep this disposable process on the fixture's drive so a C: temp
+    // directory with a D: checkout tests real allow/deny, not a missing D: file.
+    process.chdir(fixture);
+    fixtureCwd = process.cwd();
+    console.log(`Security fixture isolation ${JSON.stringify({ requestedTemp, canonicalTemp, fixture, originalCwd, fixtureCwd })}`);
     await serverChecks(vite, fixture);
     await esbuildChecks(vitePackage, fixture);
   } finally {
+    process.chdir(originalCwd);
     // fixture is created by mkdtemp directly under the canonical temp parent.
     assert.equal(path.dirname(fixture), canonicalTemp);
     assert.equal(fs.realpathSync.native(path.dirname(fixture)), canonicalTemp);
     fs.rmSync(fixture, { recursive: true, force: true });
   }
-  console.log(JSON.stringify({ date: new Date().toISOString(), platform: process.platform, hostNode: process.version, vite: require(vitePackage).version, fixturePaths: { requestedTemp, canonicalTemp, fixture }, bundledSource, checks: records, limitations: ['No real editor, command payload, SMB connection, NTLM authentication or WSL runtime was executed', 'No denied-secret-file 8.3 aliases generated; explicit tilde-path rejection checked here and actual temporary-root alias normalization exercised separately', 'Non-Windows GHSA-rq7h runtime reproduction remains unexecuted; fixed source is inspected', 'HTTP header and transformed URL checks establish server controls; no malicious website or exploit payload was executed'] }, null, 2));
+  console.log(JSON.stringify({ date: new Date().toISOString(), platform: process.platform, hostNode: process.version, vite: require(vitePackage).version, fixturePaths: { requestedTemp, canonicalTemp, fixture, originalCwd, fixtureCwd }, bundledSource, checks: records, limitations: ['No real editor, command payload, SMB connection, NTLM authentication or WSL runtime was executed', 'No denied-secret-file 8.3 aliases generated; explicit tilde-path rejection checked here and actual temporary-root alias normalization exercised separately', 'Non-Windows GHSA-rq7h runtime reproduction remains unexecuted; fixed source is inspected', 'HTTP header and transformed URL checks establish server controls; no malicious website or exploit payload was executed'] }, null, 2));
 }
 
 main().catch(error => { console.error(error.stack || error); process.exitCode = 1; });

@@ -61,6 +61,12 @@
       "category": "New normal-startup harness API assumptions",
       "observed": "sessionData follows the -dev userData path; Electron43 getLastWebPreferences omits preload paths; Windows preload script URLs use backslashes",
       "correction": "Assert actual isolated sessionData; inspect Debugger.scriptParsed for real preload loading; accept Windows separators. Initial harness failures retained outside repository; final all-mode checks pass."
+    },
+    {
+      "category": "Second Windows CI cross-drive raw-file fixture assumption",
+      "evidence": "https://github.com/examenqa/bug-pocket/actions/runs/40641773413",
+      "observed": "Runner logs show raw RUNNER~1 expanded to runneradmin; ordinary/CORS/ADS checks passed. Direct outside request returned404 instead of required403 because Vite raw-/@fs strips drive and process cwd was D: while temp fixture was C:.",
+      "correction": "Run disposable check process from canonical fixture drive and restore cwd before cleanup. Added /@fs allowed-file200, actual outside-file existence/bytes and public loading-guard true/false controls; outside403 remains mandatory. All10 focused local groups passed; next final-head CI must validate cross-drive environment."
     }
   ],
   "latestStandaloneSecurityResult": {
