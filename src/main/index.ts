@@ -1223,6 +1223,27 @@ if (!gotTheLock) {
         throw new Error(`Packaged Tray icon failed to load: ${packagedIconPath}`);
       }
       createTray();
+      const preloadWindow = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          preload: preloadPath(),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          webSecurity: true
+        }
+      });
+      hardenRendererWindow(preloadWindow);
+      try {
+        await preloadWindow.loadURL('data:text/html,<title>Packaged preload smoke</title>');
+        const preloadReady = await preloadWindow.webContents.executeJavaScript(
+          "typeof window.bugPocket?.getSettings === 'function' && typeof window.bugPocket?.createQuickBug === 'function' && typeof require === 'undefined' && typeof process === 'undefined'"
+        );
+        if (preloadReady !== true) throw new Error('Packaged preload bridge or renderer isolation check failed');
+        console.log('[packaged-smoke] preload-ready context-isolation=true node-integration=false sandbox=true');
+      } finally {
+        preloadWindow.destroy();
+      }
       console.log(`[packaged-smoke] database-ready bug-count=${bugCount}`);
       console.log(`[packaged-smoke] native-integrations-ready tray-icon=${packagedIconPath}`);
       tray?.destroy();

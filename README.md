@@ -37,12 +37,20 @@ The main process owns OS integrations and trusted local resources. The renderer 
 
 ## Setup
 
+Use the host Node LTS patch pinned in [`.node-version`](.node-version), currently
+24.22.1 (npm 11.19.1). Windows CI uses the same pin. Electron embeds a separate
+Node runtime; changing the host toolchain does not update Electron or Chromium.
+
 ```powershell
 npm install
 npm run dev
 ```
 
-`npm install` runs `electron-rebuild` so `better-sqlite3` is compiled against the bundled Electron runtime.
+`npm install` and clean `npm ci` run `electron-builder install-app-deps` so
+`better-sqlite3` is rebuilt against the bundled Electron runtime. CI retains
+`npm_config_build_from_source=false` to prefer compatible native prebuilds.
+See [CI/toolchain validation](docs/ci-toolchain.md) for the pinned Actions,
+dependency advisory dispositions and verification limits.
 
 For a production-style local build:
 
