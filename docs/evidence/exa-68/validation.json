@@ -1,0 +1,166 @@
+{
+  "date": "2026-10-28",
+  "baseCommit": "569fbeea537c8669df0be12578b239c4f9c0968a",
+  "platform": "win32",
+  "arch": "x64",
+  "windows": "10.0.26300",
+  "host": {
+    "node": "24.22.1",
+    "acorn": "8.18.0",
+    "ada": "4.0.0",
+    "amaro": "1.1.11",
+    "ares": "1.34.9",
+    "brotli": "1.2.0",
+    "cldr": "48.0",
+    "icu": "78.3",
+    "llhttp": "9.4.3",
+    "merve": "1.2.2",
+    "modules": "137",
+    "napi": "10",
+    "nbytes": "0.1.4",
+    "ncrypto": "0.0.1",
+    "nghttp2": "1.70.0",
+    "nghttp3": "",
+    "ngtcp2": "",
+    "openssl": "3.5.9",
+    "simdjson": "4.6.11",
+    "simdutf": "6.4.0",
+    "sqlite": "3.53.4",
+    "tz": "2026e",
+    "undici": "7.30.1",
+    "unicode": "17.0",
+    "uv": "1.52.1",
+    "uvwasi": "0.0.23",
+    "v8": "13.6.233.17-node.58",
+    "zlib": "1.3.2.1-motley-285e94b",
+    "zstd": "1.5.7"
+  },
+  "nodeZipSha256": "d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5",
+  "npm": "11.19.1",
+  "cleanInstall": {
+    "command": "npm ci",
+    "exitCode": 0,
+    "nativeRebuild": true,
+    "buildFromSource": false
+  },
+  "initialChecks": [
+    {
+      "name": "focused-dependency",
+      "command": "npm run test:dependency-constraints",
+      "startedAt": "2026-10-28T03:52:50.1840511Z",
+      "finishedAt": "2026-10-28T03:52:51.0391690Z",
+      "exitCode": 0
+    },
+    {
+      "name": "focused-native-sqlite",
+      "command": "npm run test:security:logout-db-handle",
+      "startedAt": "2026-10-28T03:52:51.0667141Z",
+      "finishedAt": "2026-10-28T03:52:56.6893289Z",
+      "exitCode": 0
+    },
+    {
+      "name": "test",
+      "command": "npm run test",
+      "startedAt": "2026-10-28T03:52:56.6934235Z",
+      "finishedAt": "2026-10-28T03:53:22.4620099Z",
+      "exitCode": 1
+    }
+  ],
+  "initialFailure": "Existing structural security test expected three sandbox/webSecurity declarations; updated to cover the fourth, hardened preload smoke window. Initial failure log retained.",
+  "finalChecks": [
+    {
+      "name": "focused-window-security",
+      "command": "npm run test:security:electron-boundaries",
+      "startedAt": "2026-10-28T03:53:53.8652384Z",
+      "finishedAt": "2026-10-28T03:53:54.4441915Z",
+      "exitCode": 0
+    },
+    {
+      "name": "test",
+      "command": "npm run test",
+      "startedAt": "2026-10-28T03:53:54.4663516Z",
+      "finishedAt": "2026-10-28T03:54:36.5733732Z",
+      "exitCode": 0
+    },
+    {
+      "name": "build",
+      "command": "npm run build",
+      "startedAt": "2026-10-28T03:54:36.5784831Z",
+      "finishedAt": "2026-10-28T03:54:50.7193953Z",
+      "exitCode": 0
+    },
+    {
+      "name": "packaged-smoke",
+      "command": "npm run test:packaged-smoke:build",
+      "startedAt": "2026-10-28T03:54:50.7214815Z",
+      "finishedAt": "2026-10-28T03:55:26.2216781Z",
+      "exitCode": 0
+    }
+  ],
+  "counts": {
+    "tests": 327,
+    "passed": 327,
+    "failed": 0,
+    "runnerReportedSkipped": 0,
+    "rendererPassed": 21
+  },
+  "embeddedNativeProbe": {
+    "versions": {
+      "node": "24.18.0",
+      "acorn": "8.16.0",
+      "ada": "3.4.4",
+      "amaro": "1.1.9",
+      "ares": "1.34.6",
+      "brotli": "1.2.0",
+      "cldr": "48.0",
+      "icu": "78.2",
+      "llhttp": "9.4.2",
+      "merve": "1.2.2",
+      "modules": "148",
+      "napi": "10",
+      "nbytes": "0.1.4",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.69.0",
+      "nghttp3": "",
+      "ngtcp2": "",
+      "openssl": "0.0.0",
+      "simdjson": "4.6.4",
+      "simdutf": "7.7.0",
+      "sqlite": "3.53.1",
+      "tz": "2025c",
+      "undici": "7.28.0",
+      "unicode": "17.0",
+      "uv": "1.52.1",
+      "uvwasi": "0.0.23",
+      "v8": "15.0.245.13-electron.0",
+      "zlib": "1.3.2.1-motley",
+      "zstd": "1.6.0",
+      "electron": "43.1.0",
+      "chrome": "150.0.7871.47"
+    },
+    "sqlite": {
+      "version": "3.53.2"
+    }
+  },
+  "preload": {
+    "packagedJsSha256": "26aa66f3eaf24635d108c7ee8e56b15c73a996ed810e796002a5ae466ed20a6c",
+    "packagedMjsSha256": "26aa66f3eaf24635d108c7ee8e56b15c73a996ed810e796002a5ae466ed20a6c",
+    "identical": true,
+    "actualPackagedExecutableSmoke": true
+  },
+  "excluded": [
+    "schema-filtered Supabase boundary remains unexecuted despite zero runner skips",
+    "live Supabase/providers",
+    "interactive normal-use acceptance",
+    "installed NSIS/migration",
+    "Store package/install/WACK"
+  ],
+  "readiness": {
+    "implemented": true,
+    "localVerified": true,
+    "mergeReady": false,
+    "releaseReady": false,
+    "externalFinalReview": "pending",
+    "maintainerApproval": "pending"
+  }
+}

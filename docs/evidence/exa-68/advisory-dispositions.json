@@ -1,0 +1,4561 @@
+{
+  "schemaVersion": 1,
+  "issue": "EXA-68",
+  "capturedOn": "2026-10-28",
+  "baselineCommit": "569fbeea537c8669df0be12578b239c4f9c0968a",
+  "provenance": {
+    "beforeAudit": "audit-before-full.json",
+    "afterAudit": "audit-after-full.json",
+    "beforeLockSha256": "b6460cac5422605bbc85cb85a6f55ccd2841f66adab0b4c5828f585879b8c42b",
+    "afterLockSha256": "e63acb6e62f92cad34634f1cacb6789fe681c839c9f176462596b1bceec480f0"
+  },
+  "counts": {
+    "beforeAffectedPackageEntries": {
+      "info": 0,
+      "low": 0,
+      "moderate": 4,
+      "high": 17,
+      "critical": 0,
+      "total": 21
+    },
+    "afterAffectedPackageEntries": {
+      "info": 0,
+      "low": 0,
+      "moderate": 2,
+      "high": 2,
+      "critical": 0,
+      "total": 4
+    },
+    "distinctGhsaCount": 66,
+    "distinctGhsaDispositions": {
+      "fixed": 44,
+      "audit-range removal; upstream-disputed report": 1,
+      "pending EXA-66": 12,
+      "pending broader Vite migration": 9
+    },
+    "explanation": "npm audit totals count affected package entries, including propagated parent findings. Distinct GHSA totals deduplicate advisory URLs; one GHSA can have multiple npm source IDs or ranges (notably separate undici major lines). These are not counts of independently demonstrated exploitable vulnerabilities.",
+    "distinctNpmSourceRangeVariants": 77
+  },
+  "acceptance": {
+    "securityExceptionsAuthorized": false,
+    "securityExceptionsGranted": false,
+    "allAdvisoriesResolved": false,
+    "mergeReady": false,
+    "releaseReady": false,
+    "note": "Independent final review of 23850ea792ea767de8ea0f17ac9175c64aef7209 found no PR-specific code blocker; its documentation correction is recorded here. Maintainer merge/scope disposition remains pending. EXA-70 tracks unresolved Vite work and EXA-66 retains its runtime hold. Production-only audit excludes shipped Electron; local/CI validation does not establish installed NSIS/Store acceptance."
+  },
+  "packageAggregates": {
+    "@xmldom/xmldom": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "<=0.8.14",
+      "beforeNodes": [
+        "node_modules/@xmldom/xmldom"
+      ],
+      "via": [
+        "GHSA-6gmq-8vp8-gcm6",
+        "GHSA-w2rr-34g9-rvrj",
+        "GHSA-4w3w-2rp5-g8jm",
+        "GHSA-c7q8-3ch8-vqpv",
+        "GHSA-27p8-2357-5qqv",
+        "GHSA-6h8r-xr42-gp59",
+        "GHSA-8344-3jmq-59r6",
+        "GHSA-x4fp-j954-r2f4",
+        "GHSA-965w-775f-mr7g",
+        "GHSA-93r5-fhx6-vmg9"
+      ],
+      "afterFinding": null
+    },
+    "app-builder-lib": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "<=26.14.0",
+      "beforeNodes": [
+        "node_modules/app-builder-lib"
+      ],
+      "via": [
+        "GHSA-7g7r-gx96-252g",
+        "builder-util",
+        "builder-util-runtime",
+        "dmg-builder",
+        "electron-builder-squirrel-windows",
+        "electron-publish"
+      ],
+      "afterFinding": null
+    },
+    "baseline-browser-mapping": {
+      "beforeSeverity": "moderate",
+      "beforeAffectedRange": ">=2.0.0 <2.11.0",
+      "beforeNodes": [
+        "node_modules/baseline-browser-mapping"
+      ],
+      "via": [
+        "GHSA-w5vr-8v7q-w6rv"
+      ],
+      "afterFinding": null
+    },
+    "browserslist": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "<=4.28.6",
+      "beforeNodes": [
+        "node_modules/browserslist"
+      ],
+      "via": [
+        "GHSA-c83g-rgw3-j3cx",
+        "GHSA-73wf-gq98-2v4g"
+      ],
+      "afterFinding": null
+    },
+    "builder-util": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "2.0.0 - 25.0.6 || 25.1.2 - 26.14.0",
+      "beforeNodes": [
+        "node_modules/builder-util"
+      ],
+      "via": [
+        "builder-util-runtime"
+      ],
+      "afterFinding": null
+    },
+    "builder-util-runtime": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "<9.7.0",
+      "beforeNodes": [
+        "node_modules/builder-util-runtime"
+      ],
+      "via": [
+        "GHSA-p2f4-r6v6-j797"
+      ],
+      "afterFinding": null
+    },
+    "dmg-builder": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "2.0.0 - 26.14.0",
+      "beforeNodes": [
+        "node_modules/dmg-builder"
+      ],
+      "via": [
+        "app-builder-lib",
+        "builder-util"
+      ],
+      "afterFinding": null
+    },
+    "electron": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "43.0.0-alpha.1 - 43.8.0",
+      "beforeNodes": [
+        "node_modules/electron"
+      ],
+      "via": [
+        "GHSA-gr2m-v5gq-v685",
+        "GHSA-j84w-jfhq-vhvj",
+        "GHSA-qmv3-fv6v-rmhq",
+        "GHSA-9qh4-3jw8-366w",
+        "GHSA-fw47-9c62-h3vw",
+        "GHSA-2p8c-gr87-2676",
+        "GHSA-x562-297c-g43g",
+        "GHSA-98mx-cjp9-gchm",
+        "GHSA-3qxv-5xgr-q7w9",
+        "GHSA-h3v5-h239-pg29",
+        "GHSA-997q-gvvc-jwmx",
+        "GHSA-jr5w-w6x2-84p9"
+      ],
+      "afterFinding": {
+        "severity": "high",
+        "affectedRange": "43.0.0-alpha.1 - 43.8.0",
+        "nodes": [
+          "node_modules/electron"
+        ]
+      }
+    },
+    "electron-builder": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "19.25.0 || 19.28.0 - 26.14.0",
+      "beforeNodes": [
+        "node_modules/electron-builder"
+      ],
+      "via": [
+        "app-builder-lib",
+        "builder-util",
+        "builder-util-runtime",
+        "dmg-builder"
+      ],
+      "afterFinding": null
+    },
+    "electron-builder-squirrel-windows": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "19.28.0 - 26.14.0",
+      "beforeNodes": [
+        "node_modules/electron-builder-squirrel-windows"
+      ],
+      "via": [
+        "app-builder-lib",
+        "builder-util"
+      ],
+      "afterFinding": null
+    },
+    "electron-publish": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "19.28.0 - 25.0.6 || 25.1.2 - 26.14.0",
+      "beforeNodes": [
+        "node_modules/electron-publish"
+      ],
+      "via": [
+        "builder-util",
+        "builder-util-runtime"
+      ],
+      "afterFinding": null
+    },
+    "electron-vite": {
+      "beforeSeverity": "moderate",
+      "beforeAffectedRange": "<=3.0.0",
+      "beforeNodes": [
+        "node_modules/electron-vite"
+      ],
+      "via": [
+        "esbuild",
+        "vite"
+      ],
+      "afterFinding": {
+        "severity": "moderate",
+        "affectedRange": "<=3.0.0",
+        "nodes": [
+          "node_modules/electron-vite"
+        ]
+      }
+    },
+    "esbuild": {
+      "beforeSeverity": "moderate",
+      "beforeAffectedRange": "<=0.24.2",
+      "beforeNodes": [
+        "node_modules/esbuild"
+      ],
+      "via": [
+        "GHSA-67mh-4wv8-2f99"
+      ],
+      "afterFinding": {
+        "severity": "moderate",
+        "affectedRange": "<=0.24.2",
+        "nodes": [
+          "node_modules/esbuild"
+        ]
+      }
+    },
+    "http-cache-semantics": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "<=4.2.0",
+      "beforeNodes": [
+        "node_modules/http-cache-semantics"
+      ],
+      "via": [
+        "GHSA-ch52-4w7c-c8xp"
+      ],
+      "afterFinding": null
+    },
+    "js-yaml": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "4.0.0 - 4.3.1",
+      "beforeNodes": [
+        "node_modules/js-yaml"
+      ],
+      "via": [
+        "GHSA-5p4m-2wfm-xmqj",
+        "GHSA-2883-xcg3-v3hh"
+      ],
+      "afterFinding": null
+    },
+    "nanoid": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "<3.3.18",
+      "beforeNodes": [
+        "node_modules/nanoid"
+      ],
+      "via": [
+        "GHSA-2v37-7h3g-55p8"
+      ],
+      "afterFinding": null
+    },
+    "postcss": {
+      "beforeSeverity": "moderate",
+      "beforeAffectedRange": "<=8.5.22",
+      "beforeNodes": [
+        "node_modules/postcss"
+      ],
+      "via": [
+        "GHSA-fxqj-rqcc-2cmp"
+      ],
+      "afterFinding": null
+    },
+    "source-map-js": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "1.0.0 - 1.2.1",
+      "beforeNodes": [
+        "node_modules/source-map-js"
+      ],
+      "via": [
+        "GHSA-68fv-2mgg-jv7q"
+      ],
+      "afterFinding": null
+    },
+    "tar": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "<=7.5.20",
+      "beforeNodes": [
+        "node_modules/tar"
+      ],
+      "via": [
+        "GHSA-r292-9mhp-454m"
+      ],
+      "afterFinding": null
+    },
+    "undici": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "<=6.29.0 || 7.0.0 - 7.30.0",
+      "beforeNodes": [
+        "node_modules/node-gyp/node_modules/undici",
+        "node_modules/undici"
+      ],
+      "via": [
+        "GHSA-8xcm-r25x-g524",
+        "GHSA-8xcm-r25x-g524",
+        "GHSA-4cwx-7wf7-3272",
+        "GHSA-m8rv-5g2x-5cg5",
+        "GHSA-m8rv-5g2x-5cg5",
+        "GHSA-jr45-8vmc-qm54",
+        "GHSA-v3r7-h72x-cjcm",
+        "GHSA-v3r7-h72x-cjcm",
+        "GHSA-3wwx-pv8p-q78v",
+        "GHSA-3wwx-pv8p-q78v",
+        "GHSA-pmjh-fq2x-6v4x",
+        "GHSA-r53p-7pc4-xj5r",
+        "GHSA-r53p-7pc4-xj5r",
+        "GHSA-rfgv-xxqx-mfg5",
+        "GHSA-rfgv-xxqx-mfg5",
+        "GHSA-3xpg-4rpp-hhhm",
+        "GHSA-2jfj-6hjv-fm6j",
+        "GHSA-2gqq-gqf2-x968",
+        "GHSA-w293-vg96-wgc3",
+        "GHSA-8436-99hf-9mmv",
+        "GHSA-rx4f-c7p8-82vq",
+        "GHSA-4qv8-2p9j-2685",
+        "GHSA-4qv8-2p9j-2685",
+        "GHSA-f72v-6w45-q472",
+        "GHSA-xjj6-f33q-929c",
+        "GHSA-xjj6-f33q-929c",
+        "GHSA-4w7w-5xrc-9h26",
+        "GHSA-2m5v-pch6-74hx",
+        "GHSA-2m5v-pch6-74hx",
+        "GHSA-qrxm-fqhp-jwvm",
+        "GHSA-qrxm-fqhp-jwvm",
+        "GHSA-9fm3-97px-rjf6",
+        "GHSA-9fm3-97px-rjf6",
+        "GHSA-55wc-3pg8-jfw6"
+      ],
+      "afterFinding": null
+    },
+    "vite": {
+      "beforeSeverity": "high",
+      "beforeAffectedRange": "<=6.4.3",
+      "beforeNodes": [
+        "node_modules/vite"
+      ],
+      "via": [
+        "GHSA-4w7w-66w2-5vf9",
+        "GHSA-v6wh-96g9-6wx3",
+        "GHSA-698v-4r3x-3vcv",
+        "GHSA-r825-w8mm-5pxw",
+        "GHSA-587h-7wmj-h5pm",
+        "GHSA-9jrq-w75r-8gcw",
+        "GHSA-rq7h-c2jc-7f22",
+        "GHSA-fx2h-pf6j-xcff",
+        "esbuild"
+      ],
+      "afterFinding": {
+        "severity": "high",
+        "affectedRange": "<=6.4.3",
+        "nodes": [
+          "node_modules/vite"
+        ]
+      }
+    }
+  },
+  "dependencyChainMethod": "Resolved package-lock v3 dependency, optionalDependency, peerDependency and root devDependency edges using nested node_modules resolution. Each package evidence node lists every acyclic root-to-node dependency chain; cyclic peer back-edges are excluded to avoid infinite paths. Exact parent constraints and dependency kinds are retained. Optional installation is platform-dependent; lock presence is recorded without asserting execution.",
+  "packageEvidence": {
+    "@xmldom/xmldom": {
+      "before": [
+        {
+          "node": 0,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              6,
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              2,
+              7,
+              8,
+              5
+            ],
+            [
+              0,
+              6,
+              7,
+              8,
+              5
+            ],
+            [
+              0,
+              1,
+              2,
+              9,
+              5
+            ],
+            [
+              0,
+              6,
+              9,
+              5
+            ],
+            [
+              0,
+              6,
+              10,
+              11,
+              12,
+              5
+            ],
+            [
+              0,
+              1,
+              11,
+              12,
+              5
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 0,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              6,
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              2,
+              7,
+              8,
+              5
+            ],
+            [
+              0,
+              6,
+              7,
+              8,
+              5
+            ],
+            [
+              0,
+              1,
+              2,
+              9,
+              5
+            ],
+            [
+              0,
+              6,
+              9,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    "app-builder-lib": {
+      "before": [
+        {
+          "node": 4,
+          "chains": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              6
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 4,
+          "chains": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              6
+            ]
+          ]
+        }
+      ]
+    },
+    "baseline-browser-mapping": {
+      "before": [
+        {
+          "node": 9,
+          "chains": [
+            [
+              13,
+              14,
+              15,
+              16,
+              17,
+              18
+            ],
+            [
+              19,
+              20,
+              21,
+              16,
+              17,
+              18
+            ],
+            [
+              19,
+              22,
+              23,
+              16,
+              17,
+              18
+            ],
+            [
+              19,
+              24,
+              16,
+              17,
+              18
+            ],
+            [
+              13,
+              25,
+              16,
+              17,
+              18
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 8,
+          "chains": [
+            [
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            [
+              16,
+              17,
+              18,
+              13,
+              14,
+              15
+            ],
+            [
+              16,
+              19,
+              20,
+              13,
+              14,
+              15
+            ],
+            [
+              16,
+              21,
+              13,
+              14,
+              15
+            ],
+            [
+              10,
+              22,
+              13,
+              14,
+              15
+            ]
+          ]
+        }
+      ]
+    },
+    "browserslist": {
+      "before": [
+        {
+          "node": 14,
+          "chains": [
+            [
+              13,
+              14,
+              15,
+              16,
+              17
+            ],
+            [
+              19,
+              20,
+              21,
+              16,
+              17
+            ],
+            [
+              19,
+              22,
+              23,
+              16,
+              17
+            ],
+            [
+              19,
+              24,
+              16,
+              17
+            ],
+            [
+              13,
+              25,
+              16,
+              17
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 13,
+          "chains": [
+            [
+              10,
+              11,
+              12,
+              13,
+              14
+            ],
+            [
+              16,
+              17,
+              18,
+              13,
+              14
+            ],
+            [
+              16,
+              19,
+              20,
+              13,
+              14
+            ],
+            [
+              16,
+              21,
+              13,
+              14
+            ],
+            [
+              10,
+              22,
+              13,
+              14
+            ]
+          ]
+        }
+      ]
+    },
+    "builder-util-runtime": {
+      "before": [
+        {
+          "node": 18,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              26
+            ],
+            [
+              0,
+              6,
+              26
+            ],
+            [
+              0,
+              1,
+              2,
+              27,
+              28
+            ],
+            [
+              0,
+              6,
+              27,
+              28
+            ],
+            [
+              0,
+              6,
+              10,
+              29,
+              28
+            ],
+            [
+              0,
+              1,
+              29,
+              28
+            ],
+            [
+              0,
+              30,
+              28
+            ],
+            [
+              0,
+              1,
+              2,
+              31,
+              32,
+              28
+            ],
+            [
+              0,
+              6,
+              31,
+              32,
+              28
+            ],
+            [
+              0,
+              1,
+              2,
+              33,
+              34,
+              28
+            ],
+            [
+              0,
+              6,
+              33,
+              34,
+              28
+            ],
+            [
+              0,
+              35
+            ],
+            [
+              0,
+              1,
+              2,
+              33,
+              36
+            ],
+            [
+              0,
+              6,
+              33,
+              36
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 17,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              23
+            ],
+            [
+              0,
+              6,
+              23
+            ],
+            [
+              0,
+              1,
+              2,
+              24,
+              25
+            ],
+            [
+              0,
+              6,
+              24,
+              25
+            ],
+            [
+              0,
+              6,
+              26,
+              27,
+              25
+            ],
+            [
+              0,
+              1,
+              27,
+              25
+            ],
+            [
+              0,
+              28,
+              25
+            ],
+            [
+              0,
+              1,
+              2,
+              29,
+              30,
+              25
+            ],
+            [
+              0,
+              6,
+              29,
+              30,
+              25
+            ],
+            [
+              0,
+              1,
+              2,
+              31,
+              32,
+              25
+            ],
+            [
+              0,
+              6,
+              31,
+              32,
+              25
+            ],
+            [
+              0,
+              33
+            ],
+            [
+              0,
+              1,
+              2,
+              31,
+              34
+            ],
+            [
+              0,
+              6,
+              31,
+              34
+            ]
+          ]
+        }
+      ]
+    },
+    "electron": {
+      "before": [
+        {
+          "node": 22,
+          "chains": [
+            [
+              37
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 21,
+          "chains": [
+            [
+              35
+            ]
+          ]
+        }
+      ]
+    },
+    "esbuild": {
+      "before": [
+        {
+          "node": 23,
+          "chains": [
+            [
+              13,
+              38
+            ],
+            [
+              39,
+              40
+            ],
+            [
+              19,
+              41,
+              40
+            ],
+            [
+              13,
+              42,
+              40
+            ]
+          ]
+        },
+        {
+          "node": 25,
+          "chains": [
+            [
+              43,
+              44
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 22,
+          "chains": [
+            [
+              10,
+              36
+            ],
+            [
+              37,
+              38
+            ],
+            [
+              16,
+              39,
+              38
+            ],
+            [
+              10,
+              40,
+              38
+            ]
+          ]
+        },
+        {
+          "node": 24,
+          "chains": [
+            [
+              41,
+              42
+            ]
+          ]
+        }
+      ]
+    },
+    "http-cache-semantics": {
+      "before": [
+        {
+          "node": 27,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              45,
+              46,
+              47,
+              48
+            ],
+            [
+              0,
+              6,
+              45,
+              46,
+              47,
+              48
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 26,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              43,
+              44,
+              45,
+              46
+            ],
+            [
+              0,
+              6,
+              43,
+              44,
+              45,
+              46
+            ]
+          ]
+        }
+      ]
+    },
+    "js-yaml": {
+      "before": [
+        {
+          "node": 31,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              49
+            ],
+            [
+              0,
+              6,
+              49
+            ],
+            [
+              0,
+              1,
+              2,
+              27,
+              50
+            ],
+            [
+              0,
+              6,
+              27,
+              50
+            ],
+            [
+              0,
+              6,
+              10,
+              29,
+              50
+            ],
+            [
+              0,
+              1,
+              29,
+              50
+            ],
+            [
+              0,
+              30,
+              50
+            ],
+            [
+              0,
+              1,
+              2,
+              31,
+              32,
+              50
+            ],
+            [
+              0,
+              6,
+              31,
+              32,
+              50
+            ],
+            [
+              0,
+              1,
+              2,
+              33,
+              34,
+              50
+            ],
+            [
+              0,
+              6,
+              33,
+              34,
+              50
+            ],
+            [
+              0,
+              6,
+              10,
+              51
+            ],
+            [
+              0,
+              1,
+              51
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 30,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              47
+            ],
+            [
+              0,
+              6,
+              47
+            ],
+            [
+              0,
+              1,
+              2,
+              24,
+              48
+            ],
+            [
+              0,
+              6,
+              24,
+              48
+            ],
+            [
+              0,
+              6,
+              26,
+              27,
+              48
+            ],
+            [
+              0,
+              1,
+              27,
+              48
+            ],
+            [
+              0,
+              28,
+              48
+            ],
+            [
+              0,
+              1,
+              2,
+              29,
+              30,
+              48
+            ],
+            [
+              0,
+              6,
+              29,
+              30,
+              48
+            ],
+            [
+              0,
+              1,
+              2,
+              31,
+              32,
+              48
+            ],
+            [
+              0,
+              6,
+              31,
+              32,
+              48
+            ],
+            [
+              0,
+              6,
+              26,
+              49
+            ],
+            [
+              0,
+              1,
+              49
+            ]
+          ]
+        }
+      ]
+    },
+    "nanoid": {
+      "before": [
+        {
+          "node": 32,
+          "chains": [
+            [
+              39,
+              52,
+              53
+            ],
+            [
+              19,
+              41,
+              52,
+              53
+            ],
+            [
+              13,
+              42,
+              52,
+              53
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 31,
+          "chains": [
+            [
+              37,
+              50,
+              51
+            ],
+            [
+              16,
+              39,
+              50,
+              51
+            ],
+            [
+              10,
+              40,
+              50,
+              51
+            ]
+          ]
+        }
+      ]
+    },
+    "postcss": {
+      "before": [
+        {
+          "node": 33,
+          "chains": [
+            [
+              39,
+              52
+            ],
+            [
+              19,
+              41,
+              52
+            ],
+            [
+              13,
+              42,
+              52
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 32,
+          "chains": [
+            [
+              37,
+              50
+            ],
+            [
+              16,
+              39,
+              50
+            ],
+            [
+              10,
+              40,
+              50
+            ]
+          ]
+        }
+      ]
+    },
+    "source-map-js": {
+      "before": [
+        {
+          "node": 34,
+          "chains": [
+            [
+              39,
+              52,
+              54
+            ],
+            [
+              19,
+              41,
+              52,
+              54
+            ],
+            [
+              13,
+              42,
+              52,
+              54
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 33,
+          "chains": [
+            [
+              37,
+              50,
+              52
+            ],
+            [
+              16,
+              39,
+              50,
+              52
+            ],
+            [
+              10,
+              40,
+              50,
+              52
+            ]
+          ]
+        }
+      ]
+    },
+    "tar": {
+      "before": [
+        {
+          "node": 35,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              55
+            ],
+            [
+              0,
+              6,
+              55
+            ],
+            [
+              0,
+              1,
+              2,
+              56,
+              57,
+              58
+            ],
+            [
+              0,
+              6,
+              56,
+              57,
+              58
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 34,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              53
+            ],
+            [
+              0,
+              6,
+              53
+            ],
+            [
+              0,
+              1,
+              2,
+              54,
+              55,
+              56
+            ],
+            [
+              0,
+              6,
+              54,
+              55,
+              56
+            ]
+          ]
+        }
+      ]
+    },
+    "undici": {
+      "before": [
+        {
+          "node": 38,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              56,
+              57,
+              59
+            ],
+            [
+              0,
+              6,
+              56,
+              57,
+              59
+            ]
+          ]
+        },
+        {
+          "node": 39,
+          "chains": [
+            [
+              37,
+              60,
+              61
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 37,
+          "chains": [
+            [
+              0,
+              1,
+              2,
+              54,
+              55,
+              57
+            ],
+            [
+              0,
+              6,
+              54,
+              55,
+              57
+            ]
+          ]
+        },
+        {
+          "node": 38,
+          "chains": [
+            [
+              35,
+              58,
+              59
+            ]
+          ]
+        }
+      ]
+    },
+    "vite": {
+      "before": [
+        {
+          "node": 24,
+          "chains": [
+            [
+              39
+            ],
+            [
+              19,
+              41
+            ],
+            [
+              13,
+              42
+            ]
+          ]
+        }
+      ],
+      "after": [
+        {
+          "node": 23,
+          "chains": [
+            [
+              37
+            ],
+            [
+              16,
+              39
+            ],
+            [
+              10,
+              40
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "advisories": [
+    {
+      "ghsa": "GHSA-27p8-2357-5qqv",
+      "url": "https://github.com/advisories/GHSA-27p8-2357-5qqv",
+      "title": "xmldom: DocType `name` Injection Bypasses requireWellFormed",
+      "package": "@xmldom/xmldom",
+      "findings": [
+        {
+          "npmSource": 1193700,
+          "severity": "high",
+          "affectedRange": ">=0.7.0 <=0.8.14",
+          "affectedBeforeNodes": [
+            0
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "@xmldom/xmldom",
+      "applicabilityProfile": "@xmldom/xmldom"
+    },
+    {
+      "ghsa": "GHSA-4w3w-2rp5-g8jm",
+      "url": "https://github.com/advisories/GHSA-4w3w-2rp5-g8jm",
+      "title": "xmldom: Attribute name injection via setAttribute() bypasses requireWellFormed",
+      "package": "@xmldom/xmldom",
+      "findings": [
+        {
+          "npmSource": 1193692,
+          "severity": "high",
+          "affectedRange": ">=0.7.0 <=0.8.13",
+          "affectedBeforeNodes": [
+            0
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "@xmldom/xmldom",
+      "applicabilityProfile": "@xmldom/xmldom"
+    },
+    {
+      "ghsa": "GHSA-6gmq-8vp8-gcm6",
+      "url": "https://github.com/advisories/GHSA-6gmq-8vp8-gcm6",
+      "title": "xmldom: XML fragment injection via invalid EntityReference.nodeName during requireWellFormed serialization",
+      "package": "@xmldom/xmldom",
+      "findings": [
+        {
+          "npmSource": 1158518,
+          "severity": "moderate",
+          "affectedRange": ">=0.7.0 <=0.8.14",
+          "affectedBeforeNodes": [
+            0
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "@xmldom/xmldom",
+      "applicabilityProfile": "@xmldom/xmldom"
+    },
+    {
+      "ghsa": "GHSA-6h8r-xr42-gp59",
+      "url": "https://github.com/advisories/GHSA-6h8r-xr42-gp59",
+      "title": "xmldom: Parser silently accepts a not-well-formed end tag whose name is followed by a line break and trailing content",
+      "package": "@xmldom/xmldom",
+      "findings": [
+        {
+          "npmSource": 1193705,
+          "severity": "moderate",
+          "affectedRange": ">=0.7.0 <=0.8.14",
+          "affectedBeforeNodes": [
+            0
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "@xmldom/xmldom",
+      "applicabilityProfile": "@xmldom/xmldom"
+    },
+    {
+      "ghsa": "GHSA-8344-3jmq-59r6",
+      "url": "https://github.com/advisories/GHSA-8344-3jmq-59r6",
+      "title": "xmldom: Quadratic-time attribute deduplication",
+      "package": "@xmldom/xmldom",
+      "findings": [
+        {
+          "npmSource": 1193708,
+          "severity": "high",
+          "affectedRange": ">=0.7.0 <=0.8.14",
+          "affectedBeforeNodes": [
+            0
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "@xmldom/xmldom",
+      "applicabilityProfile": "@xmldom/xmldom"
+    },
+    {
+      "ghsa": "GHSA-93r5-fhx6-vmg9",
+      "url": "https://github.com/advisories/GHSA-93r5-fhx6-vmg9",
+      "title": "xmldom: Quadratic-time parsing via the malformed-input recovery path — `parseElementStartPart` re-scan and `normalize()` adjacent-text merge",
+      "package": "@xmldom/xmldom",
+      "findings": [
+        {
+          "npmSource": 1193715,
+          "severity": "high",
+          "affectedRange": ">=0.7.0 <=0.8.14",
+          "affectedBeforeNodes": [
+            0
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "@xmldom/xmldom",
+      "applicabilityProfile": "@xmldom/xmldom"
+    },
+    {
+      "ghsa": "GHSA-965w-775f-mr7g",
+      "url": "https://github.com/advisories/GHSA-965w-775f-mr7g",
+      "title": "xmldom: Quadratic-memory consumption",
+      "package": "@xmldom/xmldom",
+      "findings": [
+        {
+          "npmSource": 1193712,
+          "severity": "high",
+          "affectedRange": ">=0.7.0 <=0.8.14",
+          "affectedBeforeNodes": [
+            0
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "@xmldom/xmldom",
+      "applicabilityProfile": "@xmldom/xmldom"
+    },
+    {
+      "ghsa": "GHSA-c7q8-3ch8-vqpv",
+      "url": "https://github.com/advisories/GHSA-c7q8-3ch8-vqpv",
+      "title": "xmldom: Processing Instruction Target Injection Bypasses requireWellFormed",
+      "package": "@xmldom/xmldom",
+      "findings": [
+        {
+          "npmSource": 1193696,
+          "severity": "high",
+          "affectedRange": ">=0.7.0 <=0.8.14",
+          "affectedBeforeNodes": [
+            0
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "@xmldom/xmldom",
+      "applicabilityProfile": "@xmldom/xmldom"
+    },
+    {
+      "ghsa": "GHSA-w2rr-34g9-rvrj",
+      "url": "https://github.com/advisories/GHSA-w2rr-34g9-rvrj",
+      "title": "xmldom: Element name injection via createElement() bypasses requireWellFormed",
+      "package": "@xmldom/xmldom",
+      "findings": [
+        {
+          "npmSource": 1193689,
+          "severity": "high",
+          "affectedRange": ">=0.7.0 <=0.8.13",
+          "affectedBeforeNodes": [
+            0
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "@xmldom/xmldom",
+      "applicabilityProfile": "@xmldom/xmldom"
+    },
+    {
+      "ghsa": "GHSA-x4fp-j954-r2f4",
+      "url": "https://github.com/advisories/GHSA-x4fp-j954-r2f4",
+      "title": "xmldom: End-tag Whitespace-Trim Regex ReDoS — quadratic backtracking in the 0.8.x end-tag parser",
+      "package": "@xmldom/xmldom",
+      "findings": [
+        {
+          "npmSource": 1193709,
+          "severity": "high",
+          "affectedRange": ">=0.7.0 <=0.8.14",
+          "affectedBeforeNodes": [
+            0
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "@xmldom/xmldom",
+      "applicabilityProfile": "@xmldom/xmldom"
+    },
+    {
+      "ghsa": "GHSA-7g7r-gx96-252g",
+      "url": "https://github.com/advisories/GHSA-7g7r-gx96-252g",
+      "title": "electron-updater: Uncontrolled search path elements within `AppImage` built by `app-builder-lib`",
+      "package": "app-builder-lib",
+      "findings": [
+        {
+          "npmSource": 1124279,
+          "severity": "high",
+          "affectedRange": "<26.15.0",
+          "affectedBeforeNodes": [
+            4
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "app-builder-lib",
+      "applicabilityProfile": "app-builder-lib"
+    },
+    {
+      "ghsa": "GHSA-w5vr-8v7q-w6rv",
+      "url": "https://github.com/advisories/GHSA-w5vr-8v7q-w6rv",
+      "title": "baseline-browser-mapping process termination on invalid input causes denial of service",
+      "package": "baseline-browser-mapping",
+      "findings": [
+        {
+          "npmSource": 1193686,
+          "severity": "moderate",
+          "affectedRange": ">=2.0.0 <2.11.0",
+          "affectedBeforeNodes": [
+            9
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "baseline-browser-mapping",
+      "applicabilityProfile": "baseline-browser-mapping"
+    },
+    {
+      "ghsa": "GHSA-73wf-gq98-2v4g",
+      "url": "https://github.com/advisories/GHSA-73wf-gq98-2v4g",
+      "title": "Browserslist: Uncaught crash / prototype write via untrusted browserslist-stats.json custom stats (normalizeStats)",
+      "package": "browserslist",
+      "findings": [
+        {
+          "npmSource": 1153172,
+          "severity": "high",
+          "affectedRange": "<=4.28.6",
+          "affectedBeforeNodes": [
+            14
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "browserslist",
+      "applicabilityProfile": "browserslist"
+    },
+    {
+      "ghsa": "GHSA-c83g-rgw3-j3cx",
+      "url": "https://github.com/advisories/GHSA-c83g-rgw3-j3cx",
+      "title": "Browserslist: Unbounded memory growth (no cache eviction) via distinct query results, leading to eventual OOM",
+      "package": "browserslist",
+      "findings": [
+        {
+          "npmSource": 1153171,
+          "severity": "high",
+          "affectedRange": "<=4.28.6",
+          "affectedBeforeNodes": [
+            14
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "browserslist",
+      "applicabilityProfile": "browserslist"
+    },
+    {
+      "ghsa": "GHSA-p2f4-r6v6-j797",
+      "url": "https://github.com/advisories/GHSA-p2f4-r6v6-j797",
+      "title": "electron-updater: Cross-origin redirect leaks `PRIVATE-TOKEN` and mixed-case `Authorization` credentials in `builder-util-runtime`",
+      "package": "builder-util-runtime",
+      "findings": [
+        {
+          "npmSource": 1124278,
+          "severity": "high",
+          "affectedRange": "<9.7.0",
+          "affectedBeforeNodes": [
+            18
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "builder-util-runtime",
+      "applicabilityProfile": "builder-util-runtime"
+    },
+    {
+      "ghsa": "GHSA-2p8c-gr87-2676",
+      "url": "https://github.com/advisories/GHSA-2p8c-gr87-2676",
+      "title": "Electron: SameSite cookie restrictions are not applied to windows opened from links",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1242836,
+          "severity": "moderate",
+          "affectedRange": ">=43.0.0-alpha.1 <43.7.0",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "electron"
+    },
+    {
+      "ghsa": "GHSA-3qxv-5xgr-q7w9",
+      "url": "https://github.com/advisories/GHSA-3qxv-5xgr-q7w9",
+      "title": "Electron: Frame subscription trusts GPU-supplied frame geometry",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1242849,
+          "severity": "low",
+          "affectedRange": ">=43.0.0-alpha.1 <43.7.3",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "electron"
+    },
+    {
+      "ghsa": "GHSA-98mx-cjp9-gchm",
+      "url": "https://github.com/advisories/GHSA-98mx-cjp9-gchm",
+      "title": "Electron: Extension tabs.query returns tab URLs and titles without the tabs permission",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1242844,
+          "severity": "low",
+          "affectedRange": ">=43.0.0-alpha.1 <43.5.1",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "electron"
+    },
+    {
+      "ghsa": "GHSA-997q-gvvc-jwmx",
+      "url": "https://github.com/advisories/GHSA-997q-gvvc-jwmx",
+      "title": "Electron: openExternal permission requests can be attributed to the wrong origin",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1242857,
+          "severity": "moderate",
+          "affectedRange": ">=43.0.0-alpha.1 <43.7.0",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "electron"
+    },
+    {
+      "ghsa": "GHSA-9qh4-3jw8-366w",
+      "url": "https://github.com/advisories/GHSA-9qh4-3jw8-366w",
+      "title": "Electron: <webview> can enable Node.js integration in Web Workers despite embedder restrictions",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1241655,
+          "severity": "high",
+          "affectedRange": ">=43.0.0-alpha.1 <43.4.1",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "GHSA-9qh4-3jw8-366w"
+    },
+    {
+      "ghsa": "GHSA-fw47-9c62-h3vw",
+      "url": "https://github.com/advisories/GHSA-fw47-9c62-h3vw",
+      "title": "Electron: HID and USB permission checks can be attributed to the wrong origin",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1242757,
+          "severity": "moderate",
+          "affectedRange": ">=43.0.0-alpha.1 <43.7.0",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "electron"
+    },
+    {
+      "ghsa": "GHSA-gr2m-v5gq-v685",
+      "url": "https://github.com/advisories/GHSA-gr2m-v5gq-v685",
+      "title": "Electron: Windows opened from a sandboxed top-level document do not inherit its sandbox restrictions",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1239975,
+          "severity": "high",
+          "affectedRange": ">=43.0.0-alpha.1 <43.4.1",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "electron"
+    },
+    {
+      "ghsa": "GHSA-h3v5-h239-pg29",
+      "url": "https://github.com/advisories/GHSA-h3v5-h239-pg29",
+      "title": "Electron: Off-screen rendering on macOS trusts GPU-supplied frame geometry",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1242853,
+          "severity": "low",
+          "affectedRange": ">=43.0.0-alpha.1 <43.7.3",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "GHSA-h3v5-h239-pg29"
+    },
+    {
+      "ghsa": "GHSA-j84w-jfhq-vhvj",
+      "url": "https://github.com/advisories/GHSA-j84w-jfhq-vhvj",
+      "title": "Electron: File and HTTP protocol handlers allow cross-origin reads without corsEnabled",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1239979,
+          "severity": "high",
+          "affectedRange": ">=43.0.0-alpha.1 <43.4.1",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "electron"
+    },
+    {
+      "ghsa": "GHSA-jr5w-w6x2-84p9",
+      "url": "https://github.com/advisories/GHSA-jr5w-w6x2-84p9",
+      "title": "Electron: Mitigation for compromised eMudhra intermediate certificates",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1243070,
+          "severity": "high",
+          "affectedRange": ">=43.0.0-alpha.1 <43.8.1",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "GHSA-jr5w-w6x2-84p9"
+    },
+    {
+      "ghsa": "GHSA-qmv3-fv6v-rmhq",
+      "url": "https://github.com/advisories/GHSA-qmv3-fv6v-rmhq",
+      "title": "Electron: Sandboxed preload code cache can be poisoned by a compromised renderer",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1239987,
+          "severity": "high",
+          "affectedRange": ">=43.0.0-beta.1 <43.5.0",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "electron"
+    },
+    {
+      "ghsa": "GHSA-x562-297c-g43g",
+      "url": "https://github.com/advisories/GHSA-x562-297c-g43g",
+      "title": "Electron: Pointer lock permission requests can be attributed to the wrong frame",
+      "package": "electron",
+      "findings": [
+        {
+          "npmSource": 1242840,
+          "severity": "moderate",
+          "affectedRange": ">=43.0.0-alpha.1 <43.7.6",
+          "affectedBeforeNodes": [
+            22
+          ],
+          "affectedAfterNodes": [
+            21
+          ]
+        }
+      ],
+      "disposition": "pending EXA-66",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "electron",
+      "applicabilityProfile": "electron"
+    },
+    {
+      "ghsa": "GHSA-67mh-4wv8-2f99",
+      "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
+      "title": "esbuild enables any website to send any requests to the development server and read the response",
+      "package": "esbuild",
+      "findings": [
+        {
+          "npmSource": 1102341,
+          "severity": "moderate",
+          "affectedRange": "<=0.24.2",
+          "affectedBeforeNodes": [
+            23
+          ],
+          "affectedAfterNodes": [
+            22
+          ]
+        }
+      ],
+      "disposition": "pending broader Vite migration",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "esbuild",
+      "applicabilityProfile": "esbuild"
+    },
+    {
+      "ghsa": "GHSA-ch52-4w7c-c8xp",
+      "url": "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+      "title": "http-cache-semantics max-stale handling can disclose cross-user cached responses",
+      "package": "http-cache-semantics",
+      "findings": [
+        {
+          "npmSource": 1240991,
+          "severity": "high",
+          "affectedRange": "<=4.2.0",
+          "affectedBeforeNodes": [
+            27
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "audit-range removal; upstream-disputed report",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "http-cache-semantics",
+      "applicabilityProfile": "http-cache-semantics",
+      "reviewDisposition": {
+        "reviewedOn": "2026-10-28",
+        "auditRangeRemoval": "Captured http-cache-semantics 4.2.0 -> 4.3.0 leaves the published <=4.2.0 range; the dated after audit omits this GHSA.",
+        "codeLevelSecurityFixVerified": false,
+        "bugPocketExploitDemonstrated": false,
+        "upstreamReportDisputed": true,
+        "officialPatchedVersionListed": "None (official advisory inspected 2026-10-28)",
+        "sources": [
+          "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+          "https://github.com/kornelski/http-cache-semantics/issues/56#issuecomment-5975759591"
+        ],
+        "externalReviewRecord": "https://linear.app/examen-qa/issue/EXA-68/align-windows-ci-node-support-and-remediate-build-tool-advisories",
+        "reproductionAttribution": "The external reviewer reported the same max-stale behavior in 4.2.0 and 4.3.0. This documentation follow-up did not rerun that reproduction.",
+        "externalReviewCommentId": "2e0d6e4e-6bce-4cd2-b2e6-0a109b5f2638"
+      }
+    },
+    {
+      "ghsa": "GHSA-2883-xcg3-v3hh",
+      "url": "https://github.com/advisories/GHSA-2883-xcg3-v3hh",
+      "title": "js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources",
+      "package": "js-yaml",
+      "findings": [
+        {
+          "npmSource": 1193727,
+          "severity": "high",
+          "affectedRange": ">=4.0.0 <4.3.2",
+          "affectedBeforeNodes": [
+            31
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "js-yaml",
+      "applicabilityProfile": "js-yaml"
+    },
+    {
+      "ghsa": "GHSA-5p4m-2wfm-xmqj",
+      "url": "https://github.com/advisories/GHSA-5p4m-2wfm-xmqj",
+      "title": "JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) — CVE-2026-59870 fix not backported",
+      "package": "js-yaml",
+      "findings": [
+        {
+          "npmSource": 1138115,
+          "severity": "high",
+          "affectedRange": ">=4.0.0 <4.3.1",
+          "affectedBeforeNodes": [
+            31
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "js-yaml",
+      "applicabilityProfile": "js-yaml"
+    },
+    {
+      "ghsa": "GHSA-2v37-7h3g-55p8",
+      "url": "https://github.com/advisories/GHSA-2v37-7h3g-55p8",
+      "title": "nanoid: custom generators can loop indefinitely when size is zero",
+      "package": "nanoid",
+      "findings": [
+        {
+          "npmSource": 1139427,
+          "severity": "high",
+          "affectedRange": "<3.3.18",
+          "affectedBeforeNodes": [
+            32
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "nanoid",
+      "applicabilityProfile": "nanoid"
+    },
+    {
+      "ghsa": "GHSA-fxqj-rqcc-2cmp",
+      "url": "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+      "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+      "package": "postcss",
+      "findings": [
+        {
+          "npmSource": 1130709,
+          "severity": "moderate",
+          "affectedRange": "<=8.5.22",
+          "affectedBeforeNodes": [
+            33
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "postcss",
+      "applicabilityProfile": "postcss"
+    },
+    {
+      "ghsa": "GHSA-68fv-2mgg-jv7q",
+      "url": "https://github.com/advisories/GHSA-68fv-2mgg-jv7q",
+      "title": "source-map-js allows event-loop denial of service through indexed source-map section offsets",
+      "package": "source-map-js",
+      "findings": [
+        {
+          "npmSource": 1241209,
+          "severity": "high",
+          "affectedRange": ">=1.0.0 <1.2.2",
+          "affectedBeforeNodes": [
+            34
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "source-map-js",
+      "applicabilityProfile": "source-map-js"
+    },
+    {
+      "ghsa": "GHSA-r292-9mhp-454m",
+      "url": "https://github.com/advisories/GHSA-r292-9mhp-454m",
+      "title": "node-tar: Uncontrolled recursion in mapHas/filesFilter allows uncatchable stack-overflow DoS via crafted long-path tar with member selection",
+      "package": "tar",
+      "findings": [
+        {
+          "npmSource": 1145647,
+          "severity": "high",
+          "affectedRange": "<=7.5.20",
+          "affectedBeforeNodes": [
+            35
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "tar",
+      "applicabilityProfile": "tar"
+    },
+    {
+      "ghsa": "GHSA-2gqq-gqf2-x968",
+      "url": "https://github.com/advisories/GHSA-2gqq-gqf2-x968",
+      "title": "undici vulnerable to response truncation via oversized chunked responses in the dump interceptor",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1240048,
+          "severity": "low",
+          "affectedRange": ">=7.1.0 <7.29.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-2jfj-6hjv-fm6j",
+      "url": "https://github.com/advisories/GHSA-2jfj-6hjv-fm6j",
+      "title": "undici vulnerable to cross-user cookie disclosure via Set-Cookie caching in shared caches",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1240046,
+          "severity": "moderate",
+          "affectedRange": ">=7.0.0 <7.29.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-2m5v-pch6-74hx",
+      "url": "https://github.com/advisories/GHSA-2m5v-pch6-74hx",
+      "title": "undici vulnerable to TLS certificate validation bypass via dropped tls options in Agent",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1243475,
+          "severity": "high",
+          "affectedRange": ">=7.0.0 <7.30.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1243476,
+          "severity": "high",
+          "affectedRange": ">=4.0.0 <6.29.1",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-3wwx-pv8p-q78v",
+      "url": "https://github.com/advisories/GHSA-3wwx-pv8p-q78v",
+      "title": "undici vulnerable to Denial of Service via unhandled error in WebSocket permessage-deflate decompression",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1239933,
+          "severity": "moderate",
+          "affectedRange": ">=7.28.0 <7.29.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1239934,
+          "severity": "moderate",
+          "affectedRange": ">=6.25.0 <6.28.1",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-3xpg-4rpp-hhhm",
+      "url": "https://github.com/advisories/GHSA-3xpg-4rpp-hhhm",
+      "title": "undici vulnerable to Denial of Service via unbounded decompression of compressed responses",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1240044,
+          "severity": "moderate",
+          "affectedRange": ">=7.15.0 <7.29.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-4cwx-7wf7-3272",
+      "url": "https://github.com/advisories/GHSA-4cwx-7wf7-3272",
+      "title": "undici vulnerable to cross-user information disclosure and parse-time crash via degenerate private cache directives",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1130718,
+          "severity": "high",
+          "affectedRange": ">=7.0.0 <7.29.0",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-4qv8-2p9j-2685",
+      "url": "https://github.com/advisories/GHSA-4qv8-2p9j-2685",
+      "title": "undici vulnerable to Denial of Service via unbounded memory in the EventSource parser",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1243078,
+          "severity": "moderate",
+          "affectedRange": ">=7.0.0 <7.30.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1243079,
+          "severity": "moderate",
+          "affectedRange": ">=6.5.0 <6.29.1",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-4w7w-5xrc-9h26",
+      "url": "https://github.com/advisories/GHSA-4w7w-5xrc-9h26",
+      "title": "undici vulnerable to cache poisoning and cross-user disclosure via cross-origin redirects",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1243473,
+          "severity": "high",
+          "affectedRange": ">=7.0.0 <7.30.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-55wc-3pg8-jfw6",
+      "url": "https://github.com/advisories/GHSA-55wc-3pg8-jfw6",
+      "title": "undici vulnerable to Denial of Service via unhandled exception in the decompress interceptor",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1243484,
+          "severity": "moderate",
+          "affectedRange": ">=7.15.0 <7.30.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-8436-99hf-9mmv",
+      "url": "https://github.com/advisories/GHSA-8436-99hf-9mmv",
+      "title": "undici vulnerable to caching and replay of unsafe HTTP method responses",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1240052,
+          "severity": "low",
+          "affectedRange": ">=7.0.0 <7.29.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-8xcm-r25x-g524",
+      "url": "https://github.com/advisories/GHSA-8xcm-r25x-g524",
+      "title": "undici vulnerable to downstream response desynchronization via retry interceptor",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1130715,
+          "severity": "moderate",
+          "affectedRange": ">=7.0.0 <7.29.0",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1130716,
+          "severity": "moderate",
+          "affectedRange": "<6.28.0",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-9fm3-97px-rjf6",
+      "url": "https://github.com/advisories/GHSA-9fm3-97px-rjf6",
+      "title": "undici WebSocket client vulnerable to Denial of Service via unbounded automatic PONG buffering",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1243481,
+          "severity": "moderate",
+          "affectedRange": ">=7.0.0 <7.30.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1243482,
+          "severity": "moderate",
+          "affectedRange": ">=5.15.0 <6.29.1",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-f72v-6w45-q472",
+      "url": "https://github.com/advisories/GHSA-f72v-6w45-q472",
+      "title": "undici vulnerable to Subresource Integrity bypass via non-lowercase algorithm tokens",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1243081,
+          "severity": "moderate",
+          "affectedRange": ">=7.15.0 <7.30.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-jr45-8vmc-qm54",
+      "url": "https://github.com/advisories/GHSA-jr45-8vmc-qm54",
+      "title": "undici vulnerable to cross-user information disclosure via whitespace around equals in Cache-Control directives",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1130729,
+          "severity": "moderate",
+          "affectedRange": ">=7.0.0 <7.29.0",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-m8rv-5g2x-5cg5",
+      "url": "https://github.com/advisories/GHSA-m8rv-5g2x-5cg5",
+      "title": "undici vulnerable to CRLF Injection via blob-like body 'type' property",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1130726,
+          "severity": "moderate",
+          "affectedRange": ">=7.0.0 <7.29.0",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1130727,
+          "severity": "moderate",
+          "affectedRange": "<6.28.0",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-pmjh-fq2x-6v4x",
+      "url": "https://github.com/advisories/GHSA-pmjh-fq2x-6v4x",
+      "title": "undici vulnerable to Denial of Service via orphaned RetryHandler response body",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1240036,
+          "severity": "moderate",
+          "affectedRange": ">=7.11.0 <7.29.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-qrxm-fqhp-jwvm",
+      "url": "https://github.com/advisories/GHSA-qrxm-fqhp-jwvm",
+      "title": "undici vulnerable to Denial of Service via TLS 1.2 certificate-changing renegotiation",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1243478,
+          "severity": "high",
+          "affectedRange": ">=7.0.0 <7.30.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1243479,
+          "severity": "high",
+          "affectedRange": ">=4.2.1 <6.29.1",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-r53p-7pc4-xj5r",
+      "url": "https://github.com/advisories/GHSA-r53p-7pc4-xj5r",
+      "title": "undici vulnerable to downstream response splitting via retry interceptor",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1240038,
+          "severity": "low",
+          "affectedRange": ">=7.0.0 <7.29.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1240039,
+          "severity": "low",
+          "affectedRange": "<6.28.1",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-rfgv-xxqx-mfg5",
+      "url": "https://github.com/advisories/GHSA-rfgv-xxqx-mfg5",
+      "title": "undici vulnerable to Denial of Service via unrequested WebSocket subprotocol",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1240041,
+          "severity": "high",
+          "affectedRange": ">=7.0.0 <7.29.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1240042,
+          "severity": "high",
+          "affectedRange": ">=6.7.0 <6.28.1",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-rx4f-c7p8-82vq",
+      "url": "https://github.com/advisories/GHSA-rx4f-c7p8-82vq",
+      "title": "undici vulnerable to Denial of Service via WebSocketStream unclean close",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1240055,
+          "severity": "moderate",
+          "affectedRange": ">=7.0.0 <7.29.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-v3r7-h72x-cjcm",
+      "url": "https://github.com/advisories/GHSA-v3r7-h72x-cjcm",
+      "title": "undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1130731,
+          "severity": "moderate",
+          "affectedRange": ">=7.0.0 <7.29.0",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1130732,
+          "severity": "moderate",
+          "affectedRange": "<6.28.0",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-w293-vg96-wgc3",
+      "url": "https://github.com/advisories/GHSA-w293-vg96-wgc3",
+      "title": "undici vulnerable to TLS certificate validation bypass via dropped connect options in BalancedPool",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1240050,
+          "severity": "high",
+          "affectedRange": ">=7.24.1 <7.29.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-xjj6-f33q-929c",
+      "url": "https://github.com/advisories/GHSA-xjj6-f33q-929c",
+      "title": "undici vulnerable to Denial of Service via unhandled error on excessive content-encodings",
+      "package": "undici",
+      "findings": [
+        {
+          "npmSource": 1243113,
+          "severity": "high",
+          "affectedRange": ">=7.18.0 <7.30.1",
+          "affectedBeforeNodes": [
+            39
+          ],
+          "affectedAfterNodes": []
+        },
+        {
+          "npmSource": 1243114,
+          "severity": "high",
+          "affectedRange": ">=6.23.0 <6.29.1",
+          "affectedBeforeNodes": [
+            38
+          ],
+          "affectedAfterNodes": []
+        }
+      ],
+      "disposition": "fixed",
+      "remainingInAfterAudit": false,
+      "dependencyEvidenceKey": "undici",
+      "applicabilityProfile": "undici"
+    },
+    {
+      "ghsa": "GHSA-4w7w-66w2-5vf9",
+      "url": "https://github.com/advisories/GHSA-4w7w-66w2-5vf9",
+      "title": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling",
+      "package": "vite",
+      "findings": [
+        {
+          "npmSource": 1116229,
+          "severity": "moderate",
+          "affectedRange": "<=6.4.1",
+          "affectedBeforeNodes": [
+            24
+          ],
+          "affectedAfterNodes": [
+            23
+          ]
+        }
+      ],
+      "disposition": "pending broader Vite migration",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "vite",
+      "applicabilityProfile": "vite"
+    },
+    {
+      "ghsa": "GHSA-587h-7wmj-h5pm",
+      "url": "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
+      "title": "launch-editor: `fs.existsSync()` existence check can be bypassed on Windows",
+      "package": "vite",
+      "findings": [
+        {
+          "npmSource": 1242658,
+          "severity": "high",
+          "affectedRange": "<=6.4.3",
+          "affectedBeforeNodes": [
+            24
+          ],
+          "affectedAfterNodes": [
+            23
+          ]
+        }
+      ],
+      "disposition": "pending broader Vite migration",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "vite",
+      "applicabilityProfile": "GHSA-587h-7wmj-h5pm"
+    },
+    {
+      "ghsa": "GHSA-698v-4r3x-3vcv",
+      "url": "https://github.com/advisories/GHSA-698v-4r3x-3vcv",
+      "title": "launch-editor: escapeCmdArgs() omits % escaping on Windows",
+      "package": "vite",
+      "findings": [
+        {
+          "npmSource": 1242622,
+          "severity": "moderate",
+          "affectedRange": "<=6.4.3",
+          "affectedBeforeNodes": [
+            24
+          ],
+          "affectedAfterNodes": [
+            23
+          ]
+        }
+      ],
+      "disposition": "pending broader Vite migration",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "vite",
+      "applicabilityProfile": "GHSA-698v-4r3x-3vcv"
+    },
+    {
+      "ghsa": "GHSA-9jrq-w75r-8gcw",
+      "url": "https://github.com/advisories/GHSA-9jrq-w75r-8gcw",
+      "title": "Vite: Cross origin script execution through Vite custom middleware",
+      "package": "vite",
+      "findings": [
+        {
+          "npmSource": 1242724,
+          "severity": "low",
+          "affectedRange": "<=6.4.3",
+          "affectedBeforeNodes": [
+            24
+          ],
+          "affectedAfterNodes": [
+            23
+          ]
+        }
+      ],
+      "disposition": "pending broader Vite migration",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "vite",
+      "applicabilityProfile": "GHSA-9jrq-w75r-8gcw"
+    },
+    {
+      "ghsa": "GHSA-fx2h-pf6j-xcff",
+      "url": "https://github.com/advisories/GHSA-fx2h-pf6j-xcff",
+      "title": "vite: `server.fs.deny` bypass on Windows alternate paths",
+      "package": "vite",
+      "findings": [
+        {
+          "npmSource": 1243432,
+          "severity": "moderate",
+          "affectedRange": "<=6.4.2",
+          "affectedBeforeNodes": [
+            24
+          ],
+          "affectedAfterNodes": [
+            23
+          ]
+        }
+      ],
+      "disposition": "pending broader Vite migration",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "vite",
+      "applicabilityProfile": "GHSA-fx2h-pf6j-xcff"
+    },
+    {
+      "ghsa": "GHSA-r825-w8mm-5pxw",
+      "url": "https://github.com/advisories/GHSA-r825-w8mm-5pxw",
+      "title": "launch-editor: Editor CLI flag misinterpretation causing arbitrary command execution for some editors",
+      "package": "vite",
+      "findings": [
+        {
+          "npmSource": 1242651,
+          "severity": "moderate",
+          "affectedRange": "<=6.4.3",
+          "affectedBeforeNodes": [
+            24
+          ],
+          "affectedAfterNodes": [
+            23
+          ]
+        }
+      ],
+      "disposition": "pending broader Vite migration",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "vite",
+      "applicabilityProfile": "GHSA-r825-w8mm-5pxw"
+    },
+    {
+      "ghsa": "GHSA-rq7h-c2jc-7f22",
+      "url": "https://github.com/advisories/GHSA-rq7h-c2jc-7f22",
+      "title": "Vite: Files outside `server.fs.allow` could be served when project paths match system paths on non-Windows machine",
+      "package": "vite",
+      "findings": [
+        {
+          "npmSource": 1242730,
+          "severity": "moderate",
+          "affectedRange": "<=6.4.3",
+          "affectedBeforeNodes": [
+            24
+          ],
+          "affectedAfterNodes": [
+            23
+          ]
+        }
+      ],
+      "disposition": "pending broader Vite migration",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "vite",
+      "applicabilityProfile": "GHSA-rq7h-c2jc-7f22"
+    },
+    {
+      "ghsa": "GHSA-v6wh-96g9-6wx3",
+      "url": "https://github.com/advisories/GHSA-v6wh-96g9-6wx3",
+      "title": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows",
+      "package": "vite",
+      "findings": [
+        {
+          "npmSource": 1120784,
+          "severity": "moderate",
+          "affectedRange": "<=6.4.2",
+          "affectedBeforeNodes": [
+            24
+          ],
+          "affectedAfterNodes": [
+            23
+          ]
+        }
+      ],
+      "disposition": "pending broader Vite migration",
+      "remainingInAfterAudit": true,
+      "dependencyEvidenceKey": "vite",
+      "applicabilityProfile": "GHSA-v6wh-96g9-6wx3"
+    }
+  ],
+  "dependencyGraphs": {
+    "before": {
+      "nodes": [
+        {
+          "path": "node_modules/@xmldom/xmldom",
+          "name": "@xmldom/xmldom",
+          "version": "0.8.13",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "",
+          "name": "bug-pocket",
+          "version": "0.9.9",
+          "dev": false,
+          "optional": false
+        },
+        {
+          "path": "node_modules/electron-builder",
+          "name": "electron-builder",
+          "version": "26.8.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/dmg-builder",
+          "name": "dmg-builder",
+          "version": "26.8.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/app-builder-lib",
+          "name": "app-builder-lib",
+          "version": "26.8.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@electron/osx-sign",
+          "name": "@electron/osx-sign",
+          "version": "1.3.3",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/plist",
+          "name": "plist",
+          "version": "3.1.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@electron/universal",
+          "name": "@electron/universal",
+          "version": "2.0.3",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/dmg-license",
+          "name": "dmg-license",
+          "version": "1.0.11",
+          "dev": true,
+          "optional": true
+        },
+        {
+          "path": "node_modules/baseline-browser-mapping",
+          "name": "baseline-browser-mapping",
+          "version": "2.10.43",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "version": "2.3.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@babel/plugin-transform-arrow-functions",
+          "name": "@babel/plugin-transform-arrow-functions",
+          "version": "7.29.7",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@babel/core",
+          "name": "@babel/core",
+          "version": "7.29.7",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@babel/helper-compilation-targets",
+          "name": "@babel/helper-compilation-targets",
+          "version": "7.29.7",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/browserslist",
+          "name": "browserslist",
+          "version": "4.28.6",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "version": "4.7.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@babel/plugin-transform-react-jsx-self",
+          "name": "@babel/plugin-transform-react-jsx-self",
+          "version": "7.29.7",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@babel/plugin-transform-react-jsx-source",
+          "name": "@babel/plugin-transform-react-jsx-source",
+          "version": "7.29.7",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/builder-util-runtime",
+          "name": "builder-util-runtime",
+          "version": "9.5.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/builder-util",
+          "name": "builder-util",
+          "version": "26.8.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/electron-builder-squirrel-windows",
+          "name": "electron-builder-squirrel-windows",
+          "version": "26.8.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/electron-publish",
+          "name": "electron-publish",
+          "version": "26.8.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/electron",
+          "name": "electron",
+          "version": "43.1.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/esbuild",
+          "name": "esbuild",
+          "version": "0.21.5",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/vite",
+          "name": "vite",
+          "version": "5.4.21",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/tsx/node_modules/esbuild",
+          "name": "esbuild",
+          "version": "0.28.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/tsx",
+          "name": "tsx",
+          "version": "4.23.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/http-cache-semantics",
+          "name": "http-cache-semantics",
+          "version": "4.2.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/app-builder-lib/node_modules/@electron/get",
+          "name": "@electron/get",
+          "version": "3.1.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/got",
+          "name": "got",
+          "version": "11.8.6",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/cacheable-request",
+          "name": "cacheable-request",
+          "version": "7.0.4",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/js-yaml",
+          "name": "js-yaml",
+          "version": "4.3.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/nanoid",
+          "name": "nanoid",
+          "version": "3.3.16",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/postcss",
+          "name": "postcss",
+          "version": "8.5.19",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/source-map-js",
+          "name": "source-map-js",
+          "version": "1.2.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/tar",
+          "name": "tar",
+          "version": "7.5.20",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@electron/rebuild",
+          "name": "@electron/rebuild",
+          "version": "4.0.4",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/node-gyp",
+          "name": "node-gyp",
+          "version": "12.4.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/node-gyp/node_modules/undici",
+          "name": "undici",
+          "version": "6.27.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/undici",
+          "name": "undici",
+          "version": "7.28.0",
+          "dev": true,
+          "optional": true
+        },
+        {
+          "path": "node_modules/@electron/get",
+          "name": "@electron/get",
+          "version": "5.0.0",
+          "dev": true,
+          "optional": false
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "dependency": "electron-builder",
+          "kind": "devDependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "dependency": "dmg-builder",
+          "kind": "dependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "dependency": "app-builder-lib",
+          "kind": "dependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "dependency": "@electron/osx-sign",
+          "kind": "dependencies",
+          "spec": "1.3.3"
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "dependency": "plist",
+          "kind": "dependencies",
+          "spec": "^3.0.5"
+        },
+        {
+          "from": 6,
+          "to": 0,
+          "dependency": "@xmldom/xmldom",
+          "kind": "dependencies",
+          "spec": "^0.8.8"
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "dependency": "app-builder-lib",
+          "kind": "dependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 4,
+          "to": 7,
+          "dependency": "@electron/universal",
+          "kind": "dependencies",
+          "spec": "2.0.3"
+        },
+        {
+          "from": 7,
+          "to": 6,
+          "dependency": "plist",
+          "kind": "dependencies",
+          "spec": "^3.1.0"
+        },
+        {
+          "from": 4,
+          "to": 6,
+          "dependency": "plist",
+          "kind": "dependencies",
+          "spec": "3.1.0"
+        },
+        {
+          "from": 4,
+          "to": 3,
+          "dependency": "dmg-builder",
+          "kind": "peerDependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 3,
+          "to": 8,
+          "dependency": "dmg-license",
+          "kind": "optionalDependencies",
+          "spec": "^1.0.11"
+        },
+        {
+          "from": 8,
+          "to": 6,
+          "dependency": "plist",
+          "kind": "dependencies",
+          "spec": "^3.0.4"
+        },
+        {
+          "from": 1,
+          "to": 10,
+          "dependency": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": 10,
+          "to": 11,
+          "dependency": "@babel/plugin-transform-arrow-functions",
+          "kind": "dependencies",
+          "spec": "^7.24.7"
+        },
+        {
+          "from": 11,
+          "to": 12,
+          "dependency": "@babel/core",
+          "kind": "peerDependencies",
+          "spec": "^7.0.0-0"
+        },
+        {
+          "from": 12,
+          "to": 13,
+          "dependency": "@babel/helper-compilation-targets",
+          "kind": "dependencies",
+          "spec": "^7.29.7"
+        },
+        {
+          "from": 13,
+          "to": 14,
+          "dependency": "browserslist",
+          "kind": "dependencies",
+          "spec": "^4.24.0"
+        },
+        {
+          "from": 14,
+          "to": 9,
+          "dependency": "baseline-browser-mapping",
+          "kind": "dependencies",
+          "spec": "^2.10.42"
+        },
+        {
+          "from": 1,
+          "to": 15,
+          "dependency": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "4.7.0"
+        },
+        {
+          "from": 15,
+          "to": 16,
+          "dependency": "@babel/plugin-transform-react-jsx-self",
+          "kind": "dependencies",
+          "spec": "^7.27.1"
+        },
+        {
+          "from": 16,
+          "to": 12,
+          "dependency": "@babel/core",
+          "kind": "peerDependencies",
+          "spec": "^7.0.0-0"
+        },
+        {
+          "from": 15,
+          "to": 17,
+          "dependency": "@babel/plugin-transform-react-jsx-source",
+          "kind": "dependencies",
+          "spec": "^7.27.1"
+        },
+        {
+          "from": 17,
+          "to": 12,
+          "dependency": "@babel/core",
+          "kind": "peerDependencies",
+          "spec": "^7.0.0-0"
+        },
+        {
+          "from": 15,
+          "to": 12,
+          "dependency": "@babel/core",
+          "kind": "dependencies",
+          "spec": "^7.28.0"
+        },
+        {
+          "from": 10,
+          "to": 12,
+          "dependency": "@babel/core",
+          "kind": "dependencies",
+          "spec": "^7.24.7"
+        },
+        {
+          "from": 4,
+          "to": 18,
+          "dependency": "builder-util-runtime",
+          "kind": "dependencies",
+          "spec": "9.5.1"
+        },
+        {
+          "from": 4,
+          "to": 19,
+          "dependency": "builder-util",
+          "kind": "dependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 19,
+          "to": 18,
+          "dependency": "builder-util-runtime",
+          "kind": "dependencies",
+          "spec": "9.5.1"
+        },
+        {
+          "from": 3,
+          "to": 19,
+          "dependency": "builder-util",
+          "kind": "dependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 2,
+          "to": 19,
+          "dependency": "builder-util",
+          "kind": "dependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 4,
+          "to": 20,
+          "dependency": "electron-builder-squirrel-windows",
+          "kind": "peerDependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 20,
+          "to": 19,
+          "dependency": "builder-util",
+          "kind": "dependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 4,
+          "to": 21,
+          "dependency": "electron-publish",
+          "kind": "dependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 21,
+          "to": 19,
+          "dependency": "builder-util",
+          "kind": "dependencies",
+          "spec": "26.8.1"
+        },
+        {
+          "from": 2,
+          "to": 18,
+          "dependency": "builder-util-runtime",
+          "kind": "dependencies",
+          "spec": "9.5.1"
+        },
+        {
+          "from": 21,
+          "to": 18,
+          "dependency": "builder-util-runtime",
+          "kind": "dependencies",
+          "spec": "9.5.1"
+        },
+        {
+          "from": 1,
+          "to": 22,
+          "dependency": "electron",
+          "kind": "devDependencies",
+          "spec": "^43.1.0"
+        },
+        {
+          "from": 10,
+          "to": 23,
+          "dependency": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": 1,
+          "to": 24,
+          "dependency": "vite",
+          "kind": "devDependencies",
+          "spec": "5.4.21"
+        },
+        {
+          "from": 24,
+          "to": 23,
+          "dependency": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.3"
+        },
+        {
+          "from": 15,
+          "to": 24,
+          "dependency": "vite",
+          "kind": "peerDependencies",
+          "spec": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
+        },
+        {
+          "from": 10,
+          "to": 24,
+          "dependency": "vite",
+          "kind": "peerDependencies",
+          "spec": "^4.0.0 || ^5.0.0"
+        },
+        {
+          "from": 1,
+          "to": 26,
+          "dependency": "tsx",
+          "kind": "devDependencies",
+          "spec": "4.23.1"
+        },
+        {
+          "from": 26,
+          "to": 25,
+          "dependency": "esbuild",
+          "kind": "dependencies",
+          "spec": "~0.28.0"
+        },
+        {
+          "from": 4,
+          "to": 28,
+          "dependency": "@electron/get",
+          "kind": "dependencies",
+          "spec": "^3.0.0"
+        },
+        {
+          "from": 28,
+          "to": 29,
+          "dependency": "got",
+          "kind": "dependencies",
+          "spec": "^11.8.5"
+        },
+        {
+          "from": 29,
+          "to": 30,
+          "dependency": "cacheable-request",
+          "kind": "dependencies",
+          "spec": "^7.0.2"
+        },
+        {
+          "from": 30,
+          "to": 27,
+          "dependency": "http-cache-semantics",
+          "kind": "dependencies",
+          "spec": "^4.0.0"
+        },
+        {
+          "from": 4,
+          "to": 31,
+          "dependency": "js-yaml",
+          "kind": "dependencies",
+          "spec": "^4.1.0"
+        },
+        {
+          "from": 19,
+          "to": 31,
+          "dependency": "js-yaml",
+          "kind": "dependencies",
+          "spec": "^4.1.0"
+        },
+        {
+          "from": 3,
+          "to": 31,
+          "dependency": "js-yaml",
+          "kind": "dependencies",
+          "spec": "^4.1.0"
+        },
+        {
+          "from": 24,
+          "to": 33,
+          "dependency": "postcss",
+          "kind": "dependencies",
+          "spec": "^8.4.43"
+        },
+        {
+          "from": 33,
+          "to": 32,
+          "dependency": "nanoid",
+          "kind": "dependencies",
+          "spec": "^3.3.12"
+        },
+        {
+          "from": 33,
+          "to": 34,
+          "dependency": "source-map-js",
+          "kind": "dependencies",
+          "spec": "^1.2.1"
+        },
+        {
+          "from": 4,
+          "to": 35,
+          "dependency": "tar",
+          "kind": "dependencies",
+          "spec": "^7.5.7"
+        },
+        {
+          "from": 4,
+          "to": 36,
+          "dependency": "@electron/rebuild",
+          "kind": "dependencies",
+          "spec": "^4.0.3"
+        },
+        {
+          "from": 36,
+          "to": 37,
+          "dependency": "node-gyp",
+          "kind": "dependencies",
+          "spec": "^12.2.0"
+        },
+        {
+          "from": 37,
+          "to": 35,
+          "dependency": "tar",
+          "kind": "dependencies",
+          "spec": "^7.5.4"
+        },
+        {
+          "from": 37,
+          "to": 38,
+          "dependency": "undici",
+          "kind": "dependencies",
+          "spec": "^6.25.0"
+        },
+        {
+          "from": 22,
+          "to": 40,
+          "dependency": "@electron/get",
+          "kind": "dependencies",
+          "spec": "^5.0.0"
+        },
+        {
+          "from": 40,
+          "to": 39,
+          "dependency": "undici",
+          "kind": "optionalDependencies",
+          "spec": "^7.24.4"
+        }
+      ]
+    },
+    "after": {
+      "nodes": [
+        {
+          "path": "node_modules/@xmldom/xmldom",
+          "name": "@xmldom/xmldom",
+          "version": "0.8.15",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "",
+          "name": "bug-pocket",
+          "version": "0.9.9",
+          "dev": false,
+          "optional": false
+        },
+        {
+          "path": "node_modules/electron-builder",
+          "name": "electron-builder",
+          "version": "26.18.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/dmg-builder",
+          "name": "dmg-builder",
+          "version": "26.18.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/app-builder-lib",
+          "name": "app-builder-lib",
+          "version": "26.18.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@electron/osx-sign",
+          "name": "@electron/osx-sign",
+          "version": "1.3.3",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/plist",
+          "name": "plist",
+          "version": "3.1.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@electron/universal",
+          "name": "@electron/universal",
+          "version": "2.0.3",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/baseline-browser-mapping",
+          "name": "baseline-browser-mapping",
+          "version": "2.11.34",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "version": "2.3.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@babel/plugin-transform-arrow-functions",
+          "name": "@babel/plugin-transform-arrow-functions",
+          "version": "7.29.7",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@babel/core",
+          "name": "@babel/core",
+          "version": "7.29.7",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@babel/helper-compilation-targets",
+          "name": "@babel/helper-compilation-targets",
+          "version": "7.29.7",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/browserslist",
+          "name": "browserslist",
+          "version": "4.29.5",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "version": "4.7.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@babel/plugin-transform-react-jsx-self",
+          "name": "@babel/plugin-transform-react-jsx-self",
+          "version": "7.29.7",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@babel/plugin-transform-react-jsx-source",
+          "name": "@babel/plugin-transform-react-jsx-source",
+          "version": "7.29.7",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/builder-util-runtime",
+          "name": "builder-util-runtime",
+          "version": "9.7.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/builder-util",
+          "name": "builder-util",
+          "version": "26.18.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/electron-builder-squirrel-windows",
+          "name": "electron-builder-squirrel-windows",
+          "version": "26.18.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/electron-publish",
+          "name": "electron-publish",
+          "version": "26.18.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/electron",
+          "name": "electron",
+          "version": "43.1.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/esbuild",
+          "name": "esbuild",
+          "version": "0.21.5",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/vite",
+          "name": "vite",
+          "version": "5.4.21",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/tsx/node_modules/esbuild",
+          "name": "esbuild",
+          "version": "0.28.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/tsx",
+          "name": "tsx",
+          "version": "4.23.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/http-cache-semantics",
+          "name": "http-cache-semantics",
+          "version": "4.3.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/app-builder-lib/node_modules/@electron/get",
+          "name": "@electron/get",
+          "version": "3.1.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/got",
+          "name": "got",
+          "version": "11.8.6",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/cacheable-request",
+          "name": "cacheable-request",
+          "version": "7.0.4",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/js-yaml",
+          "name": "js-yaml",
+          "version": "4.3.2",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/nanoid",
+          "name": "nanoid",
+          "version": "3.3.20",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/postcss",
+          "name": "postcss",
+          "version": "8.5.32",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/source-map-js",
+          "name": "source-map-js",
+          "version": "1.2.2",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/tar",
+          "name": "tar",
+          "version": "7.5.22",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/@electron/rebuild",
+          "name": "@electron/rebuild",
+          "version": "4.2.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/node-gyp",
+          "name": "node-gyp",
+          "version": "12.4.0",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/node-gyp/node_modules/undici",
+          "name": "undici",
+          "version": "6.29.1",
+          "dev": true,
+          "optional": false
+        },
+        {
+          "path": "node_modules/undici",
+          "name": "undici",
+          "version": "7.30.1",
+          "dev": true,
+          "optional": true
+        },
+        {
+          "path": "node_modules/@electron/get",
+          "name": "@electron/get",
+          "version": "5.0.0",
+          "dev": true,
+          "optional": false
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "dependency": "electron-builder",
+          "kind": "devDependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "dependency": "dmg-builder",
+          "kind": "dependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "dependency": "app-builder-lib",
+          "kind": "dependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "dependency": "@electron/osx-sign",
+          "kind": "dependencies",
+          "spec": "1.3.3"
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "dependency": "plist",
+          "kind": "dependencies",
+          "spec": "^3.0.5"
+        },
+        {
+          "from": 6,
+          "to": 0,
+          "dependency": "@xmldom/xmldom",
+          "kind": "dependencies",
+          "spec": "^0.8.8"
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "dependency": "app-builder-lib",
+          "kind": "dependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 4,
+          "to": 7,
+          "dependency": "@electron/universal",
+          "kind": "dependencies",
+          "spec": "2.0.3"
+        },
+        {
+          "from": 7,
+          "to": 6,
+          "dependency": "plist",
+          "kind": "dependencies",
+          "spec": "^3.1.0"
+        },
+        {
+          "from": 4,
+          "to": 6,
+          "dependency": "plist",
+          "kind": "dependencies",
+          "spec": "3.1.0"
+        },
+        {
+          "from": 1,
+          "to": 9,
+          "dependency": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": 9,
+          "to": 10,
+          "dependency": "@babel/plugin-transform-arrow-functions",
+          "kind": "dependencies",
+          "spec": "^7.24.7"
+        },
+        {
+          "from": 10,
+          "to": 11,
+          "dependency": "@babel/core",
+          "kind": "peerDependencies",
+          "spec": "^7.0.0-0"
+        },
+        {
+          "from": 11,
+          "to": 12,
+          "dependency": "@babel/helper-compilation-targets",
+          "kind": "dependencies",
+          "spec": "^7.29.7"
+        },
+        {
+          "from": 12,
+          "to": 13,
+          "dependency": "browserslist",
+          "kind": "dependencies",
+          "spec": "^4.24.0"
+        },
+        {
+          "from": 13,
+          "to": 8,
+          "dependency": "baseline-browser-mapping",
+          "kind": "dependencies",
+          "spec": "^2.11.33"
+        },
+        {
+          "from": 1,
+          "to": 14,
+          "dependency": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "4.7.0"
+        },
+        {
+          "from": 14,
+          "to": 15,
+          "dependency": "@babel/plugin-transform-react-jsx-self",
+          "kind": "dependencies",
+          "spec": "^7.27.1"
+        },
+        {
+          "from": 15,
+          "to": 11,
+          "dependency": "@babel/core",
+          "kind": "peerDependencies",
+          "spec": "^7.0.0-0"
+        },
+        {
+          "from": 14,
+          "to": 16,
+          "dependency": "@babel/plugin-transform-react-jsx-source",
+          "kind": "dependencies",
+          "spec": "^7.27.1"
+        },
+        {
+          "from": 16,
+          "to": 11,
+          "dependency": "@babel/core",
+          "kind": "peerDependencies",
+          "spec": "^7.0.0-0"
+        },
+        {
+          "from": 14,
+          "to": 11,
+          "dependency": "@babel/core",
+          "kind": "dependencies",
+          "spec": "^7.28.0"
+        },
+        {
+          "from": 9,
+          "to": 11,
+          "dependency": "@babel/core",
+          "kind": "dependencies",
+          "spec": "^7.24.7"
+        },
+        {
+          "from": 4,
+          "to": 17,
+          "dependency": "builder-util-runtime",
+          "kind": "dependencies",
+          "spec": "9.7.1"
+        },
+        {
+          "from": 4,
+          "to": 18,
+          "dependency": "builder-util",
+          "kind": "dependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 18,
+          "to": 17,
+          "dependency": "builder-util-runtime",
+          "kind": "dependencies",
+          "spec": "9.7.1"
+        },
+        {
+          "from": 4,
+          "to": 3,
+          "dependency": "dmg-builder",
+          "kind": "peerDependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 3,
+          "to": 18,
+          "dependency": "builder-util",
+          "kind": "dependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 2,
+          "to": 18,
+          "dependency": "builder-util",
+          "kind": "dependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 4,
+          "to": 19,
+          "dependency": "electron-builder-squirrel-windows",
+          "kind": "peerDependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 19,
+          "to": 18,
+          "dependency": "builder-util",
+          "kind": "dependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 4,
+          "to": 20,
+          "dependency": "electron-publish",
+          "kind": "dependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 20,
+          "to": 18,
+          "dependency": "builder-util",
+          "kind": "dependencies",
+          "spec": "26.18.1"
+        },
+        {
+          "from": 2,
+          "to": 17,
+          "dependency": "builder-util-runtime",
+          "kind": "dependencies",
+          "spec": "9.7.1"
+        },
+        {
+          "from": 20,
+          "to": 17,
+          "dependency": "builder-util-runtime",
+          "kind": "dependencies",
+          "spec": "9.7.1"
+        },
+        {
+          "from": 1,
+          "to": 21,
+          "dependency": "electron",
+          "kind": "devDependencies",
+          "spec": "^43.1.0"
+        },
+        {
+          "from": 9,
+          "to": 22,
+          "dependency": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": 1,
+          "to": 23,
+          "dependency": "vite",
+          "kind": "devDependencies",
+          "spec": "5.4.21"
+        },
+        {
+          "from": 23,
+          "to": 22,
+          "dependency": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.3"
+        },
+        {
+          "from": 14,
+          "to": 23,
+          "dependency": "vite",
+          "kind": "peerDependencies",
+          "spec": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
+        },
+        {
+          "from": 9,
+          "to": 23,
+          "dependency": "vite",
+          "kind": "peerDependencies",
+          "spec": "^4.0.0 || ^5.0.0"
+        },
+        {
+          "from": 1,
+          "to": 25,
+          "dependency": "tsx",
+          "kind": "devDependencies",
+          "spec": "4.23.1"
+        },
+        {
+          "from": 25,
+          "to": 24,
+          "dependency": "esbuild",
+          "kind": "dependencies",
+          "spec": "~0.28.0"
+        },
+        {
+          "from": 4,
+          "to": 27,
+          "dependency": "@electron/get",
+          "kind": "dependencies",
+          "spec": "^3.0.0"
+        },
+        {
+          "from": 27,
+          "to": 28,
+          "dependency": "got",
+          "kind": "dependencies",
+          "spec": "^11.8.5"
+        },
+        {
+          "from": 28,
+          "to": 29,
+          "dependency": "cacheable-request",
+          "kind": "dependencies",
+          "spec": "^7.0.2"
+        },
+        {
+          "from": 29,
+          "to": 26,
+          "dependency": "http-cache-semantics",
+          "kind": "dependencies",
+          "spec": "^4.0.0"
+        },
+        {
+          "from": 4,
+          "to": 30,
+          "dependency": "js-yaml",
+          "kind": "dependencies",
+          "spec": "^4.1.0"
+        },
+        {
+          "from": 18,
+          "to": 30,
+          "dependency": "js-yaml",
+          "kind": "dependencies",
+          "spec": "^4.1.0"
+        },
+        {
+          "from": 3,
+          "to": 30,
+          "dependency": "js-yaml",
+          "kind": "dependencies",
+          "spec": "^4.1.0"
+        },
+        {
+          "from": 23,
+          "to": 32,
+          "dependency": "postcss",
+          "kind": "dependencies",
+          "spec": "^8.4.43"
+        },
+        {
+          "from": 32,
+          "to": 31,
+          "dependency": "nanoid",
+          "kind": "dependencies",
+          "spec": "^3.3.20"
+        },
+        {
+          "from": 32,
+          "to": 33,
+          "dependency": "source-map-js",
+          "kind": "dependencies",
+          "spec": "^1.2.2"
+        },
+        {
+          "from": 4,
+          "to": 34,
+          "dependency": "tar",
+          "kind": "dependencies",
+          "spec": "^7.5.7"
+        },
+        {
+          "from": 4,
+          "to": 35,
+          "dependency": "@electron/rebuild",
+          "kind": "dependencies",
+          "spec": "^4.2.1"
+        },
+        {
+          "from": 35,
+          "to": 36,
+          "dependency": "node-gyp",
+          "kind": "dependencies",
+          "spec": "^12.2.0"
+        },
+        {
+          "from": 36,
+          "to": 34,
+          "dependency": "tar",
+          "kind": "dependencies",
+          "spec": "^7.5.4"
+        },
+        {
+          "from": 36,
+          "to": 37,
+          "dependency": "undici",
+          "kind": "dependencies",
+          "spec": "^6.25.0"
+        },
+        {
+          "from": 21,
+          "to": 39,
+          "dependency": "@electron/get",
+          "kind": "dependencies",
+          "spec": "^5.0.0"
+        },
+        {
+          "from": 39,
+          "to": 38,
+          "dependency": "undici",
+          "kind": "optionalDependencies",
+          "spec": "^7.24.4"
+        }
+      ]
+    }
+  },
+  "applicabilityProfiles": {
+    "@xmldom/xmldom": "Dev-only builder plist XML parsing/serialization graph. Injection and resource-exhaustion behavior depends on malformed/untrusted XML or constructed nodes. No packaged production path is present in this lock. Compatible 0.8.15 repair is applied, without relying on a trust or platform exception.",
+    "app-builder-lib": "Linux AppImage generated-runtime library-search-path issue. This checkout configures Windows NSIS and validation uses --win --dir; neither produces the affected AppImage runtime. Updated app-builder-lib nonetheless removes the vulnerable version. This is not installed NSIS or Store acceptance.",
+    "baseline-browser-mapping": "Dev-only Babel/browserslist target resolution; invalid input can terminate the process. Updated within its existing parent range, so no input-trust exception is required.",
+    "browserslist": "Dev-only Babel compilation-target queries/custom stats can cause unbounded cache growth or crash/prototype writes. Compatible browserslist update is applied; not a packaged application dependency.",
+    "builder-util-runtime": "Build/publish/download HTTP utility can leak PRIVATE-TOKEN or mixed-case Authorization on cross-origin redirects. It is dev-only in this lock and not part of the application production dependency tree. No assumption of credential absence is needed for disposition: the compatible builder update replaces the affected utility.",
+    "electron": "Unchanged shipped Electron 43.1.0 matches this advisory range. Current renderer/window hardening is preserved, but no exploitability exception or release approval is granted. Runtime remediation, embedded Node/Chromium validation and the independent Chromium hold remain EXA-66 work.",
+    "GHSA-9qh4-3jw8-366w": "Electron webview/worker integration restriction bypass. Renderer isolation and current window safeguards are preserved; no proof of complete inapplicability was attempted. The shipped Electron 43.1.0 remains vulnerable by version and is owned by the separate EXA-66 runtime review.",
+    "GHSA-h3v5-h239-pg29": "Explicitly concerns macOS off-screen rendering and GPU-supplied frame geometry. Windows is the current target. The vulnerable Electron version is nevertheless unchanged and its runtime security hold remains with EXA-66; this individual platform observation does not clear that hold.",
+    "GHSA-jr5w-w6x2-84p9": "Shipped Electron certificate-trust mitigation, distinct from npm package-only production audit and host Node. No configuration-based inapplicability is claimed; remains under the EXA-66 runtime/Chromium hold.",
+    "esbuild": "esbuild serve API CORS/source disclosure. Inspected project scripts and installed electron-vite/Vite use build/transform/context and did not establish an esbuild serve endpoint. The vulnerable esbuild package remains at 0.21.5 and is retained as unresolved rather than accepted risk. Vite separately runs its own dev server, which has distinct advisories. Patched esbuild >=0.25.0 does not satisfy electron-vite ^0.21.5 or Vite ^0.21.3.",
+    "http-cache-semantics": "Build-only old @electron/get -> got -> cacheable-request graph. The alleged cross-user shared-cache/max-stale Bug Pocket exploit was not demonstrated. The captured compatible update 4.2.0 -> 4.3.0 leaves the published <=4.2.0 range and removes this entry from the dated after audit. The official advisory lists no patched version; the upstream owner disputes the report. Audit-range removal is not evidence of a verified code-level security fix. No security exception or application exploit claim is made.",
+    "js-yaml": "Build-tool YAML config parser can exhaust CPU on malicious YAML merge/omap constructs. Repository config uses package.json, but this is a parser repair rather than a configuration exception.",
+    "nanoid": "Dev-only PostCSS graph; affected custom generator behavior can loop indefinitely with zero size. Compatible patched 3.x version is locked; no production application API is inferred from this dev dependency.",
+    "postcss": "Dev-only Vite CSS build processing; crafted sourceMappingURL with from unset can read arbitrary source maps. Compatible patched PostCSS 8.x version is locked; build-input trust is not used as an exception.",
+    "source-map-js": "Dev-only PostCSS source-map handling; malformed indexed map offsets can exhaust the event loop. Patched compatible 1.2.2 is locked.",
+    "tar": "Dev-only builder packaging and native node-gyp install/rebuild archive path; a crafted long-path archive with member selection can trigger uncatchable recursion. Patched compatible 7.5.22 is locked; native rebuilding remains enabled.",
+    "undici": "Build/install-time @electron/get optional HTTP client and node-gyp HTTP client, on separate 7.x and 6.x branches. Advisory-specific network/cache/retry/WebSocket/EventSource/TLS prerequisites differ; no blanket inapplicability is asserted. Both supported parent ranges now resolve to patched releases and the after audit reports no undici finding. Node/Electron built-in fetch is a separate runtime, not repaired by this lock update.",
+    "vite": "Vite development-server optimized-dependency source-map traversal. Official advisory requires an exposed dev server and predictable sensitive .map files. Repository electron.vite.config.ts has no host override; CI builds and packaged app smoke do not launch the Vite dev server. Developer invocation can change exposure, so this remains pending a coordinated Vite/electron-vite migration.",
+    "GHSA-587h-7wmj-h5pm": "Windows launch-editor fs.existsSync path-check bypass removes a filesystem-existence prerequisite and combines with percent escaping to permit command injection. Bundled vulnerable editor middleware remains in Vite 5.4.21. Packaged static renderer and CI build do not invoke the editor endpoint, but Windows developer use remains unresolved.",
+    "GHSA-698v-4r3x-3vcv": "Windows bundled launch-editor argument escaping can permit command injection with crafted percent-containing inputs and attacker-controlled environment/NTFS conditions. Developer middleware risk remains; no hostile-input acceptance or general inapplicability is claimed. Fix must replace bundled Vite code through a coordinated major migration.",
+    "GHSA-9jrq-w75r-8gcw": "Requires custom middleware passing an unchanged browser URL to transformIndexHtml, inline module script and sensitive values/actions. Inspected repository config uses the standard renderer SPA and no such custom middleware. This specific prerequisite was not found, but the Vite version remains affected and requires the broader migration; no package-wide exception inferred.",
+    "GHSA-fx2h-pf6j-xcff": "Windows/NTFS development-server fs.deny bypass using ADS or 8.3 paths. Official advisory requires network-exposed dev-server use and sensitive files inside the allow roots. Current config has no host override; CI build and packaged app serve static output rather than a Vite dev server. This does not waive possible developer exposure; pending migration.",
+    "GHSA-r825-w8mm-5pxw": "Bundled launch-editor can misinterpret paths as editor CLI flags. Applicability depends on attacker-created filesystem entries, selected editor and direct/middleware/WSL path conditions described by the advisory. Those developer configurations were not exhaustively tested; remain pending migration rather than declaring all Windows uses safe.",
+    "GHSA-rq7h-c2jc-7f22": "Official advisory requires a non-Windows Vite dev server plus network exposure, a matching root-relative imported/system path and a readable file outside deny rules. It excludes this Windows CI/smoke platform. Non-Windows developer use was not accepted or tested; retained in migration scope.",
+    "GHSA-v6wh-96g9-6wx3": "Windows development-server bundled launch-editor middleware can disclose an NTLMv2 hash through a UNC path. A malicious website requesting the known running middleware is a documented prerequisite; loopback binding does not by itself establish inapplicability. Installed Vite 5.4.21 registers /__open-in-editor and bundles the editor code, so a separate launch-editor override would not patch it. No packaged Vite server is used; developer risk remains pending migration."
+  },
+  "scopeByDisposition": {
+    "fixed": "Compatible package update already locked; verify through clean installation, checks, build and packaged smoke.",
+    "pending EXA-66": "Keep EXA-66 runtime/security remediation and its Chromium hold separate. This PR does not upgrade Electron or approve release.",
+    "pending broader Vite migration": "EXA-70 separately tracks the unresolved supported Vite/electron-vite major migration and patched esbuild/bundled launch-editor, including development, start and packaged preload validation. The issue remains Todo; linking it does not start remediation or grant an exception. https://linear.app/examen-qa/issue/EXA-70/migrate-vite-toolchain-and-remediate-residual-development-server",
+    "audit-range removal; upstream-disputed report": "Record audit-range removal and the upstream dispute separately from the 44 fixed records. Preserve the official advisory, owner response and dated audit evidence; no verified code fix or demonstrated Bug Pocket exploit is claimed."
+  },
+  "rangeValidationByDisposition": {
+    "fixed": "No installed after-lock node matches any captured affected range, and the after audit no longer reports the GHSA.",
+    "pending EXA-66": "At least one after-lock node still matches the captured affected range; no security exception authorized.",
+    "pending broader Vite migration": "At least one after-lock node still matches the captured affected range; no security exception authorized.",
+    "audit-range removal; upstream-disputed report": "No after-lock node matches the captured <=4.2.0 range and the dated after audit omits the GHSA. This range/audit observation does not establish a code-level security patch; the official advisory lists no patched version and the upstream report is disputed."
+  },
+  "evidenceLookup": "Each advisory references packageEvidence by package name. Its per-snapshot node IDs index dependencyGraphs.before/after.nodes. Each chain is an ordered array of edge IDs indexing that snapshot's edges; edge from/to IDs identify exact lock paths and versions. Source-range affected node IDs use the same snapshot tables. Applicability, proposed scope and range validation are shared by explicit profile/disposition keys to avoid repeated prose. Raw audits retain original CVSS/CWE metadata."
+}

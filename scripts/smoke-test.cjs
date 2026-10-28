@@ -6,6 +6,7 @@ const { basename, dirname, join, resolve } = require('node:path');
 
 const startupMarker = '[packaged-smoke] database-ready';
 const nativeIntegrationMarker = '[packaged-smoke] native-integrations-ready';
+const preloadMarker = '[packaged-smoke] preload-ready';
 const nativeModuleFailure = /cannot find module|could not locate the bindings file|better[-_]sqlite3|node_module_version|module did not self-register|specified module could not be found/i;
 const packagedAssetFailure = /enoent|no such file or directory|nativeimage.*(?:failed|empty|error)|tray icon failed to load/i;
 const timeoutMs = Number(process.env.BUG_POCKET_SMOKE_TIMEOUT_MS || 30_000);
@@ -121,6 +122,10 @@ async function runSmokeTest() {
     assert.ok(
       stdout.includes(nativeIntegrationMarker),
       `Packaged application exited without confirming Tray initialization.\n${combinedOutput.trim()}`
+    );
+    assert.ok(
+      stdout.includes(preloadMarker),
+      `Packaged application exited without confirming its isolated preload bridge.\n${combinedOutput.trim()}`
     );
     assert.ok(
       existsSync(join(userDataPath, 'local.sqlite')),

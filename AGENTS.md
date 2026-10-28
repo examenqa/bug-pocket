@@ -1,6 +1,6 @@
 # Bug Pocket Agent Handoff
 
-Last updated: July 16, 2026.
+Last updated: October 28, 2026.
 
 This file is the working source of truth for engineers and coding agents. Prefer the current code and tests when this document and an old chat transcript disagree.
 
@@ -311,13 +311,16 @@ Important packaging constraints:
 Workflow: `.github/workflows/ci.yml`.
 
 - Runs on `windows-latest` for pushes and pull requests targeting `main` or `dev`.
-- Uses Node 20 for native dependency stability.
+- Pins host Node 24.22.1 through `.node-version`; `package.json` requires the
+  compatible Node 24 line. Electron embeds a separate Node runtime.
+- Uses verified Node 24 Actions releases pinned by commit; see
+  `docs/ci-toolchain.md` for sources and advisory dispositions.
 - `npm ci` sets `npm_config_build_from_source=false` to prefer compatible prebuilds.
 - Runs tests, TypeScript/electron-vite build, and packaged smoke verification.
 
-Node 20 test runner constraints:
+Test runner constraints:
 
-- Do not add `--test-isolation=none`; Node 20 does not support it.
+- Keep the existing Node/Electron runner separation and `tsx` loaders.
 - Native TypeScript tests must use `node --import tsx --test ...`.
 - Tests launched through `scripts/run-electron-test.cjs` run in Electron where native bindings are required.
 - Time-sensitive tests must freeze their clock deterministically; do not calculate expiry from two independent `Date.now()` calls.
@@ -359,4 +362,4 @@ Before changing sync, storage, auth, backup, IPC, or updater code, verify that t
 - Unstaged updater shutdown
 - Main-process quit while a backup, AI call, or sync write is active
 - Native `better-sqlite3` bindings packed inside ASAR
-- TypeScript tests launched on Node 20 without the `tsx` loader
+- TypeScript tests launched without the `tsx` loader

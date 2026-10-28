@@ -173,9 +173,9 @@ boundaryTest('all renderer windows deny remote navigation and spawned windows', 
   boundaryAssert.match(mainSource, /webContents\.on\(['"]will-navigate['"],\s*guardNavigation\)/);
   boundaryAssert.match(mainSource, /webContents\.setWindowOpenHandler/);
   boundaryAssert.match(mainSource, /return \{ action: ['"]deny['"] \}/);
-  boundaryAssert.equal((mainSource.match(/hardenRendererWindow\((?:mainWindow|quickWindow|snipWindow)\)/g) ?? []).length, 3);
-  boundaryAssert.equal((mainSource.match(/sandbox:\s*true/g) ?? []).length, 3);
-  boundaryAssert.equal((mainSource.match(/webSecurity:\s*true/g) ?? []).length, 3);
+  boundaryAssert.equal((mainSource.match(/hardenRendererWindow\((?:mainWindow|quickWindow|snipWindow|preloadWindow)\)/g) ?? []).length, 4);
+  boundaryAssert.equal((mainSource.match(/sandbox:\s*true/g) ?? []).length, 4);
+  boundaryAssert.equal((mainSource.match(/webSecurity:\s*true/g) ?? []).length, 4);
 });
 
 boundaryTest('renderer bridge cannot request absolute attachment paths for AI triage', () => {
