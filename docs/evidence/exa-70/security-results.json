@@ -1,8 +1,13 @@
 {
-  "date": "2026-10-28T05:52:22.610Z",
+  "date": "2026-10-28T06:05:33.185Z",
   "platform": "win32",
   "hostNode": "v24.22.1",
   "vite": "6.4.5",
+  "fixturePaths": {
+    "requestedTemp": "C:\\Users\\vali2\\AppData\\Local\\Temp",
+    "canonicalTemp": "C:\\Users\\vali2\\AppData\\Local\\Temp",
+    "fixture": "C:\\Users\\vali2\\AppData\\Local\\Temp\\bug-pocket-exa70-security-EVekqi"
+  },
   "bundledSource": {
     "file": "node_modules/vite/dist/node/chunks/dep-CkSfqg8D.js",
     "sha256": "d079b31bef701ca4a06372c93638c168de7511be6af6ccd8385474a1bd751eed",
@@ -82,7 +87,7 @@
   ],
   "limitations": [
     "No real editor, command payload, SMB connection, NTLM authentication or WSL runtime was executed",
-    "No actual 8.3 aliases generated; explicit tilde-path fixture verified rejection",
+    "No denied-secret-file 8.3 aliases generated; explicit tilde-path rejection checked here and actual temporary-root alias normalization exercised separately",
     "Non-Windows GHSA-rq7h runtime reproduction remains unexecuted; fixed source is inspected",
     "HTTP header and transformed URL checks establish server controls; no malicious website or exploit payload was executed"
   ]

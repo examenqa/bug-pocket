@@ -162,7 +162,7 @@ async function serverChecks(vite, fixture) {
     await server.listen();
     const port = server.httpServer.address().port;
     const positive = await request(port, '/main.js');
-    assert.equal(positive.status, 200);
+    assert.equal(positive.status, 200, `Benign main.js must load from canonical fixture ${project}; response headers=${JSON.stringify(positive.headers)}, body=${positive.body.slice(0, 1200)}`);
     assert.ok(positive.body.includes('EXA70_SYNTHETIC_PUBLIC'));
     const remote = await request(port, '/main.js', { Origin: 'https://exa70-origin.invalid' });
     assert.notEqual(remote.headers['access-control-allow-origin'], '*');
@@ -262,16 +262,24 @@ async function main() {
   const viteRoot = path.dirname(vitePackage);
   const vite = await import(pathToFileURL(path.join(viteRoot, 'dist/node/index.js')).href);
   const bundledSource = bundledEditorChecks(viteRoot);
-  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'bug-pocket-exa70-security-'));
+  // Windows hosted runners may expose %TEMP% through a RUNNER~1 short alias.
+  // Vite correctly rejects all tilde paths, including aliases in an allowed
+  // root. Expand the existing temp directory to its native canonical spelling;
+  // keep every Vite filesystem protection enabled for the synthetic fixtures.
+  const requestedTemp = os.tmpdir();
+  const canonicalTemp = fs.realpathSync.native(requestedTemp);
+  const fixture = fs.mkdtempSync(path.join(canonicalTemp, 'bug-pocket-exa70-security-'));
+  console.log(`Security fixture isolation ${JSON.stringify({ requestedTemp, canonicalTemp, fixture })}`);
   try {
     await serverChecks(vite, fixture);
     await esbuildChecks(vitePackage, fixture);
   } finally {
-    // fixture is created by mkdtemp directly under tmpdir, never caller supplied.
-    assert.equal(path.dirname(fixture), os.tmpdir());
+    // fixture is created by mkdtemp directly under the canonical temp parent.
+    assert.equal(path.dirname(fixture), canonicalTemp);
+    assert.equal(fs.realpathSync.native(path.dirname(fixture)), canonicalTemp);
     fs.rmSync(fixture, { recursive: true, force: true });
   }
-  console.log(JSON.stringify({ date: new Date().toISOString(), platform: process.platform, hostNode: process.version, vite: require(vitePackage).version, bundledSource, checks: records, limitations: ['No real editor, command payload, SMB connection, NTLM authentication or WSL runtime was executed', 'No actual 8.3 aliases generated; explicit tilde-path fixture verified rejection', 'Non-Windows GHSA-rq7h runtime reproduction remains unexecuted; fixed source is inspected', 'HTTP header and transformed URL checks establish server controls; no malicious website or exploit payload was executed'] }, null, 2));
+  console.log(JSON.stringify({ date: new Date().toISOString(), platform: process.platform, hostNode: process.version, vite: require(vitePackage).version, fixturePaths: { requestedTemp, canonicalTemp, fixture }, bundledSource, checks: records, limitations: ['No real editor, command payload, SMB connection, NTLM authentication or WSL runtime was executed', 'No denied-secret-file 8.3 aliases generated; explicit tilde-path rejection checked here and actual temporary-root alias normalization exercised separately', 'Non-Windows GHSA-rq7h runtime reproduction remains unexecuted; fixed source is inspected', 'HTTP header and transformed URL checks establish server controls; no malicious website or exploit payload was executed'] }, null, 2));
 }
 
 main().catch(error => { console.error(error.stack || error); process.exitCode = 1; });

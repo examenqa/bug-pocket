@@ -133,6 +133,16 @@ port zero to its default. Selecting an available OS port fixed the fixture;
 the final full suite passed. Other harness adjustments and their superseded
 results are explicit in `check-failures.json`.
 
+The first [PR CI run](https://github.com/examenqa/bug-pocket/actions/runs/40641113588)
+installed successfully but stopped when the security fixture's ordinary file
+returned 403. A focused Windows regression reproduced that exact failure with
+an actual 8.3 temporary-directory alias and passed after canonicalizing its
+parent through `fs.realpathSync.native`. Vite correctly rejects tildes even
+inside an allowed root. The fixture now uses the canonical directory spelling;
+all deny/strict controls remain enabled. The first CI run did not record its
+temp spelling, so attribution to that runner's alias is an inference. The
+subsequent run prints both raw and canonical paths. See `short-temp-regression.json`.
+
 Unsuppressed npm configuration/install-script notices, inherited transitive
 deprecations, the local path-with-spaces rebuild diagnostic and builder duplicate
 reference/resource-editing notices are recorded. The unchanged meta CSP emits

@@ -52,6 +52,12 @@
       "verification": "security-ephemeral-final.log passed all 10 groups after the fix"
     },
     {
+      "category": "First Windows CI fixture positive-control failure",
+      "evidence": "https://github.com/examenqa/bug-pocket/actions/runs/40641113588",
+      "observed": "Clean install succeeded; security main.js positive control returned403 before the full suite. Runner temp spelling was not captured.",
+      "correction": "Actual local Windows8.3 temp alias reproduced the failure. Canonicalize the temp parent via fs.realpathSync.native before creating the fixture, validate cleanup against that parent and keep all Vite deny/strict controls. Focused red/green evidence is short-temp-regression.json. Attribution to first runner alias remains inference until subsequent printed path evidence."
+    },
+    {
       "category": "New normal-startup harness API assumptions",
       "observed": "sessionData follows the -dev userData path; Electron43 getLastWebPreferences omits preload paths; Windows preload script URLs use backslashes",
       "correction": "Assert actual isolated sessionData; inspect Debugger.scriptParsed for real preload loading; accept Windows separators. Initial harness failures retained outside repository; final all-mode checks pass."

@@ -45,8 +45,9 @@
     {
       "command": "npm run test:toolchain-security",
       "exit": 0,
-      "log": "security-ephemeral-final.log",
-      "groups": 10
+      "log": "security-short-temp-after.log",
+      "groups": 10,
+      "actual8dot3TempAliasRedGreenRegression": "short-temp-regression.json"
     },
     {
       "command": "npm run test:packaged-smoke:build",
@@ -132,7 +133,7 @@
     "Existing schema-install test filter leaves the Supabase boundary test unexecuted despite zero runner-reported skips.",
     "Live Supabase/provider acceptance, installed NSIS/migration, Store package/install and WACK remain unexecuted.",
     "Editor and UNC tests execute actual bundled code with inert filesystem/child-process doubles; no real shell editor, SMB/NTLM or WSL process is executed.",
-    "No actual NTFS8.3 aliases generated; existing synthetic tilde-path fixture exercises rejection.",
+    "Denied-file 8.3 alias exfiltration is not exercised; an actual temporary-directory 8.3 alias was independently exercised red/green, with canonical path expansion preserving Vite deny controls.",
     "GHSA-rq7h non-Windows runtime reproduction unexecuted; official Windows exclusion and fixed resolvedId source independently recorded.",
     "Normal startup harness intercepts only Windows login Run registry writes; OS startup-registration acceptance remains excluded.",
     "CDP/inspector instrumentation is limited to these synthetic loopback test processes; ordinary debugger-free interactive/manual acceptance is not claimed."
@@ -145,7 +146,13 @@
     "disputedCacheClassificationUnchanged": "audit-range removal; upstream-disputed report"
   },
   "ci": {
-    "location": "Final PR-head Windows CI is recorded after pushing in the PR and the existing Linear execution checkpoint; not inferred from local checks."
+    "location": "Final PR-head Windows CI is recorded after pushing in the PR and the existing Linear execution checkpoint; not inferred from local checks.",
+    "firstRun": {
+      "url": "https://github.com/examenqa/bug-pocket/actions/runs/40641113588",
+      "head": "4e420d772536e294183cf8ab9ec4b713bb6da01b",
+      "conclusion": "failure",
+      "observed": "Synthetic positive main.js returned403 before full tests; fixture canonicalization correction demonstrated with actual local8.3 temp alias red/green. First CI temp spelling was not captured; cause remains inference until subsequent CI path evidence."
+    }
   },
   "readiness": {
     "implemented": true,

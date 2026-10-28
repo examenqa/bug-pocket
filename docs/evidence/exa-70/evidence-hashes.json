@@ -79,8 +79,8 @@
     },
     {
       "file": "check-failures.json",
-      "rawSha256": "5772ddfc79058ea09a00fc7bd506293997572d8be716babd06ea4aedcc795349",
-      "normalizedLfSha256": "5772ddfc79058ea09a00fc7bd506293997572d8be716babd06ea4aedcc795349"
+      "rawSha256": "93dba65f17e2c9f2bacc91a84378947aacf88901e2c242070bd1ef4a2704e750",
+      "normalizedLfSha256": "93dba65f17e2c9f2bacc91a84378947aacf88901e2c242070bd1ef4a2704e750"
     },
     {
       "file": "dependency-paths.json",
@@ -124,8 +124,13 @@
     },
     {
       "file": "security-results.json",
-      "rawSha256": "5871f559a365d1940c99f64edf6917a0832576af996d1be31d35ed1f4ac1a1c3",
-      "normalizedLfSha256": "5871f559a365d1940c99f64edf6917a0832576af996d1be31d35ed1f4ac1a1c3"
+      "rawSha256": "c9458576a1775ab4f8fb2ac68cb02760ec2af9ca8e4bf46c7a50fbf8465fd170",
+      "normalizedLfSha256": "c9458576a1775ab4f8fb2ac68cb02760ec2af9ca8e4bf46c7a50fbf8465fd170"
+    },
+    {
+      "file": "short-temp-regression.json",
+      "rawSha256": "f6112754e5a9865d578a92995908f1f859758d1ec036472d23ae8ddb4091ccef",
+      "normalizedLfSha256": "f6112754e5a9865d578a92995908f1f859758d1ec036472d23ae8ddb4091ccef"
     },
     {
       "file": "source-evidence.json",
@@ -139,8 +144,8 @@
     },
     {
       "file": "validation.json",
-      "rawSha256": "fffd9e575ad8524a70a47dd4d83a7e91f6f57588b01169364a1b0a59e32ba033",
-      "normalizedLfSha256": "fffd9e575ad8524a70a47dd4d83a7e91f6f57588b01169364a1b0a59e32ba033"
+      "rawSha256": "fcdf5d83050ca4924151c49c739521951271514218f5a908926b7353d02bc10c",
+      "normalizedLfSha256": "fcdf5d83050ca4924151c49c739521951271514218f5a908926b7353d02bc10c"
     }
   ]
 }
