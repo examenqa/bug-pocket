@@ -1,0 +1,1981 @@
+{
+  "issue": "EXA-70",
+  "capturedOn": "2026-10-28",
+  "selectedHost": "24.22.1",
+  "executedHost": "v24.22.1",
+  "npm": "11.19.1",
+  "electronRuntimeHeldSeparate": "43.1.0",
+  "policy": "Check every declared Node engine in the after lock, including optional-platform entries. Electron runtime is separate from the Windows host.",
+  "recordsChecked": 328,
+  "mismatches": [],
+  "records": [
+    {
+      "path": "node_modules/@babel/code-frame",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/compat-data",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/core",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/generator",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/helper-compilation-targets",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/helper-globals",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/helper-module-imports",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/helper-module-transforms",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/helper-plugin-utils",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/helper-string-parser",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/helper-validator-identifier",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/helper-validator-option",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/helpers",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/parser",
+      "version": "7.29.7",
+      "node": ">=6.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/plugin-transform-arrow-functions",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/plugin-transform-react-jsx-self",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/plugin-transform-react-jsx-source",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/template",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/traverse",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@babel/types",
+      "version": "7.29.7",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron-internal/extract-zip",
+      "version": "1.0.4",
+      "node": ">=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/asar",
+      "version": "3.4.1",
+      "node": ">=10.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/asar/node_modules/minimatch",
+      "version": "3.1.5",
+      "node": "*",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/fuses/node_modules/fs-extra",
+      "version": "9.1.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/get",
+      "version": "5.0.0",
+      "node": ">=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/get/node_modules/semver",
+      "version": "7.8.5",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/notarize",
+      "version": "2.5.0",
+      "node": ">= 10.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/notarize/node_modules/fs-extra",
+      "version": "9.1.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/osx-sign",
+      "version": "1.3.3",
+      "node": ">=12.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/osx-sign/node_modules/isbinaryfile",
+      "version": "4.0.10",
+      "node": ">= 8.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/rebuild",
+      "version": "4.2.1",
+      "node": ">=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/universal",
+      "version": "2.0.3",
+      "node": ">=16.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/universal/node_modules/fs-extra",
+      "version": "11.4.1",
+      "node": ">=14.14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/universal/node_modules/minimatch",
+      "version": "9.0.9",
+      "node": ">=16 || 14 >=14.17",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/windows-sign",
+      "version": "1.2.2",
+      "node": ">=14.14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@electron/windows-sign/node_modules/fs-extra",
+      "version": "11.4.1",
+      "node": ">=14.14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/aix-ppc64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/android-arm",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/android-arm64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/android-x64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/darwin-arm64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/darwin-x64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/freebsd-arm64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/freebsd-x64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/linux-arm",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/linux-arm64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/linux-ia32",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/linux-loong64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/linux-mips64el",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/linux-ppc64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/linux-riscv64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/linux-s390x",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/linux-x64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/netbsd-arm64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/netbsd-x64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/openbsd-arm64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/openbsd-x64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/openharmony-arm64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/sunos-x64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/win32-arm64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/win32-ia32",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@esbuild/win32-x64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@isaacs/fs-minipass",
+      "version": "4.0.1",
+      "node": ">=18.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@jridgewell/resolve-uri",
+      "version": "3.1.2",
+      "node": ">=6.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@malept/cross-spawn-promise",
+      "version": "2.0.0",
+      "node": ">= 12.13.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@malept/flatpak-bundler",
+      "version": "0.4.0",
+      "node": ">= 10.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@malept/flatpak-bundler/node_modules/fs-extra",
+      "version": "9.1.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@noble/hashes",
+      "version": "1.8.0",
+      "node": "^14.21.3 || >=16",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@peculiar/asn1-schema",
+      "version": "2.11.1",
+      "node": ">=14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@peculiar/json-schema",
+      "version": "1.1.12",
+      "node": ">=8.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@peculiar/webcrypto",
+      "version": "1.7.2",
+      "node": ">=14.18.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-android-arm-eabi",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-android-arm64",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-darwin-arm64",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-darwin-x64",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-freebsd-x64",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-arm-gnueabihf",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-arm64-gnu",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-arm64-musl",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-ppc64-gnu",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-s390x-gnu",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-x64-gnu",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-x64-musl",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-openharmony-arm64",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-win32-arm64-msvc",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@rolldown/binding-win32-x64-msvc",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@sindresorhus/is",
+      "version": "4.6.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@supabase/auth-js",
+      "version": "2.106.2",
+      "node": ">=20.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@supabase/functions-js",
+      "version": "2.106.2",
+      "node": ">=20.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@supabase/postgrest-js",
+      "version": "2.106.2",
+      "node": ">=20.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@supabase/realtime-js",
+      "version": "2.106.2",
+      "node": ">=20.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@supabase/storage-js",
+      "version": "2.106.2",
+      "node": ">=20.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@supabase/supabase-js",
+      "version": "2.106.2",
+      "node": ">=20.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@szmarczak/http-timer",
+      "version": "4.0.6",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@vitejs/plugin-react",
+      "version": "5.2.0",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/@xmldom/xmldom",
+      "version": "0.8.15",
+      "node": ">=10.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/abbrev",
+      "version": "4.0.0",
+      "node": "^20.17.0 || >=22.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/abort-controller",
+      "version": "3.0.0",
+      "node": ">=6.5",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/agent-base",
+      "version": "7.1.4",
+      "node": ">= 14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/ansi-regex",
+      "version": "5.0.1",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/ansi-styles",
+      "version": "4.3.0",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/app-builder-lib",
+      "version": "26.18.1",
+      "node": ">=14.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/app-builder-lib/node_modules/@electron/get",
+      "version": "3.1.0",
+      "node": ">=14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/app-builder-lib/node_modules/@electron/get/node_modules/fs-extra",
+      "version": "8.1.0",
+      "node": ">=6 <7 || >=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/app-builder-lib/node_modules/ci-info",
+      "version": "4.3.1",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/app-builder-lib/node_modules/env-paths",
+      "version": "2.2.1",
+      "node": ">=6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/app-builder-lib/node_modules/semver",
+      "version": "7.7.4",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/app-builder-lib/node_modules/universalify",
+      "version": "0.1.2",
+      "node": ">= 4.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/archiver",
+      "version": "8.0.0",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/asn1js",
+      "version": "3.1.0",
+      "node": ">=12.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/async-exit-hook",
+      "version": "2.0.1",
+      "node": ">=0.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/at-least-node",
+      "version": "1.0.0",
+      "node": ">= 4.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/balanced-match",
+      "version": "4.0.4",
+      "node": "18 || 20 || >=22",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/baseline-browser-mapping",
+      "version": "2.11.34",
+      "node": ">=6.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/better-sqlite3",
+      "version": "12.11.1",
+      "node": "20.x || 22.x || 23.x || 24.x || 25.x || 26.x",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/bl/node_modules/readable-stream",
+      "version": "3.6.2",
+      "node": ">= 6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/browserslist",
+      "version": "4.29.5",
+      "node": "^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/buffer-crc32",
+      "version": "1.0.0",
+      "node": ">=8.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/builder-util",
+      "version": "26.18.1",
+      "node": ">=14.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/builder-util-runtime",
+      "version": "9.7.1",
+      "node": ">=12.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/bytestreamjs",
+      "version": "2.0.1",
+      "node": ">=6.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/cac",
+      "version": "7.1.0",
+      "node": ">=20.19.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/cacheable-lookup",
+      "version": "5.0.4",
+      "node": ">=10.6.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/cacheable-request",
+      "version": "7.0.4",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/call-bind-apply-helpers",
+      "version": "1.0.2",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/chalk",
+      "version": "4.1.2",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/chownr",
+      "version": "3.0.0",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/ci-info",
+      "version": "4.4.0",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/cliui",
+      "version": "8.0.1",
+      "node": ">=12",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/clone-response/node_modules/mimic-response",
+      "version": "1.0.1",
+      "node": ">=4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/color-convert",
+      "version": "2.0.1",
+      "node": ">=7.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/combined-stream",
+      "version": "1.0.8",
+      "node": ">= 0.8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/commander",
+      "version": "5.1.0",
+      "node": ">= 6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/compare-version",
+      "version": "0.1.2",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/compress-commons",
+      "version": "7.0.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/crc-32",
+      "version": "1.2.2",
+      "node": ">=0.8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/crc32-stream",
+      "version": "7.0.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/cross-spawn",
+      "version": "7.0.6",
+      "node": ">= 8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/cross-spawn/node_modules/which",
+      "version": "2.0.2",
+      "node": ">= 8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/debug",
+      "version": "4.4.3",
+      "node": ">=6.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/decompress-response",
+      "version": "6.0.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/deep-extend",
+      "version": "0.6.0",
+      "node": ">=4.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/defer-to-connect",
+      "version": "2.0.1",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/define-data-property",
+      "version": "1.1.4",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/define-properties",
+      "version": "1.2.1",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/delayed-stream",
+      "version": "1.0.0",
+      "node": ">=0.4.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/detect-libc",
+      "version": "2.1.2",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/dir-compare/node_modules/minimatch",
+      "version": "3.1.5",
+      "node": "*",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/dotenv",
+      "version": "16.6.1",
+      "node": ">=12",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/dotenv-expand",
+      "version": "11.0.7",
+      "node": ">=12",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/dunder-proto",
+      "version": "1.0.1",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/ejs",
+      "version": "3.1.10",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/electron",
+      "version": "43.1.0",
+      "node": ">= 22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/electron-builder",
+      "version": "26.18.1",
+      "node": ">=14.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/electron-log",
+      "version": "5.4.4",
+      "node": ">= 14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/electron-vite",
+      "version": "6.0.0",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/electron-winstaller",
+      "version": "5.4.0",
+      "node": ">=8.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/electron-winstaller/node_modules/fs-extra",
+      "version": "7.0.1",
+      "node": ">=6 <7 || >=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/electron-winstaller/node_modules/universalify",
+      "version": "0.1.2",
+      "node": ">= 4.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/env-paths",
+      "version": "3.0.0",
+      "node": "^12.20.0 || ^14.13.1 || >=16.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/es-define-property",
+      "version": "1.0.1",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/es-errors",
+      "version": "1.3.0",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/es-object-atoms",
+      "version": "1.1.2",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/es-set-tostringtag",
+      "version": "2.1.0",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/esbuild",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/esbuild/node_modules/@esbuild/netbsd-arm64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/esbuild/node_modules/@esbuild/openbsd-arm64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/esbuild/node_modules/@esbuild/openharmony-arm64",
+      "version": "0.25.12",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/escalade",
+      "version": "3.2.0",
+      "node": ">=6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/escape-string-regexp",
+      "version": "4.0.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/event-target-shim",
+      "version": "5.0.1",
+      "node": ">=6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/events",
+      "version": "3.3.0",
+      "node": ">=0.8.x",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/expand-template",
+      "version": "2.0.3",
+      "node": ">=6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/fdir",
+      "version": "6.5.0",
+      "node": ">=12.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/filelist/node_modules/minimatch",
+      "version": "5.1.9",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/form-data",
+      "version": "4.0.6",
+      "node": ">= 6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/fs-extra",
+      "version": "10.1.0",
+      "node": ">=12",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/fsevents",
+      "version": "2.3.3",
+      "node": "^8.16.0 || ^10.6.0 || >=11.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/gensync",
+      "version": "1.0.0-beta.2",
+      "node": ">=6.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/get-caller-file",
+      "version": "2.0.5",
+      "node": "6.* || 8.* || >= 10.*",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/get-intrinsic",
+      "version": "1.3.0",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/get-proto",
+      "version": "1.0.1",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/get-stream",
+      "version": "5.2.0",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/glob",
+      "version": "7.2.3",
+      "node": "*",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/glob/node_modules/minimatch",
+      "version": "3.1.5",
+      "node": "*",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/global-agent",
+      "version": "3.0.0",
+      "node": ">=10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/global-agent/node_modules/semver",
+      "version": "7.8.5",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/globalthis",
+      "version": "1.0.4",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/gopd",
+      "version": "1.2.0",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/got",
+      "version": "11.8.6",
+      "node": ">=10.19.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/has-flag",
+      "version": "4.0.0",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/has-symbols",
+      "version": "1.1.0",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/has-tostringtag",
+      "version": "1.0.2",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/hasown",
+      "version": "2.0.4",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/hosted-git-info",
+      "version": "4.1.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/hosted-git-info/node_modules/lru-cache",
+      "version": "6.0.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/http-proxy-agent",
+      "version": "7.0.2",
+      "node": ">= 14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/http2-wrapper",
+      "version": "1.0.3",
+      "node": ">=10.19.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/https-proxy-agent",
+      "version": "7.0.6",
+      "node": ">= 14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/iceberg-js",
+      "version": "0.8.1",
+      "node": ">=20.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/is-fullwidth-code-point",
+      "version": "3.0.0",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/is-stream",
+      "version": "4.0.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/isbinaryfile",
+      "version": "5.0.7",
+      "node": ">= 18.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/isexe",
+      "version": "3.1.5",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/jake",
+      "version": "10.9.4",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/jsesc",
+      "version": "3.1.0",
+      "node": ">=6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/json5",
+      "version": "2.2.3",
+      "node": ">=6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/lazystream",
+      "version": "1.0.1",
+      "node": ">= 0.6.3",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/lowercase-keys",
+      "version": "2.0.0",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/matcher",
+      "version": "3.0.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/math-intrinsics",
+      "version": "1.1.0",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/mime",
+      "version": "2.6.0",
+      "node": ">=4.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/mime-db",
+      "version": "1.52.0",
+      "node": ">= 0.6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/mime-types",
+      "version": "2.1.35",
+      "node": ">= 0.6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/mimic-response",
+      "version": "3.1.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/minimatch",
+      "version": "10.2.5",
+      "node": "18 || 20 || >=22",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/minimatch/node_modules/brace-expansion",
+      "version": "5.0.12",
+      "node": "20 || >=22",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/minipass",
+      "version": "7.1.3",
+      "node": ">=16 || 14 >=14.17",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/minizlib",
+      "version": "3.1.0",
+      "node": ">= 18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/nanoid",
+      "version": "3.3.20",
+      "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/node-abi",
+      "version": "4.40.0",
+      "node": ">=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/node-abi/node_modules/semver",
+      "version": "7.8.5",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/node-api-version/node_modules/semver",
+      "version": "7.8.5",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/node-gyp",
+      "version": "12.4.0",
+      "node": "^20.17.0 || >=22.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/node-gyp/node_modules/env-paths",
+      "version": "2.2.1",
+      "node": ">=6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/node-gyp/node_modules/isexe",
+      "version": "4.0.0",
+      "node": ">=20",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/node-gyp/node_modules/semver",
+      "version": "7.8.5",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/node-gyp/node_modules/undici",
+      "version": "6.29.1",
+      "node": ">=18.17",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/node-gyp/node_modules/which",
+      "version": "6.0.1",
+      "node": "^20.17.0 || >=22.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/node-releases",
+      "version": "2.0.60",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/nopt",
+      "version": "9.0.0",
+      "node": "^20.17.0 || >=22.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/normalize-path",
+      "version": "3.0.0",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/normalize-url",
+      "version": "6.1.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/object-keys",
+      "version": "1.1.1",
+      "node": ">= 0.4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/p-cancelable",
+      "version": "2.1.1",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/p-limit",
+      "version": "3.1.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/path-is-absolute",
+      "version": "1.0.1",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/path-key",
+      "version": "3.1.1",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/pe-library",
+      "version": "0.4.1",
+      "node": ">=12",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/picomatch",
+      "version": "4.0.7",
+      "node": ">=12",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/pkijs",
+      "version": "3.4.3",
+      "node": ">=16.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/plist",
+      "version": "3.1.0",
+      "node": ">=10.4.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/postcss",
+      "version": "8.5.32",
+      "node": "^10 || ^12 || >=14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/postject",
+      "version": "1.0.0-alpha.6",
+      "node": ">=14.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/postject/node_modules/commander",
+      "version": "9.5.0",
+      "node": "^12.20.0 || >=14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/prebuild-install",
+      "version": "7.1.3",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/prebuild-install/node_modules/node-abi",
+      "version": "3.94.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/prebuild-install/node_modules/semver",
+      "version": "7.8.5",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/proc-log",
+      "version": "6.1.0",
+      "node": "^20.17.0 || >=22.9.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/process",
+      "version": "0.11.10",
+      "node": ">= 0.6.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/progress",
+      "version": "2.0.3",
+      "node": ">=0.4.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/promise-retry",
+      "version": "2.0.1",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/pvutils",
+      "version": "1.2.0",
+      "node": ">=16.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/quick-lru",
+      "version": "5.1.1",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/react",
+      "version": "18.3.1",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/react-refresh",
+      "version": "0.18.0",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/readable-stream",
+      "version": "4.7.0",
+      "node": "^12.22.0 || ^14.17.0 || >=16.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/readdir-glob",
+      "version": "3.0.0",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/require-directory",
+      "version": "2.1.1",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/require-from-string",
+      "version": "2.0.2",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/resedit",
+      "version": "1.7.2",
+      "node": ">=12",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/retry",
+      "version": "0.12.0",
+      "node": ">= 4",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/roarr",
+      "version": "2.15.4",
+      "node": ">=8.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/rolldown",
+      "version": "1.2.15",
+      "node": "^20.19.0 || >=22.12.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/rollup",
+      "version": "4.62.2",
+      "node": ">=18.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/sax",
+      "version": "1.6.1",
+      "node": ">=11.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/serialize-error",
+      "version": "7.0.1",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/shebang-command",
+      "version": "2.0.0",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/shebang-regex",
+      "version": "3.0.0",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/simple-update-notifier",
+      "version": "2.0.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/simple-update-notifier/node_modules/semver",
+      "version": "7.8.5",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/source-map",
+      "version": "0.6.1",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/source-map-js",
+      "version": "1.2.2",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/stat-mode",
+      "version": "1.0.0",
+      "node": ">= 6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/string-width",
+      "version": "4.2.3",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/strip-ansi",
+      "version": "6.0.1",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/strip-json-comments",
+      "version": "2.0.1",
+      "node": ">=0.10.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/sumchecker",
+      "version": "3.0.1",
+      "node": ">= 8.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/supports-color",
+      "version": "7.2.0",
+      "node": ">=8",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tar",
+      "version": "7.5.22",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tar-fs/node_modules/readable-stream",
+      "version": "3.6.2",
+      "node": ">= 6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tar-fs/node_modules/tar-stream",
+      "version": "2.2.0",
+      "node": ">=6",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tar/node_modules/yallist",
+      "version": "5.0.0",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/temp",
+      "version": "0.9.4",
+      "node": ">=6.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tinyglobby",
+      "version": "0.2.17",
+      "node": ">=12.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tmp",
+      "version": "0.2.7",
+      "node": ">=14.14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx",
+      "version": "4.23.1",
+      "node": ">=18.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/aix-ppc64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/android-arm",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/android-arm64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/android-x64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/darwin-arm64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/darwin-x64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/freebsd-arm64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/freebsd-x64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/linux-arm",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/linux-arm64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/linux-ia32",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/linux-loong64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/linux-mips64el",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/linux-ppc64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/linux-riscv64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/linux-s390x",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/linux-x64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/netbsd-x64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/openbsd-x64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/sunos-x64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/win32-arm64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/win32-ia32",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/@esbuild/win32-x64",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tsx/node_modules/esbuild",
+      "version": "0.28.1",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/tunnel-agent",
+      "version": "0.6.0",
+      "node": "*",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/type-fest",
+      "version": "0.13.1",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/typescript",
+      "version": "5.9.3",
+      "node": ">=14.17",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/undici",
+      "version": "7.30.1",
+      "node": ">=20.18.1",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/universalify",
+      "version": "2.0.1",
+      "node": ">= 10.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/unzipper/node_modules/fs-extra",
+      "version": "11.3.1",
+      "node": ">=14.14",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/vite",
+      "version": "6.4.5",
+      "node": "^18.0.0 || ^20.0.0 || >=22.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/which",
+      "version": "5.0.0",
+      "node": "^18.17.0 || >=20.5.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/wrap-ansi",
+      "version": "7.0.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/ws",
+      "version": "8.21.0",
+      "node": ">=10.0.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/xmlbuilder",
+      "version": "15.1.1",
+      "node": ">=8.0",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/y18n",
+      "version": "5.0.8",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/yargs",
+      "version": "17.7.3",
+      "node": ">=12",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/yargs-parser",
+      "version": "21.1.1",
+      "node": ">=12",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/yauzl",
+      "version": "3.4.0",
+      "node": ">=12",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/yocto-queue",
+      "version": "0.1.0",
+      "node": ">=10",
+      "selectedHostSatisfies": true
+    },
+    {
+      "path": "node_modules/zip-stream",
+      "version": "7.0.5",
+      "node": ">=18",
+      "selectedHostSatisfies": true
+    }
+  ]
+}

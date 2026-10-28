@@ -1,0 +1,114 @@
+{
+  "issue": "EXA-70",
+  "capturedOn": "2026-10-28",
+  "scope": "Internal supporting check development and scoped review; not external final review or a security exception",
+  "failuresAndCorrections": [
+    {
+      "evidence": "build-initial.log",
+      "category": "Execution sandbox limitation",
+      "observed": "Vite Windows optimizeSafeRealPathSync child-process spawn failed with EPERM",
+      "correction": "The same supported build was rerun with allowed process permissions; no compatibility/security code workaround was added"
+    },
+    {
+      "evidence": "security-first.log",
+      "category": "New harness extraction boundary",
+      "observed": "VM extraction selected an earlier same-named os binding and produced a syntax error",
+      "correction": "Locate the os binding immediately preceding the actual bundled getArgumentsForFile implementation"
+    },
+    {
+      "evidence": "security-second.log",
+      "category": "New harness fixture coverage",
+      "observed": "No optimizer existed because the fixture disabled dependency discovery without an included dependency",
+      "correction": "Add one synthetic local package and explicitly optimize it; assert the real optimized-dependency URL branch is active"
+    },
+    {
+      "evidence": [
+        "security-third.log",
+        "security-fourth.log",
+        "security-fifth.log"
+      ],
+      "category": "New harness response expectation",
+      "observed": "Encoded forward slashes remain literal filename characters under decodeURI and Vite returns a safe empty dummy sourcemap with HTTP 200",
+      "correction": "Assert ordinary and Windows-backslash traversal return denial; separately assert the encoded-slash response is an empty dummy map with no synthetic outside bytes. Use mpa fixture mode to avoid SPA HTML fallback ambiguity"
+    },
+    {
+      "evidence": "security-seventh.log",
+      "category": "New harness SSE endpoint coverage",
+      "observed": "Tightened SSE positive-control assertion rejected HTTP 404 because the request lacked EventSource's required Accept header",
+      "correction": "Send Accept: text/event-stream and require HTTP 200 plus text/event-stream before checking absence of permissive CORS. Earlier security-sixth.log passed a weaker 404 check and is superseded"
+    },
+    {
+      "evidence": "security-final.log",
+      "category": "Concurrent installation environment",
+      "observed": "Cannot find module vite/package.json while root clean npm ci was replacing node_modules",
+      "correction": "Wait for clean installation to complete; the unchanged security checks then passed in security-final-after-ci.log",
+      "productVulnerability": false
+    },
+    {
+      "evidence": "test-port-collision.log",
+      "category": "New harness Windows port isolation",
+      "observed": "Vite normalized port 0 to its default 5173; concurrent development verification already used that port",
+      "correction": "Reserve and release an OS-selected available TCP port, then pass the selected number to Vite with strictPort true. No existing listener was killed",
+      "verification": "security-ephemeral-final.log passed all 10 groups after the fix"
+    },
+    {
+      "category": "First Windows CI fixture positive-control failure",
+      "evidence": "https://github.com/examenqa/bug-pocket/actions/runs/40641113588",
+      "observed": "Clean install succeeded; security main.js positive control returned403 before the full suite. Runner temp spelling was not captured.",
+      "correction": "Actual local Windows8.3 temp alias reproduced the failure. Canonicalize the temp parent via fs.realpathSync.native before creating the fixture, validate cleanup against that parent and keep all Vite deny/strict controls. Focused red/green evidence is short-temp-regression.json. Attribution to first runner alias remains inference until subsequent printed path evidence."
+    },
+    {
+      "category": "New normal-startup harness API assumptions",
+      "observed": "sessionData follows the -dev userData path; Electron43 getLastWebPreferences omits preload paths; Windows preload script URLs use backslashes",
+      "correction": "Assert actual isolated sessionData; inspect Debugger.scriptParsed for real preload loading; accept Windows separators. Initial harness failures retained outside repository; final all-mode checks pass."
+    },
+    {
+      "category": "Second Windows CI cross-drive raw-file fixture assumption",
+      "evidence": "https://github.com/examenqa/bug-pocket/actions/runs/40641773413",
+      "observed": "Runner logs show raw RUNNER~1 expanded to runneradmin; ordinary/CORS/ADS checks passed. Direct outside request returned404 instead of required403 because Vite raw-/@fs strips drive and process cwd was D: while temp fixture was C:.",
+      "correction": "Run disposable check process from canonical fixture drive and restore cwd before cleanup. Added /@fs allowed-file200, actual outside-file existence/bytes and public loading-guard true/false controls; outside403 remains mandatory. All10 focused local groups passed; next final-head CI must validate cross-drive environment."
+    }
+  ],
+  "latestStandaloneSecurityResult": {
+    "evidence": "security-ephemeral-final.log",
+    "command": "node scripts/test-vite-security.cjs",
+    "host": "Windows x64 / Node 24.22.1",
+    "versions": {
+      "vite": "6.4.5",
+      "viteResolvedEsbuild": "0.25.12"
+    },
+    "exitCode": 0,
+    "namedGroupsPassed": 10,
+    "supersedes": [
+      "security-sixth.log",
+      "security-final-after-ci.log"
+    ]
+  },
+  "checkBoundaries": [
+    "Actual installed Vite editor source was executed with inert filesystem and child_process recording doubles; no real editor, shell command payload, SMB connection or NTLM authentication was attempted",
+    "WSL argument conversion was simulated with the actual bundled function; no WSL runtime was executed",
+    "Windows tilde-path rejection used a real synthetic tilde-named file; no volume 8.3 alias was generated",
+    "GHSA-rq7h-c2jc-7f22 explicitly excludes Windows; patched resolvedId registration was inspected but no POSIX runtime reproduction was executed",
+    "Custom HTML transformation checked every generated module URL remains on the local origin; no malicious website or attacker JavaScript was executed",
+    "HTTP CORS and DNS-rebinding controls were checked directly; loopback binding alone was not used as a disposition",
+    "The existing schema-install test filter leaves the Supabase boundary unexecuted despite any zero runner-reported skip count",
+    "Live providers/Supabase, installed NSIS/migration, Store package installation and WACK remain separate acceptance gates",
+    "Normal-startup verification intercepts app.setLoginItemSettings to avoid changing the real Windows Run registry; that integration is explicitly excluded"
+  ],
+  "internalScopedReview": {
+    "basis": "Current working diff and installed package manifests; final root tests, packaging and CI were still in progress when this note was written",
+    "actionableFinding": "Port-zero fixture collision described above; corrected and verified",
+    "otherFindings": [],
+    "verified": [
+      "electron-vite 6.0.0 declares Vite ^6/^7/^8 and Node ^20.19.0 or >=22.12.0",
+      "plugin-react 5.2.0 declares Vite ^4.2/^5/^6/^7/^8 and Node ^20.19.0 or >=22.12.0",
+      "npm ls vite electron-vite plugin-react esbuild magic-string returns exit 0 with no invalid peer path",
+      "Exact Electron, builder, SQLite, React/react-dom, archiver and yauzl lock records equal the verified-main baseline",
+      "Generated main output still requires external better-sqlite3",
+      "Configuration, renderer security and app IPC source are unchanged",
+      "Historical EXA-68 files only receive a dated narrative cross-reference; snapshots and disputed cache classification are preserved",
+      "Startup harness verifies isolation before app-entry imports/DB, uses real renderer/IPC, restores source fixtures and does not weaken sandbox flags"
+    ],
+    "notExternalFinalReview": true
+  }
+}

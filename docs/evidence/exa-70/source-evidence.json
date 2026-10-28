@@ -1,0 +1,80 @@
+{
+  "issue": "EXA-70",
+  "capturedOn": "2026-10-28",
+  "baselineCommit": "2ef9a0fe89b8bc5f06a30a0ead931e842815792b",
+  "hashConvention": "Unless explicitly suffixed NormalizedLf, SHA-256 values hash raw working-copy or generated-file bytes. Installed third-party bundle hashes identify the downloaded distribution bytes. Tracked source files can have CRLF working bytes and LF Git blobs; corresponding normalized comparisons are in lock-changes.json.",
+  "installedVite": {
+    "file": "node_modules/vite/dist/node/chunks/dep-CkSfqg8D.js",
+    "sha256": "d079b31bef701ca4a06372c93638c168de7511be6af6ccd8385474a1bd751eed",
+    "matchesOfficialRegistryTarball": true,
+    "tarballIntegrity": "sha512-4enwjFfi4IwtEh0w+jPzpLVOFQiPHmmzPxcHXQOyEur47o6u0jE573DmGpjA+7irXoMLYRZD5ZaFUEneS3abPg==",
+    "bundleMarkers": [
+      {
+        "meaning": "editor arguments canonicalized",
+        "marker": "fileName = path$6.resolve(fileName);",
+        "line": 24951
+      },
+      {
+        "meaning": "Windows percent rejection",
+        "marker": "if (args.some((arg) => arg.includes('%')))",
+        "line": 25092
+      },
+      {
+        "meaning": "position suffix canonicalized",
+        "marker": "const fileName = unresolvedFileName ? path$5.resolve(unresolvedFileName) : '';",
+        "line": 25112
+      },
+      {
+        "meaning": "UNC rejection before filesystem",
+        "marker": "if (process.platform === 'win32' && fileName.startsWith('\\\\\\\\'))",
+        "line": 25182
+      },
+      {
+        "meaning": "existsSync after UNC rejection",
+        "marker": "if (!fs$1.existsSync(fileName))",
+        "line": 25190
+      },
+      {
+        "meaning": "optimized map boundary",
+        "marker": "if (!depsOptimizer.isOptimizedDepFile(sourcemapPath))",
+        "line": 37491
+      },
+      {
+        "meaning": "safe modules record resolved paths",
+        "marker": "config.safeModulePaths.add(cleanUrl(resolvedId));",
+        "line": 40941
+      }
+    ],
+    "explanation": "Vite bundles launch-editor and middleware internally. No standalone launch-editor addition or override is used as evidence of remediation. All marker locations refer to the installed distribution, not an unrelated package."
+  },
+  "installedElectronVite": {
+    "file": "node_modules/electron-vite/dist/chunks/lib-DoUt4oMD.js",
+    "sha256": "2dbac04f176c651aa3372f268272556e94c2f4f45963acc52d3aa324e8e12bd8",
+    "officialSources": [
+      "https://raw.githubusercontent.com/alex8088/electron-vite/v6.0.0/src/plugins/electron.ts",
+      "https://raw.githubusercontent.com/alex8088/electron-vite/v6.0.0/src/plugins/externalizeDeps.ts",
+      "https://raw.githubusercontent.com/alex8088/electron-vite/v6.0.0/CHANGELOG.md"
+    ],
+    "observations": [
+      "ConfigFactory copies build.rollupOptions to build.rolldownOptions when the latter is absent; presets copy final options back for Vite 6.",
+      "Main/preload builtins and package.dependencies are externalized. build.externalizeDeps defaults true; the deprecated explicit plugin is not necessary.",
+      "Package type controls default CJS/ESM; the application explicitly configures CJS. Upstream does not unconditionally rewrite application preloadPath() to .mjs."
+    ]
+  },
+  "preloadPipeline": {
+    "configFile": "electron.vite.config.ts",
+    "configSha256": "383c53b863bb0b56688093a34b36a4a505c73cb96cb8d23b5d03d63d81b6e5c0",
+    "configNormalizedLfSha256": "304b9536f1a9515ebba2a73b3739739883eea7e026eaae4ce4fc2ffc342c83bc",
+    "applicationSource": "src/main/index.ts",
+    "generatedMain": "out/main/index.js",
+    "sourceSelection": "preloadPath(): dev uses ../preload/index.js; production selects existing ../preload/index.mjs, falling back to ../preload/index.js.",
+    "generatedSelectionPreserved": true,
+    "format": "Explicit CommonJS for main and preload. Main remains out/main/index.js; preload emits out/preload/index.js.",
+    "generatedPreloadSha256": "26aa66f3eaf24635d108c7ee8e56b15c73a996ed810e796002a5ae466ed20a6c",
+    "copiedPreloadSha256": "26aa66f3eaf24635d108c7ee8e56b15c73a996ed810e796002a5ae466ed20a6c",
+    "generatedAndCopiedPreloadIdentical": true,
+    "decision": "Retain scripts/fix-preload.js and build/start/dist invocation. Correct its historical explanation: the copy preserves the application production preference; current upstream does not force every preload reference to .mjs.",
+    "verificationBoundary": "Generated paths and byte equality are source/output evidence. Normal development, npm start and packaged renderer/accepted benign IPC behavior must each be executed separately; hidden bridge-presence smoke alone is insufficient."
+  },
+  "discovery": "MCP graph search found preloadPath, but get_code_snippet returned stale/unrelated lines from its different indexed checkout; current checkout source and generated outputs were read directly."
+}

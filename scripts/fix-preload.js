@@ -1,12 +1,14 @@
 /**
- * Post-build fix for electron-vite v2.3.x
+ * Preserve the application's existing production preload path.
  *
- * electron-vite always rewrites preload references in the main bundle to
- * use `index.mjs`, but when the preload is built with `format: 'cjs'`, rollup
- * outputs `index.js` (its default CJS filename). This creates a file-not-found
- * mismatch at runtime. This script copies index.js -> index.mjs so Electron
- * finds the file at the path the main bundle expects. The content is still
- * CommonJS, which works fine in Electron's preload sandbox context.
+ * With electron-vite 6 and our explicit CommonJS configuration, the generated
+ * preload is index.js. The application's preloadPath() uses that file in dev
+ * and prefers index.mjs in production, with an index.js fallback. Keep the
+ * historical copy for start/packaged execution; the extension does not turn its
+ * contents into ESM in Electron's sandboxed preload loader. Normal startup,
+ * real IPC and isolation are verified by test:toolchain-startup in all modes.
+ * This is an application compatibility convention, not an unconditional
+ * electron-vite rewrite. See docs/vite-toolchain.md for the traced output.
  */
 const fs = require('fs');
 const path = require('path');

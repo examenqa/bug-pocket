@@ -1,0 +1,4328 @@
+{
+  "schemaVersion": 1,
+  "issue": "EXA-70",
+  "capturedOn": "2026-10-28",
+  "baselineCommit": "2ef9a0fe89b8bc5f06a30a0ead931e842815792b",
+  "beforeLockSha256": "37c8242bd882e2406bcc43bec32ec7831fd9157d5ca10199db227ee90d0e20f2",
+  "afterLockSha256": "a66f8c51636f4beb4d258c51ed637500eb7939db228c75d5f52fc1c5dbed75f5",
+  "lockfileVersion": 3,
+  "hashConvention": "Legacy beforeLockSha256/afterLockSha256 fields hash raw captured Windows working-copy bytes. core.autocrlf=true can produce CRLF working files and LF Git blobs; use normalized LF hashes to verify a fresh Git clone.",
+  "beforeLockRawWorkingCopySha256": "37c8242bd882e2406bcc43bec32ec7831fd9157d5ca10199db227ee90d0e20f2",
+  "afterLockRawWorkingCopySha256": "a66f8c51636f4beb4d258c51ed637500eb7939db228c75d5f52fc1c5dbed75f5",
+  "beforeLockNormalizedLfSha256": "e63acb6e62f92cad34634f1cacb6789fe681c839c9f176462596b1bceec480f0",
+  "afterLockNormalizedLfSha256": "d63d9a983c342c97c874251ec969ca12a0046074d85bba84e3b02b27fd493400",
+  "baselineGitLockBlobSha256": "e63acb6e62f92cad34634f1cacb6789fe681c839c9f176462596b1bceec480f0",
+  "beforeNormalizedLfMatchesBaselineGitBlob": true,
+  "deliberateRootDependencyChanges": [
+    {
+      "name": "@vitejs/plugin-react",
+      "before": "4.7.0",
+      "after": "5.2.0"
+    },
+    {
+      "name": "electron-vite",
+      "before": "2.3.0",
+      "after": "6.0.0"
+    },
+    {
+      "name": "vite",
+      "before": "5.4.21",
+      "after": "6.4.5"
+    }
+  ],
+  "counts": {
+    "added": 21,
+    "removed": 0,
+    "changed": 33
+  },
+  "invariants": {
+    "applicationDependencyDeclarationsUnchanged": true,
+    "otherDevDependencyDeclarationsUnchanged": true,
+    "electronDeclaration": "^43.1.0",
+    "electronLockRecordUnchanged": true,
+    "electronLocked": "43.1.0",
+    "builderLocked": "26.18.1",
+    "builderLockRecordUnchanged": true,
+    "sqliteLocked": "12.11.1",
+    "sqliteLockRecordUnchanged": true,
+    "reactLocked": "18.3.1",
+    "reactLockRecordUnchanged": true,
+    "packagingConfigurationUnchanged": true,
+    "braceOverridesUnchanged": true,
+    "approvedBraceOverrides": {
+      "minimatch@3": {
+        "brace-expansion": "1.1.21"
+      },
+      "minimatch@5": {
+        "brace-expansion": "2.1.7"
+      },
+      "minimatch@9": {
+        "brace-expansion": "2.1.7"
+      },
+      "minimatch@10": {
+        "brace-expansion": "5.0.12"
+      }
+    },
+    "hostEngineUnchanged": true,
+    "mainEntryUnchanged": true,
+    "mainEntry": "out/main/index.js",
+    "postinstallUnchanged": true,
+    "ci": {
+      "actionsPinsUnchanged": true,
+      "actionPins": [
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1"
+      ],
+      "triggersUnchanged": true,
+      "triggerText": "on:\n  push:\n    branches:\n      - main\n      - dev\n  pull_request:\n    branches:\n      - main\n      - dev",
+      "nativeInstallOptionRetained": true,
+      "intentionalChange": "Add separate normal development/start/packaged renderer and accepted IPC verification step; existing install/test/build/unpacked smoke steps remain."
+    },
+    "unchangedSourceFiles": [
+      {
+        "file": ".node-version",
+        "baselineBlobSha256": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
+        "workingFileRawSha256": "7c415154bb9f8e90394317c7109261249d2c4fbd549008ae6d014ee565ee7967",
+        "workingFileNormalizedLfSha256": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
+        "contentUnchangedIgnoringCheckoutLineEndings": true
+      },
+      {
+        "file": "electron.vite.config.ts",
+        "baselineBlobSha256": "304b9536f1a9515ebba2a73b3739739883eea7e026eaae4ce4fc2ffc342c83bc",
+        "workingFileRawSha256": "383c53b863bb0b56688093a34b36a4a505c73cb96cb8d23b5d03d63d81b6e5c0",
+        "workingFileNormalizedLfSha256": "304b9536f1a9515ebba2a73b3739739883eea7e026eaae4ce4fc2ffc342c83bc",
+        "contentUnchangedIgnoringCheckoutLineEndings": true
+      },
+      {
+        "file": "src/main/index.ts",
+        "baselineBlobSha256": "1c01c719bb34c037439171457fb9550256cd1e325ce73fe31411c293a2b74a19",
+        "workingFileRawSha256": "f99333be3c92c94d65175c3be8a675231e50e24848480b027893892d36d7328b",
+        "workingFileNormalizedLfSha256": "1c01c719bb34c037439171457fb9550256cd1e325ce73fe31411c293a2b74a19",
+        "contentUnchangedIgnoringCheckoutLineEndings": true
+      },
+      {
+        "file": "src/preload/index.ts",
+        "baselineBlobSha256": "40a583434e585b2af8842844bfaca59d0435afb1c2959de59f741d54fe588dca",
+        "workingFileRawSha256": "27c0202c2bf4efb95f8ded1e7d94c93e272e389319e1b5bd39dc646722a3dbdb",
+        "workingFileNormalizedLfSha256": "40a583434e585b2af8842844bfaca59d0435afb1c2959de59f741d54fe588dca",
+        "contentUnchangedIgnoringCheckoutLineEndings": true
+      },
+      {
+        "file": "src/main/ipc/secureIpc.ts",
+        "baselineBlobSha256": "aefc6090c054c268e74aaff9ee1bfa2bd407455940c08258877bd13b3f09689c",
+        "workingFileRawSha256": "1d4ae3d3af021e103d2e2218bcb7989e13be100ee74a2e789ee29e53a9f02aad",
+        "workingFileNormalizedLfSha256": "aefc6090c054c268e74aaff9ee1bfa2bd407455940c08258877bd13b3f09689c",
+        "contentUnchangedIgnoringCheckoutLineEndings": true
+      },
+      {
+        "file": "src/renderer/index.html",
+        "baselineBlobSha256": "516258b7ccc09442330ad9346ad0be1681901d5b8d346d2a97cee72dc2ecda37",
+        "workingFileRawSha256": "0bb26bb961157c5f95ce4cd3f331e5a233676f63be16d29d432fea9745f01b9f",
+        "workingFileNormalizedLfSha256": "516258b7ccc09442330ad9346ad0be1681901d5b8d346d2a97cee72dc2ecda37",
+        "contentUnchangedIgnoringCheckoutLineEndings": true
+      }
+    ],
+    "preservedArchiveAndBraceRecords": [
+      {
+        "path": "node_modules/@electron/universal/node_modules/brace-expansion",
+        "version": "2.1.7",
+        "unchanged": true
+      },
+      {
+        "path": "node_modules/brace-expansion",
+        "version": "1.1.21",
+        "unchanged": true
+      },
+      {
+        "path": "node_modules/filelist/node_modules/brace-expansion",
+        "version": "2.1.7",
+        "unchanged": true
+      },
+      {
+        "path": "node_modules/minimatch/node_modules/brace-expansion",
+        "version": "5.0.12",
+        "unchanged": true
+      },
+      {
+        "path": "node_modules/yauzl",
+        "version": "3.4.0",
+        "unchanged": true
+      }
+    ]
+  },
+  "changes": [
+    {
+      "path": "",
+      "change": "changed",
+      "changedFields": [
+        "devDependencies"
+      ],
+      "before": {
+        "name": "bug-pocket",
+        "version": "0.9.9",
+        "hasInstallScript": true,
+        "dependencies": {
+          "@supabase/supabase-js": "2.106.2",
+          "archiver": "^8.0.0",
+          "better-sqlite3": "12.11.1",
+          "electron-log": "5.4.4",
+          "lucide-react": "^0.468.0",
+          "react": "^18.3.1",
+          "react-dom": "^18.3.1",
+          "ws": "8.21.0",
+          "yauzl": "3.4.0"
+        },
+        "devDependencies": {
+          "@electric-sql/pglite": "0.5.8",
+          "@types/archiver": "7.0.0",
+          "@types/better-sqlite3": "7.6.13",
+          "@types/node": "22.19.19",
+          "@types/react": "18.3.29",
+          "@types/react-dom": "18.3.7",
+          "@types/ws": "8.18.1",
+          "@types/yauzl": "3.4.0",
+          "@vitejs/plugin-react": "4.7.0",
+          "electron": "^43.1.0",
+          "electron-builder": "26.18.1",
+          "electron-vite": "2.3.0",
+          "tsx": "4.23.1",
+          "typescript": "5.9.3",
+          "vite": "5.4.21"
+        },
+        "engines": {
+          "node": "^24.22.1"
+        }
+      },
+      "after": {
+        "name": "bug-pocket",
+        "version": "0.9.9",
+        "hasInstallScript": true,
+        "dependencies": {
+          "@supabase/supabase-js": "2.106.2",
+          "archiver": "^8.0.0",
+          "better-sqlite3": "12.11.1",
+          "electron-log": "5.4.4",
+          "lucide-react": "^0.468.0",
+          "react": "^18.3.1",
+          "react-dom": "^18.3.1",
+          "ws": "8.21.0",
+          "yauzl": "3.4.0"
+        },
+        "devDependencies": {
+          "@electric-sql/pglite": "0.5.8",
+          "@types/archiver": "7.0.0",
+          "@types/better-sqlite3": "7.6.13",
+          "@types/node": "22.19.19",
+          "@types/react": "18.3.29",
+          "@types/react-dom": "18.3.7",
+          "@types/ws": "8.18.1",
+          "@types/yauzl": "3.4.0",
+          "@vitejs/plugin-react": "5.2.0",
+          "electron": "^43.1.0",
+          "electron-builder": "26.18.1",
+          "electron-vite": "6.0.0",
+          "tsx": "4.23.1",
+          "typescript": "5.9.3",
+          "vite": "6.4.5"
+        },
+        "engines": {
+          "node": "^24.22.1"
+        }
+      },
+      "reason": "Only the direct Vite, electron-vite and plugin-react declarations change in the lock root; other direct dependencies and Node engine are retained.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": []
+    },
+    {
+      "path": "node_modules/@esbuild/aix-ppc64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.21.5.tgz",
+        "integrity": "sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==",
+        "cpu": [
+          "ppc64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "aix"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.25.12.tgz",
+        "integrity": "sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA==",
+        "cpu": [
+          "ppc64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "aix"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/aix-ppc64",
+          "name": "@esbuild/aix-ppc64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/aix-ppc64",
+          "name": "@esbuild/aix-ppc64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/android-arm",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.21.5.tgz",
+        "integrity": "sha512-vCPvzSjpPHEi1siZdlvAlsPxXl7WbOVUBBAowWug4rJHb68Ox8KualB+1ocNvT5fjv6wpkX6o/iEpbDrf68zcg==",
+        "cpu": [
+          "arm"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "android"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.25.12.tgz",
+        "integrity": "sha512-VJ+sKvNA/GE7Ccacc9Cha7bpS8nyzVv0jdVgwNDaR4gDMC/2TTRc33Ip8qrNYUcpkOHUT5OZ0bUcNNVZQ9RLlg==",
+        "cpu": [
+          "arm"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "android"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/android-arm",
+          "name": "@esbuild/android-arm",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/android-arm",
+          "name": "@esbuild/android-arm",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/android-arm64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.21.5.tgz",
+        "integrity": "sha512-c0uX9VAUBQ7dTDCjq+wdyGLowMdtR/GoC2U5IYk/7D1H1JYC0qseD7+11iMP2mRLN9RcCMRcjC4YMclCzGwS/A==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "android"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.25.12.tgz",
+        "integrity": "sha512-6AAmLG7zwD1Z159jCKPvAxZd4y/VTO0VkprYy+3N2FtJ8+BQWFXU+OxARIwA46c5tdD9SsKGZ/1ocqBS/gAKHg==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "android"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/android-arm64",
+          "name": "@esbuild/android-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/android-arm64",
+          "name": "@esbuild/android-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/android-x64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.21.5.tgz",
+        "integrity": "sha512-D7aPRUUNHRBwHxzxRvp856rjUHRFW1SdQATKXH2hqA0kAZb1hKmi02OpYRacl0TxIGz/ZmXWlbZgjwWYaCakTA==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "android"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.25.12.tgz",
+        "integrity": "sha512-5jbb+2hhDHx5phYR2By8GTWEzn6I9UqR11Kwf22iKbNpYrsmRB18aX/9ivc5cabcUiAT/wM+YIZ6SG9QO6a8kg==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "android"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/android-x64",
+          "name": "@esbuild/android-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/android-x64",
+          "name": "@esbuild/android-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/darwin-arm64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.21.5.tgz",
+        "integrity": "sha512-DwqXqZyuk5AiWWf3UfLiRDJ5EDd49zg6O9wclZ7kUMv2WRFr4HKjXp/5t8JZ11QbQfUS6/cRCKGwYhtNAY88kQ==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "darwin"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.25.12.tgz",
+        "integrity": "sha512-N3zl+lxHCifgIlcMUP5016ESkeQjLj/959RxxNYIthIg+CQHInujFuXeWbWMgnTo4cp5XVHqFPmpyu9J65C1Yg==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "darwin"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/darwin-arm64",
+          "name": "@esbuild/darwin-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/darwin-arm64",
+          "name": "@esbuild/darwin-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/darwin-x64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.21.5.tgz",
+        "integrity": "sha512-se/JjF8NlmKVG4kNIuyWMV/22ZaerB+qaSi5MdrXtd6R08kvs2qCN4C09miupktDitvh8jRFflwGFBQcxZRjbw==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "darwin"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.25.12.tgz",
+        "integrity": "sha512-HQ9ka4Kx21qHXwtlTUVbKJOAnmG1ipXhdWTmNXiPzPfWKpXqASVcWdnf2bnL73wgjNrFXAa3yYvBSd9pzfEIpA==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "darwin"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/darwin-x64",
+          "name": "@esbuild/darwin-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/darwin-x64",
+          "name": "@esbuild/darwin-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/freebsd-arm64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.21.5.tgz",
+        "integrity": "sha512-5JcRxxRDUJLX8JXp/wcBCy3pENnCgBR9bN6JsY4OmhfUtIHe3ZW0mawA7+RDAcMLrMIZaf03NlQiX9DGyB8h4g==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "freebsd"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.25.12.tgz",
+        "integrity": "sha512-gA0Bx759+7Jve03K1S0vkOu5Lg/85dou3EseOGUes8flVOGxbhDDh/iZaoek11Y8mtyKPGF3vP8XhnkDEAmzeg==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "freebsd"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/freebsd-arm64",
+          "name": "@esbuild/freebsd-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/freebsd-arm64",
+          "name": "@esbuild/freebsd-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/freebsd-x64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.21.5.tgz",
+        "integrity": "sha512-J95kNBj1zkbMXtHVH29bBriQygMXqoVQOQYA+ISs0/2l3T9/kj42ow2mpqerRBxDJnmkUDCaQT/dfNXWX/ZZCQ==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "freebsd"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.25.12.tgz",
+        "integrity": "sha512-TGbO26Yw2xsHzxtbVFGEXBFH0FRAP7gtcPE7P5yP7wGy7cXK2oO7RyOhL5NLiqTlBh47XhmIUXuGciXEqYFfBQ==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "freebsd"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/freebsd-x64",
+          "name": "@esbuild/freebsd-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/freebsd-x64",
+          "name": "@esbuild/freebsd-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/linux-arm",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.21.5.tgz",
+        "integrity": "sha512-bPb5AHZtbeNGjCKVZ9UGqGwo8EUu4cLq68E95A53KlxAPRmUyYv2D6F0uUI65XisGOL1hBP5mTronbgo+0bFcA==",
+        "cpu": [
+          "arm"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.25.12.tgz",
+        "integrity": "sha512-lPDGyC1JPDou8kGcywY0YILzWlhhnRjdof3UlcoqYmS9El818LLfJJc3PXXgZHrHCAKs/Z2SeZtDJr5MrkxtOw==",
+        "cpu": [
+          "arm"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-arm",
+          "name": "@esbuild/linux-arm",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-arm",
+          "name": "@esbuild/linux-arm",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/linux-arm64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.21.5.tgz",
+        "integrity": "sha512-ibKvmyYzKsBeX8d8I7MH/TMfWDXBF3db4qM6sy+7re0YXya+K1cem3on9XgdT2EQGMu4hQyZhan7TeQ8XkGp4Q==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.25.12.tgz",
+        "integrity": "sha512-8bwX7a8FghIgrupcxb4aUmYDLp8pX06rGh5HqDT7bB+8Rdells6mHvrFHHW2JAOPZUbnjUpKTLg6ECyzvas2AQ==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-arm64",
+          "name": "@esbuild/linux-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-arm64",
+          "name": "@esbuild/linux-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/linux-ia32",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.21.5.tgz",
+        "integrity": "sha512-YvjXDqLRqPDl2dvRODYmmhz4rPeVKYvppfGYKSNGdyZkA01046pLWyRKKI3ax8fbJoK5QbxblURkwK/MWY18Tg==",
+        "cpu": [
+          "ia32"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.25.12.tgz",
+        "integrity": "sha512-0y9KrdVnbMM2/vG8KfU0byhUN+EFCny9+8g202gYqSSVMonbsCfLjUO+rCci7pM0WBEtz+oK/PIwHkzxkyharA==",
+        "cpu": [
+          "ia32"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-ia32",
+          "name": "@esbuild/linux-ia32",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-ia32",
+          "name": "@esbuild/linux-ia32",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/linux-loong64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.21.5.tgz",
+        "integrity": "sha512-uHf1BmMG8qEvzdrzAqg2SIG/02+4/DHB6a9Kbya0XDvwDEKCoC8ZRWI5JJvNdUjtciBGFQ5PuBlpEOXQj+JQSg==",
+        "cpu": [
+          "loong64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.25.12.tgz",
+        "integrity": "sha512-h///Lr5a9rib/v1GGqXVGzjL4TMvVTv+s1DPoxQdz7l/AYv6LDSxdIwzxkrPW438oUXiDtwM10o9PmwS/6Z0Ng==",
+        "cpu": [
+          "loong64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-loong64",
+          "name": "@esbuild/linux-loong64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-loong64",
+          "name": "@esbuild/linux-loong64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/linux-mips64el",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.21.5.tgz",
+        "integrity": "sha512-IajOmO+KJK23bj52dFSNCMsz1QP1DqM6cwLUv3W1QwyxkyIWecfafnI555fvSGqEKwjMXVLokcV5ygHW5b3Jbg==",
+        "cpu": [
+          "mips64el"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.25.12.tgz",
+        "integrity": "sha512-iyRrM1Pzy9GFMDLsXn1iHUm18nhKnNMWscjmp4+hpafcZjrr2WbT//d20xaGljXDBYHqRcl8HnxbX6uaA/eGVw==",
+        "cpu": [
+          "mips64el"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-mips64el",
+          "name": "@esbuild/linux-mips64el",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-mips64el",
+          "name": "@esbuild/linux-mips64el",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/linux-ppc64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.21.5.tgz",
+        "integrity": "sha512-1hHV/Z4OEfMwpLO8rp7CvlhBDnjsC3CttJXIhBi+5Aj5r+MBvy4egg7wCbe//hSsT+RvDAG7s81tAvpL2XAE4w==",
+        "cpu": [
+          "ppc64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.25.12.tgz",
+        "integrity": "sha512-9meM/lRXxMi5PSUqEXRCtVjEZBGwB7P/D4yT8UG/mwIdze2aV4Vo6U5gD3+RsoHXKkHCfSxZKzmDssVlRj1QQA==",
+        "cpu": [
+          "ppc64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-ppc64",
+          "name": "@esbuild/linux-ppc64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-ppc64",
+          "name": "@esbuild/linux-ppc64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/linux-riscv64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.21.5.tgz",
+        "integrity": "sha512-2HdXDMd9GMgTGrPWnJzP2ALSokE/0O5HhTUvWIbD3YdjME8JwvSCnNGBnTThKGEB91OZhzrJ4qIIxk/SBmyDDA==",
+        "cpu": [
+          "riscv64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.25.12.tgz",
+        "integrity": "sha512-Zr7KR4hgKUpWAwb1f3o5ygT04MzqVrGEGXGLnj15YQDJErYu/BGg+wmFlIDOdJp0PmB0lLvxFIOXZgFRrdjR0w==",
+        "cpu": [
+          "riscv64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-riscv64",
+          "name": "@esbuild/linux-riscv64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-riscv64",
+          "name": "@esbuild/linux-riscv64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/linux-s390x",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.21.5.tgz",
+        "integrity": "sha512-zus5sxzqBJD3eXxwvjN1yQkRepANgxE9lgOW2qLnmr8ikMTphkjgXu1HR01K4FJg8h1kEEDAqDcZQtbrRnB41A==",
+        "cpu": [
+          "s390x"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.25.12.tgz",
+        "integrity": "sha512-MsKncOcgTNvdtiISc/jZs/Zf8d0cl/t3gYWX8J9ubBnVOwlk65UIEEvgBORTiljloIWnBzLs4qhzPkJcitIzIg==",
+        "cpu": [
+          "s390x"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-s390x",
+          "name": "@esbuild/linux-s390x",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-s390x",
+          "name": "@esbuild/linux-s390x",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/linux-x64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.21.5.tgz",
+        "integrity": "sha512-1rYdTpyv03iycF1+BhzrzQJCdOuAOtaqHTWJZCWvijKD2N5Xu0TtVC8/+1faWqcP9iBCWOmjmhoH94dH82BxPQ==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.25.12.tgz",
+        "integrity": "sha512-uqZMTLr/zR/ed4jIGnwSLkaHmPjOjJvnm6TVVitAa08SLS9Z0VM8wIRx7gWbJB5/J54YuIMInDquWyYvQLZkgw==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-x64",
+          "name": "@esbuild/linux-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/linux-x64",
+          "name": "@esbuild/linux-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/netbsd-x64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.21.5.tgz",
+        "integrity": "sha512-Woi2MXzXjMULccIwMnLciyZH4nCIMpWQAs049KEeMvOcNADVxo0UBIQPfSmxB3CWKedngg7sWZdLvLczpe0tLg==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "netbsd"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.25.12.tgz",
+        "integrity": "sha512-Ld5pTlzPy3YwGec4OuHh1aCVCRvOXdH8DgRjfDy/oumVovmuSzWfnSJg+VtakB9Cm0gxNO9BzWkj6mtO1FMXkQ==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "netbsd"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/netbsd-x64",
+          "name": "@esbuild/netbsd-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/netbsd-x64",
+          "name": "@esbuild/netbsd-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/openbsd-x64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.21.5.tgz",
+        "integrity": "sha512-HLNNw99xsvx12lFBUwoT8EVCsSvRNDVxNpjZ7bPn947b8gJPzeHWyNVhFsaerc0n3TsbOINvRP2byTZ5LKezow==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "openbsd"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.25.12.tgz",
+        "integrity": "sha512-MZyXUkZHjQxUvzK7rN8DJ3SRmrVrke8ZyRusHlP+kuwqTcfWLyqMOE3sScPPyeIXN/mDJIfGXvcMqCgYKekoQw==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "openbsd"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/openbsd-x64",
+          "name": "@esbuild/openbsd-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/openbsd-x64",
+          "name": "@esbuild/openbsd-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/sunos-x64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.21.5.tgz",
+        "integrity": "sha512-6+gjmFpfy0BHU5Tpptkuh8+uw3mnrvgs+dSPQXQOv3ekbordwnzTVEb4qnIvQcYXq6gzkyTnoZ9dZG+D4garKg==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "sunos"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.25.12.tgz",
+        "integrity": "sha512-3wGSCDyuTHQUzt0nV7bocDy72r2lI33QL3gkDNGkod22EsYl04sMf0qLb8luNKTOmgF/eDEDP5BFNwoBKH441w==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "sunos"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/sunos-x64",
+          "name": "@esbuild/sunos-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/sunos-x64",
+          "name": "@esbuild/sunos-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/win32-arm64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.21.5.tgz",
+        "integrity": "sha512-Z0gOTd75VvXqyq7nsl93zwahcTROgqvuAcYDUr+vOv8uHhNSKROyU961kgtCD1e95IqPKSQKH7tBTslnS3tA8A==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "win32"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.25.12.tgz",
+        "integrity": "sha512-rMmLrur64A7+DKlnSuwqUdRKyd3UE7oPJZmnljqEptesKM8wx9J8gx5u0+9Pq0fQQW8vqeKebwNXdfOyP+8Bsg==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "win32"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/win32-arm64",
+          "name": "@esbuild/win32-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/win32-arm64",
+          "name": "@esbuild/win32-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/win32-ia32",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.21.5.tgz",
+        "integrity": "sha512-SWXFF1CL2RVNMaVs+BBClwtfZSvDgtL//G/smwAc5oVK/UPu2Gu9tIaRgFmYFFKrmg3SyAjSrElf0TiJ1v8fYA==",
+        "cpu": [
+          "ia32"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "win32"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.25.12.tgz",
+        "integrity": "sha512-HkqnmmBoCbCwxUKKNPBixiWDGCpQGVsrQfJoVGYLPT41XWF8lHuE5N6WhVia2n4o5QK5M4tYr21827fNhi4byQ==",
+        "cpu": [
+          "ia32"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "win32"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/win32-ia32",
+          "name": "@esbuild/win32-ia32",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/win32-ia32",
+          "name": "@esbuild/win32-ia32",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@esbuild/win32-x64",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.21.5.tgz",
+        "integrity": "sha512-tQd/1efJuzPC6rCFwEvLtci/xNFcTZknmXs98FYDfGE4wP9ClFV98nyKrzJKVPMhdDnjzLhdUyMX4PsQAPjwIw==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "win32"
+        ],
+        "engines": {
+          "node": ">=12"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.25.12.tgz",
+        "integrity": "sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "win32"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/win32-x64",
+          "name": "@esbuild/win32-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/@esbuild/win32-x64",
+          "name": "@esbuild/win32-x64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@jridgewell/sourcemap-codec",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity"
+      ],
+      "before": {
+        "version": "1.5.5",
+        "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz",
+        "integrity": "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==",
+        "dev": true,
+        "license": "MIT"
+      },
+      "after": {
+        "version": "1.6.0",
+        "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.6.0.tgz",
+        "integrity": "sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==",
+        "dev": true,
+        "license": "MIT"
+      },
+      "reason": "magic-string 1.4.5 requires @jridgewell/sourcemap-codec ^1.6.0; resolves 1.6.0 as part of the required electron-vite config bundler graph.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/magic-string",
+          "name": "magic-string",
+          "kind": "dependencies",
+          "spec": "^0.30.10"
+        },
+        {
+          "from": "node_modules/magic-string",
+          "to": "node_modules/@jridgewell/sourcemap-codec",
+          "name": "@jridgewell/sourcemap-codec",
+          "kind": "dependencies",
+          "spec": "^1.5.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/magic-string",
+          "name": "magic-string",
+          "kind": "dependencies",
+          "spec": "^1.4.2"
+        },
+        {
+          "from": "node_modules/magic-string",
+          "to": "node_modules/@jridgewell/sourcemap-codec",
+          "name": "@jridgewell/sourcemap-codec",
+          "kind": "dependencies",
+          "spec": "^1.6.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/pluginutils",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity"
+      ],
+      "before": {
+        "version": "1.0.0-beta.27",
+        "resolved": "https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.0-beta.27.tgz",
+        "integrity": "sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA==",
+        "dev": true,
+        "license": "MIT"
+      },
+      "after": {
+        "version": "1.0.0-rc.3",
+        "resolved": "https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.0-rc.3.tgz",
+        "integrity": "sha512-eybk3TjzzzV97Dlj5c+XrBFW57eTNhzod66y9HrBlzJ6NsCrWCp/2kaPS3K9wJmurBC0Tdw4yPjXKZqlznim3Q==",
+        "dev": true,
+        "license": "MIT"
+      },
+      "reason": "plugin-react 5.2.0 requires exact @rolldown/pluginutils 1.0.0-rc.3; replaces the old plugin 4.7.0 beta utility.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "4.7.0"
+        },
+        {
+          "from": "node_modules/@vitejs/plugin-react",
+          "to": "node_modules/@rolldown/pluginutils",
+          "name": "@rolldown/pluginutils",
+          "kind": "dependencies",
+          "spec": "1.0.0-beta.27"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "5.2.0"
+        },
+        {
+          "from": "node_modules/@vitejs/plugin-react",
+          "to": "node_modules/@rolldown/pluginutils",
+          "name": "@rolldown/pluginutils",
+          "kind": "dependencies",
+          "spec": "1.0.0-rc.3"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@vitejs/plugin-react",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "dependencies",
+        "engines",
+        "peerDependencies"
+      ],
+      "before": {
+        "version": "4.7.0",
+        "resolved": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-4.7.0.tgz",
+        "integrity": "sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==",
+        "dev": true,
+        "license": "MIT",
+        "dependencies": {
+          "@babel/core": "^7.28.0",
+          "@babel/plugin-transform-react-jsx-self": "^7.27.1",
+          "@babel/plugin-transform-react-jsx-source": "^7.27.1",
+          "@rolldown/pluginutils": "1.0.0-beta.27",
+          "@types/babel__core": "^7.20.5",
+          "react-refresh": "^0.17.0"
+        },
+        "engines": {
+          "node": "^14.18.0 || >=16.0.0"
+        },
+        "peerDependencies": {
+          "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
+        }
+      },
+      "after": {
+        "version": "5.2.0",
+        "resolved": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-5.2.0.tgz",
+        "integrity": "sha512-YmKkfhOAi3wsB1PhJq5Scj3GXMn3WvtQ/JC0xoopuHoXSdmtdStOpFrYaT1kie2YgFBcIe64ROzMYRjCrYOdYw==",
+        "dev": true,
+        "license": "MIT",
+        "dependencies": {
+          "@babel/core": "^7.29.0",
+          "@babel/plugin-transform-react-jsx-self": "^7.27.1",
+          "@babel/plugin-transform-react-jsx-source": "^7.27.1",
+          "@rolldown/pluginutils": "1.0.0-rc.3",
+          "@types/babel__core": "^7.20.5",
+          "react-refresh": "^0.18.0"
+        },
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        },
+        "peerDependencies": {
+          "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0"
+        }
+      },
+      "reason": "Use 5.2.0, the most recent release compatible with Vite 6; plugin 6 requires Vite 8. Its documented Fast Refresh minimum React 16.9 includes unchanged React 18.3.1.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "4.7.0"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "5.2.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/cac",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines"
+      ],
+      "before": {
+        "version": "6.7.14",
+        "resolved": "https://registry.npmjs.org/cac/-/cac-6.7.14.tgz",
+        "integrity": "sha512-b6Ilus+c3RrdDk+JhLKUAQfzzgLEPy6wcXqS7f/xe1EETvsDP6GORG7SFuOs6cID5YkqchW/LXZbX5bc8j7ZcQ==",
+        "dev": true,
+        "license": "MIT",
+        "engines": {
+          "node": ">=8"
+        }
+      },
+      "after": {
+        "version": "7.1.0",
+        "resolved": "https://registry.npmjs.org/cac/-/cac-7.1.0.tgz",
+        "integrity": "sha512-LMDU/U2yA4IPIY8KT0NsNPWEYZvAMkbgyspxJ6btJaYV+WMDOHAZCmB0lsTObiHaRS1V/ztKAl7+TSkTqXyeoA==",
+        "dev": true,
+        "license": "MIT",
+        "engines": {
+          "node": ">=20.19.0"
+        }
+      },
+      "reason": "electron-vite 6 requires cac ^7.0.0; the new CLI graph resolves 7.1.0.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/cac",
+          "name": "cac",
+          "kind": "dependencies",
+          "spec": "^6.7.14"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/cac",
+          "name": "cac",
+          "kind": "dependencies",
+          "spec": "^7.0.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/electron-vite",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "dependencies",
+        "engines",
+        "peerDependencies"
+      ],
+      "before": {
+        "version": "2.3.0",
+        "resolved": "https://registry.npmjs.org/electron-vite/-/electron-vite-2.3.0.tgz",
+        "integrity": "sha512-lsN2FymgJlp4k6MrcsphGqZQ9fKRdJKasoaiwIrAewN1tapYI/KINLdfEL7n10LuF0pPSNf/IqjzZbB5VINctg==",
+        "dev": true,
+        "license": "MIT",
+        "dependencies": {
+          "@babel/core": "^7.24.7",
+          "@babel/plugin-transform-arrow-functions": "^7.24.7",
+          "cac": "^6.7.14",
+          "esbuild": "^0.21.5",
+          "magic-string": "^0.30.10",
+          "picocolors": "^1.0.1"
+        },
+        "bin": {
+          "electron-vite": "bin/electron-vite.js"
+        },
+        "engines": {
+          "node": "^18.0.0 || >=20.0.0"
+        },
+        "peerDependencies": {
+          "@swc/core": "^1.0.0",
+          "vite": "^4.0.0 || ^5.0.0"
+        },
+        "peerDependenciesMeta": {
+          "@swc/core": {
+            "optional": true
+          }
+        }
+      },
+      "after": {
+        "version": "6.0.0",
+        "resolved": "https://registry.npmjs.org/electron-vite/-/electron-vite-6.0.0.tgz",
+        "integrity": "sha512-zafg2uizgll7jdx0BNDkkzO/SowsUBsiHqYN3v9Ieq7XPDHreRGZ4G9IRY/+RslgBktpLOjLM4jlP+IVpV0BGw==",
+        "dev": true,
+        "license": "MIT",
+        "dependencies": {
+          "@babel/core": "^7.29.7",
+          "@babel/plugin-transform-arrow-functions": "^7.29.7",
+          "cac": "^7.0.0",
+          "magic-string": "^1.4.2",
+          "picocolors": "^1.1.1",
+          "rolldown": "~1.2.10"
+        },
+        "bin": {
+          "electron-vite": "bin/electron-vite.js"
+        },
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        },
+        "peerDependencies": {
+          "@swc/core": "^1.0.0",
+          "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
+        },
+        "peerDependenciesMeta": {
+          "@swc/core": {
+            "optional": true
+          }
+        }
+      },
+      "reason": "Use current stable upstream electron-vite with declared Vite 6 compatibility; older branches have no demonstrated maintenance guarantee.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/esbuild",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "engines",
+        "optionalDependencies"
+      ],
+      "before": {
+        "version": "0.21.5",
+        "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.21.5.tgz",
+        "integrity": "sha512-mg3OPMV4hXywwpoDxu3Qda5xCKQi+vCTZq8S9J/EpkhB2HzKXq4SNFZE3+NK93JYxc8VMSep+lOUSC/RVKaBqw==",
+        "dev": true,
+        "hasInstallScript": true,
+        "license": "MIT",
+        "bin": {
+          "esbuild": "bin/esbuild"
+        },
+        "engines": {
+          "node": ">=12"
+        },
+        "optionalDependencies": {
+          "@esbuild/aix-ppc64": "0.21.5",
+          "@esbuild/android-arm": "0.21.5",
+          "@esbuild/android-arm64": "0.21.5",
+          "@esbuild/android-x64": "0.21.5",
+          "@esbuild/darwin-arm64": "0.21.5",
+          "@esbuild/darwin-x64": "0.21.5",
+          "@esbuild/freebsd-arm64": "0.21.5",
+          "@esbuild/freebsd-x64": "0.21.5",
+          "@esbuild/linux-arm": "0.21.5",
+          "@esbuild/linux-arm64": "0.21.5",
+          "@esbuild/linux-ia32": "0.21.5",
+          "@esbuild/linux-loong64": "0.21.5",
+          "@esbuild/linux-mips64el": "0.21.5",
+          "@esbuild/linux-ppc64": "0.21.5",
+          "@esbuild/linux-riscv64": "0.21.5",
+          "@esbuild/linux-s390x": "0.21.5",
+          "@esbuild/linux-x64": "0.21.5",
+          "@esbuild/netbsd-x64": "0.21.5",
+          "@esbuild/openbsd-x64": "0.21.5",
+          "@esbuild/sunos-x64": "0.21.5",
+          "@esbuild/win32-arm64": "0.21.5",
+          "@esbuild/win32-ia32": "0.21.5",
+          "@esbuild/win32-x64": "0.21.5"
+        }
+      },
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.25.12.tgz",
+        "integrity": "sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg==",
+        "dev": true,
+        "hasInstallScript": true,
+        "license": "MIT",
+        "bin": {
+          "esbuild": "bin/esbuild"
+        },
+        "engines": {
+          "node": ">=18"
+        },
+        "optionalDependencies": {
+          "@esbuild/aix-ppc64": "0.25.12",
+          "@esbuild/android-arm": "0.25.12",
+          "@esbuild/android-arm64": "0.25.12",
+          "@esbuild/android-x64": "0.25.12",
+          "@esbuild/darwin-arm64": "0.25.12",
+          "@esbuild/darwin-x64": "0.25.12",
+          "@esbuild/freebsd-arm64": "0.25.12",
+          "@esbuild/freebsd-x64": "0.25.12",
+          "@esbuild/linux-arm": "0.25.12",
+          "@esbuild/linux-arm64": "0.25.12",
+          "@esbuild/linux-ia32": "0.25.12",
+          "@esbuild/linux-loong64": "0.25.12",
+          "@esbuild/linux-mips64el": "0.25.12",
+          "@esbuild/linux-ppc64": "0.25.12",
+          "@esbuild/linux-riscv64": "0.25.12",
+          "@esbuild/linux-s390x": "0.25.12",
+          "@esbuild/linux-x64": "0.25.12",
+          "@esbuild/netbsd-arm64": "0.25.12",
+          "@esbuild/netbsd-x64": "0.25.12",
+          "@esbuild/openbsd-arm64": "0.25.12",
+          "@esbuild/openbsd-x64": "0.25.12",
+          "@esbuild/openharmony-arm64": "0.25.12",
+          "@esbuild/sunos-x64": "0.25.12",
+          "@esbuild/win32-arm64": "0.25.12",
+          "@esbuild/win32-ia32": "0.25.12",
+          "@esbuild/win32-x64": "0.25.12"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/magic-string",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "dependencies"
+      ],
+      "before": {
+        "version": "0.30.21",
+        "resolved": "https://registry.npmjs.org/magic-string/-/magic-string-0.30.21.tgz",
+        "integrity": "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==",
+        "dev": true,
+        "license": "MIT",
+        "dependencies": {
+          "@jridgewell/sourcemap-codec": "^1.5.5"
+        }
+      },
+      "after": {
+        "version": "1.4.5",
+        "resolved": "https://registry.npmjs.org/magic-string/-/magic-string-1.4.5.tgz",
+        "integrity": "sha512-oLLC2+YvQUfAa+vxoufE/yc1icb87M9iXIRqAoR/2EhE/8cb3SF/+Gi0c2By1B+5Vz2e2vQtUvHiu1+63Znh+w==",
+        "dev": true,
+        "license": "MIT",
+        "dependencies": {
+          "@jridgewell/sourcemap-codec": "^1.6.0"
+        }
+      },
+      "reason": "electron-vite 6 requires magic-string ^1.4.2, resolving 1.4.5. Vite 6 keeps a separate nested 0.30.21 within its own supported parent range.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/magic-string",
+          "name": "magic-string",
+          "kind": "dependencies",
+          "spec": "^0.30.10"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/magic-string",
+          "name": "magic-string",
+          "kind": "dependencies",
+          "spec": "^1.4.2"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/react-refresh",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity"
+      ],
+      "before": {
+        "version": "0.17.0",
+        "resolved": "https://registry.npmjs.org/react-refresh/-/react-refresh-0.17.0.tgz",
+        "integrity": "sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==",
+        "dev": true,
+        "license": "MIT",
+        "engines": {
+          "node": ">=0.10.0"
+        }
+      },
+      "after": {
+        "version": "0.18.0",
+        "resolved": "https://registry.npmjs.org/react-refresh/-/react-refresh-0.18.0.tgz",
+        "integrity": "sha512-QgT5//D3jfjJb6Gsjxv0Slpj23ip+HtOpnNgnb2S5zU3CB26G/IDPGoy4RJB42wzFE46DRsstbW6tKHoKbhAxw==",
+        "dev": true,
+        "license": "MIT",
+        "engines": {
+          "node": ">=0.10.0"
+        }
+      },
+      "reason": "plugin-react 5.2.0 requires react-refresh ^0.18.0. React and react-dom application runtimes remain locked at 18.3.1.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "4.7.0"
+        },
+        {
+          "from": "node_modules/@vitejs/plugin-react",
+          "to": "node_modules/react-refresh",
+          "name": "react-refresh",
+          "kind": "dependencies",
+          "spec": "^0.17.0"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "5.2.0"
+        },
+        {
+          "from": "node_modules/@vitejs/plugin-react",
+          "to": "node_modules/react-refresh",
+          "name": "react-refresh",
+          "kind": "dependencies",
+          "spec": "^0.18.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/vite",
+      "change": "changed",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "dependencies",
+        "engines",
+        "peerDependencies",
+        "peerDependenciesMeta"
+      ],
+      "before": {
+        "version": "5.4.21",
+        "resolved": "https://registry.npmjs.org/vite/-/vite-5.4.21.tgz",
+        "integrity": "sha512-o5a9xKjbtuhY6Bi5S3+HvbRERmouabWbyUcpXXUA1u+GNUKoROi9byOJ8M0nHbHYHkYICiMlqxkg1KkYmm25Sw==",
+        "dev": true,
+        "license": "MIT",
+        "dependencies": {
+          "esbuild": "^0.21.3",
+          "postcss": "^8.4.43",
+          "rollup": "^4.20.0"
+        },
+        "bin": {
+          "vite": "bin/vite.js"
+        },
+        "engines": {
+          "node": "^18.0.0 || >=20.0.0"
+        },
+        "funding": {
+          "url": "https://github.com/vitejs/vite?sponsor=1"
+        },
+        "optionalDependencies": {
+          "fsevents": "~2.3.3"
+        },
+        "peerDependencies": {
+          "@types/node": "^18.0.0 || >=20.0.0",
+          "less": "*",
+          "lightningcss": "^1.21.0",
+          "sass": "*",
+          "sass-embedded": "*",
+          "stylus": "*",
+          "sugarss": "*",
+          "terser": "^5.4.0"
+        },
+        "peerDependenciesMeta": {
+          "@types/node": {
+            "optional": true
+          },
+          "less": {
+            "optional": true
+          },
+          "lightningcss": {
+            "optional": true
+          },
+          "sass": {
+            "optional": true
+          },
+          "sass-embedded": {
+            "optional": true
+          },
+          "stylus": {
+            "optional": true
+          },
+          "sugarss": {
+            "optional": true
+          },
+          "terser": {
+            "optional": true
+          }
+        }
+      },
+      "after": {
+        "version": "6.4.5",
+        "resolved": "https://registry.npmjs.org/vite/-/vite-6.4.5.tgz",
+        "integrity": "sha512-4enwjFfi4IwtEh0w+jPzpLVOFQiPHmmzPxcHXQOyEur47o6u0jE573DmGpjA+7irXoMLYRZD5ZaFUEneS3abPg==",
+        "dev": true,
+        "license": "MIT",
+        "dependencies": {
+          "esbuild": "^0.25.0",
+          "fdir": "^6.4.4",
+          "picomatch": "^4.0.2",
+          "postcss": "^8.5.3",
+          "rollup": "^4.34.9",
+          "tinyglobby": "^0.2.13"
+        },
+        "bin": {
+          "vite": "bin/vite.js"
+        },
+        "engines": {
+          "node": "^18.0.0 || ^20.0.0 || >=22.0.0"
+        },
+        "funding": {
+          "url": "https://github.com/vitejs/vite?sponsor=1"
+        },
+        "optionalDependencies": {
+          "fsevents": "~2.3.3"
+        },
+        "peerDependencies": {
+          "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0",
+          "jiti": ">=1.21.0",
+          "less": "*",
+          "lightningcss": "^1.21.0",
+          "sass": "*",
+          "sass-embedded": "*",
+          "stylus": "*",
+          "sugarss": "*",
+          "terser": "^5.16.0",
+          "tsx": "^4.8.1",
+          "yaml": "^2.4.2"
+        },
+        "peerDependenciesMeta": {
+          "@types/node": {
+            "optional": true
+          },
+          "jiti": {
+            "optional": true
+          },
+          "less": {
+            "optional": true
+          },
+          "lightningcss": {
+            "optional": true
+          },
+          "sass": {
+            "optional": true
+          },
+          "sass-embedded": {
+            "optional": true
+          },
+          "stylus": {
+            "optional": true
+          },
+          "sugarss": {
+            "optional": true
+          },
+          "terser": {
+            "optional": true
+          },
+          "tsx": {
+            "optional": true
+          },
+          "yaml": {
+            "optional": true
+          }
+        }
+      },
+      "reason": "Use latest patch in the oldest officially maintained Vite security branch; replaces affected bundled editor and dev-server source.",
+      "beforeShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "5.4.21"
+        }
+      ],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@oxc-project/types",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "dev",
+        "license",
+        "funding"
+      ],
+      "before": null,
+      "after": {
+        "version": "0.155.0",
+        "resolved": "https://registry.npmjs.org/@oxc-project/types/-/types-0.155.0.tgz",
+        "integrity": "sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==",
+        "dev": true,
+        "license": "MIT",
+        "funding": {
+          "url": "https://github.com/sponsors/oxc-project"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@oxc-project/types",
+          "name": "@oxc-project/types",
+          "kind": "dependencies",
+          "spec": "=0.155.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-android-arm-eabi",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-android-arm-eabi/-/binding-android-arm-eabi-1.2.15.tgz",
+        "integrity": "sha512-aLcgK9gIJ3YRvrrtfSBbRa27F5WrpiTaPulnFpsHPxpUHgFlSgnU4854MHwoRGEBhfRJDWCS2WQ7lIjskE9Olw==",
+        "cpu": [
+          "arm"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "android"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-android-arm-eabi",
+          "name": "@rolldown/binding-android-arm-eabi",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-android-arm64",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-android-arm64/-/binding-android-arm64-1.2.15.tgz",
+        "integrity": "sha512-xD7DdZCrbThKuxNg7ooQmvp07ys4J/pnSEMTG3/OdOWl6daC67m/Q4fL78sRHMxTH/N4fGUbYhcPM0MF5WFHkg==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "android"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-android-arm64",
+          "name": "@rolldown/binding-android-arm64",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-darwin-arm64",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-darwin-arm64/-/binding-darwin-arm64-1.2.15.tgz",
+        "integrity": "sha512-m2WuQ6r0B4OTYxyPpNLtXaMRbRDUbG8YQV2Q3KTdSSK8Th6KHCnC8jVCJt8bvYeSB5WivkkNbc85mKadaSdOxA==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "darwin"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-darwin-arm64",
+          "name": "@rolldown/binding-darwin-arm64",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-darwin-x64",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-darwin-x64/-/binding-darwin-x64-1.2.15.tgz",
+        "integrity": "sha512-5RtnsHM36nodM9WbMy+zip0LGS/G+y5wro5RHrpOlr4ac24+1zSi9kiV2MP1myZeZ/ifEHfulQcWjnAXzc2C2A==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "darwin"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-darwin-x64",
+          "name": "@rolldown/binding-darwin-x64",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-freebsd-x64",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-freebsd-x64/-/binding-freebsd-x64-1.2.15.tgz",
+        "integrity": "sha512-g3l09pyFqhu+135JKkbkwiKGQmwU5hUMUPJ4VdBADvuqR8d33L6H578rh8m7rtxbdp+VmX/+nzI7nvhSZlzpUQ==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "freebsd"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-freebsd-x64",
+          "name": "@rolldown/binding-freebsd-x64",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-arm-gnueabihf",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-linux-arm-gnueabihf/-/binding-linux-arm-gnueabihf-1.2.15.tgz",
+        "integrity": "sha512-nIe3VugI97nGQtspPxDqA4sXMUpeiocKIP/CqpY/u/vgbT+alX+cVxu1C/oVBPKg4feNTmYovE91v4DgXvXNwQ==",
+        "cpu": [
+          "arm"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-linux-arm-gnueabihf",
+          "name": "@rolldown/binding-linux-arm-gnueabihf",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-arm64-gnu",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "libc",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-linux-arm64-gnu/-/binding-linux-arm64-gnu-1.2.15.tgz",
+        "integrity": "sha512-iTBjXx+B5QSvgI89lJfmqh4wTh8NabR1YZIIN3hNx4zSG0EVfVqkOvLulNpG4251pbd6/IAmZ/LefVk1Y4rPhw==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "libc": [
+          "glibc"
+        ],
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-linux-arm64-gnu",
+          "name": "@rolldown/binding-linux-arm64-gnu",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-arm64-musl",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "libc",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-linux-arm64-musl/-/binding-linux-arm64-musl-1.2.15.tgz",
+        "integrity": "sha512-uN26XOnVR7rqQupG3V9oAG2EGGatWjcJHOeDOHUFCh4TBWmP2tHTFoVN13aYbwfm0aHqJAEmcwhAu6sooIjfqQ==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "libc": [
+          "musl"
+        ],
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-linux-arm64-musl",
+          "name": "@rolldown/binding-linux-arm64-musl",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-ppc64-gnu",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "libc",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-linux-ppc64-gnu/-/binding-linux-ppc64-gnu-1.2.15.tgz",
+        "integrity": "sha512-9nWkcdd+H+XhaA3fQIwpHnKIrfx/PQ6rO0pivr78Og07tXlUlctBBJoEYLPfhTmCR/QxEVdn6uPjHV5SymPhdw==",
+        "cpu": [
+          "ppc64"
+        ],
+        "dev": true,
+        "libc": [
+          "glibc"
+        ],
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-linux-ppc64-gnu",
+          "name": "@rolldown/binding-linux-ppc64-gnu",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-s390x-gnu",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "libc",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-linux-s390x-gnu/-/binding-linux-s390x-gnu-1.2.15.tgz",
+        "integrity": "sha512-Ggh0ciFjLwIusLSLz7LZYEaGdxOAUJXI+Qu5JCbhPJJHEt8vP+IjRATTJheiJsdzzTYgUiHUiw3X1Ea3ZpMBdA==",
+        "cpu": [
+          "s390x"
+        ],
+        "dev": true,
+        "libc": [
+          "glibc"
+        ],
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-linux-s390x-gnu",
+          "name": "@rolldown/binding-linux-s390x-gnu",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-x64-gnu",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "libc",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.2.15.tgz",
+        "integrity": "sha512-FHg60rS6DBePAYZ9X9F67x+JObFdmgn6tupA1C/a3B+CufFmTD4mX+e8M75tCiAO3foR/6xwVBI0KQiI7sn/rw==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "libc": [
+          "glibc"
+        ],
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-linux-x64-gnu",
+          "name": "@rolldown/binding-linux-x64-gnu",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-x64-musl",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "libc",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-linux-x64-musl/-/binding-linux-x64-musl-1.2.15.tgz",
+        "integrity": "sha512-/cvV/7v5VGz/moiz0XKRj2dE8DzsKyhIu1KpOvJGPjRywg3yscON889UGvAe8zfiJLHup7VLjBduoGWi3HusWQ==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "libc": [
+          "musl"
+        ],
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "linux"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-linux-x64-musl",
+          "name": "@rolldown/binding-linux-x64-musl",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-openharmony-arm64",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-openharmony-arm64/-/binding-openharmony-arm64-1.2.15.tgz",
+        "integrity": "sha512-MyzC5Hrv/sm+Z7TSGKP/j8001RO2xQm1zOpCNVL4j0cY/VhBZviludA2YFQ7i4lH6ZAXxQm0lcMdBzM+99mE7w==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "openharmony"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-openharmony-arm64",
+          "name": "@rolldown/binding-openharmony-arm64",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-win32-arm64-msvc",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-win32-arm64-msvc/-/binding-win32-arm64-msvc-1.2.15.tgz",
+        "integrity": "sha512-+PgYiS+AH5omy6L45ZLxybasauJaj3M8buoT83D+nzPmCayXlxUV9hydhciCKVyIg0B/v0BtXPDE1uGqNwCPpg==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "win32"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-win32-arm64-msvc",
+          "name": "@rolldown/binding-win32-arm64-msvc",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-win32-x64-msvc",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/@rolldown/binding-win32-x64-msvc/-/binding-win32-x64-msvc-1.2.15.tgz",
+        "integrity": "sha512-HFZd2QNQYn1JbIi+Hpd7H+r/lkWxcfIu28nirZ6eCn2LafuvmExMlb/P96Sfx5tf7pPArw39IdhmCF8vmV+NhQ==",
+        "cpu": [
+          "x64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "win32"
+        ],
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/@rolldown/binding-win32-x64-msvc",
+          "name": "@rolldown/binding-win32-x64-msvc",
+          "kind": "optionalDependencies",
+          "spec": "1.2.15"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/esbuild/node_modules/@esbuild/netbsd-arm64",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/netbsd-arm64/-/netbsd-arm64-0.25.12.tgz",
+        "integrity": "sha512-xXwcTq4GhRM7J9A8Gv5boanHhRa/Q9KLVmcyXHCTaM4wKfIpWkdXiMog/KsnxzJ0A1+nD+zoecuzqPmCRyBGjg==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "netbsd"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/esbuild/node_modules/@esbuild/netbsd-arm64",
+          "name": "@esbuild/netbsd-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/esbuild/node_modules/@esbuild/openbsd-arm64",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/openbsd-arm64/-/openbsd-arm64-0.25.12.tgz",
+        "integrity": "sha512-fF96T6KsBo/pkQI950FARU9apGNTSlZGsv1jZBAlcLL1MLjLNIWPBkj5NlSz8aAzYKg+eNqknrUJ24QBybeR5A==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "openbsd"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/esbuild/node_modules/@esbuild/openbsd-arm64",
+          "name": "@esbuild/openbsd-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/esbuild/node_modules/@esbuild/openharmony-arm64",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "cpu",
+        "dev",
+        "license",
+        "optional",
+        "os",
+        "engines"
+      ],
+      "before": null,
+      "after": {
+        "version": "0.25.12",
+        "resolved": "https://registry.npmjs.org/@esbuild/openharmony-arm64/-/openharmony-arm64-0.25.12.tgz",
+        "integrity": "sha512-rm0YWsqUSRrjncSXGA7Zv78Nbnw4XL6/dzr20cyrQf7ZmRcsovpcRBdhD43Nuk3y7XIoW2OxMVvwuRvk9XdASg==",
+        "cpu": [
+          "arm64"
+        ],
+        "dev": true,
+        "license": "MIT",
+        "optional": true,
+        "os": [
+          "openharmony"
+        ],
+        "engines": {
+          "node": ">=18"
+        }
+      },
+      "reason": "Vite 6 accepts esbuild ^0.25.0: resolve 0.25.12 and matching optional native binaries, above the <=0.24.2 advisory range. Unchanged tsx keeps its separate 0.28.1 tree.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        },
+        {
+          "from": "node_modules/esbuild",
+          "to": "node_modules/esbuild/node_modules/@esbuild/openharmony-arm64",
+          "name": "@esbuild/openharmony-arm64",
+          "kind": "optionalDependencies",
+          "spec": "0.25.12"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/rolldown",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "dev",
+        "license",
+        "dependencies",
+        "bin",
+        "engines",
+        "optionalDependencies"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.2.15",
+        "resolved": "https://registry.npmjs.org/rolldown/-/rolldown-1.2.15.tgz",
+        "integrity": "sha512-6odND+fel5zVw3I4Yc2e69gvguDnX0CAAGiNDZSq4ik5WUcaLrkD2GLuog0XcODbor31hZ5ayEMgVDno+KPV5g==",
+        "dev": true,
+        "license": "MIT",
+        "dependencies": {
+          "@oxc-project/types": "=0.155.0",
+          "@rolldown/pluginutils": "^1.0.0"
+        },
+        "bin": {
+          "rolldown": "bin/cli.mjs"
+        },
+        "engines": {
+          "node": "^20.19.0 || >=22.12.0"
+        },
+        "optionalDependencies": {
+          "@rolldown/binding-android-arm-eabi": "1.2.15",
+          "@rolldown/binding-android-arm64": "1.2.15",
+          "@rolldown/binding-darwin-arm64": "1.2.15",
+          "@rolldown/binding-darwin-x64": "1.2.15",
+          "@rolldown/binding-freebsd-x64": "1.2.15",
+          "@rolldown/binding-linux-arm-gnueabihf": "1.2.15",
+          "@rolldown/binding-linux-arm64-gnu": "1.2.15",
+          "@rolldown/binding-linux-arm64-musl": "1.2.15",
+          "@rolldown/binding-linux-ppc64-gnu": "1.2.15",
+          "@rolldown/binding-linux-s390x-gnu": "1.2.15",
+          "@rolldown/binding-linux-x64-gnu": "1.2.15",
+          "@rolldown/binding-linux-x64-musl": "1.2.15",
+          "@rolldown/binding-openharmony-arm64": "1.2.15",
+          "@rolldown/binding-win32-arm64-msvc": "1.2.15",
+          "@rolldown/binding-win32-x64-msvc": "1.2.15"
+        }
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/rolldown/node_modules/@rolldown/pluginutils",
+      "change": "added",
+      "changedFields": [
+        "version",
+        "resolved",
+        "integrity",
+        "dev",
+        "license"
+      ],
+      "before": null,
+      "after": {
+        "version": "1.0.1",
+        "resolved": "https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.1.tgz",
+        "integrity": "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==",
+        "dev": true,
+        "license": "MIT"
+      },
+      "reason": "Required electron-vite 6 Rolldown configuration bundler graph and its optional platform bindings; no application runtime dependency introduced.",
+      "beforeShortestRootChain": [],
+      "afterShortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/rolldown",
+          "name": "rolldown",
+          "kind": "dependencies",
+          "spec": "~1.2.10"
+        },
+        {
+          "from": "node_modules/rolldown",
+          "to": "node_modules/rolldown/node_modules/@rolldown/pluginutils",
+          "name": "@rolldown/pluginutils",
+          "kind": "dependencies",
+          "spec": "^1.0.0"
+        }
+      ]
+    }
+  ]
+}

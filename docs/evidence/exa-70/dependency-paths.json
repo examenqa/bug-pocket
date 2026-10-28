@@ -1,0 +1,469 @@
+{
+  "schemaVersion": 1,
+  "issue": "EXA-70",
+  "capturedOn": "2026-10-28",
+  "baselineCommit": "2ef9a0fe89b8bc5f06a30a0ead931e842815792b",
+  "before": [
+    {
+      "path": "node_modules/@vitejs/plugin-react",
+      "version": "4.7.0",
+      "engines": {
+        "node": "^14.18.0 || >=16.0.0"
+      },
+      "dependencies": {
+        "@babel/core": "^7.28.0",
+        "@babel/plugin-transform-react-jsx-self": "^7.27.1",
+        "@babel/plugin-transform-react-jsx-source": "^7.27.1",
+        "@rolldown/pluginutils": "1.0.0-beta.27",
+        "@types/babel__core": "^7.20.5",
+        "react-refresh": "^0.17.0"
+      },
+      "peerDependencies": {
+        "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
+      },
+      "incoming": [
+        {
+          "from": "",
+          "to": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "4.7.0"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "4.7.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/electron-vite",
+      "version": "2.3.0",
+      "engines": {
+        "node": "^18.0.0 || >=20.0.0"
+      },
+      "dependencies": {
+        "@babel/core": "^7.24.7",
+        "@babel/plugin-transform-arrow-functions": "^7.24.7",
+        "cac": "^6.7.14",
+        "esbuild": "^0.21.5",
+        "magic-string": "^0.30.10",
+        "picocolors": "^1.0.1"
+      },
+      "peerDependencies": {
+        "@swc/core": "^1.0.0",
+        "vite": "^4.0.0 || ^5.0.0"
+      },
+      "incoming": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/esbuild",
+      "version": "0.21.5",
+      "engines": {
+        "node": ">=12"
+      },
+      "incoming": [
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.3"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "2.3.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.21.5"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/tsx",
+      "version": "4.23.1",
+      "engines": {
+        "node": ">=18.0.0"
+      },
+      "dependencies": {
+        "esbuild": "~0.28.0"
+      },
+      "incoming": [
+        {
+          "from": "",
+          "to": "node_modules/tsx",
+          "name": "tsx",
+          "kind": "devDependencies",
+          "spec": "4.23.1"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/tsx",
+          "name": "tsx",
+          "kind": "devDependencies",
+          "spec": "4.23.1"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/tsx/node_modules/esbuild",
+      "version": "0.28.1",
+      "engines": {
+        "node": ">=18"
+      },
+      "incoming": [
+        {
+          "from": "node_modules/tsx",
+          "to": "node_modules/tsx/node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "~0.28.0"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/tsx",
+          "name": "tsx",
+          "kind": "devDependencies",
+          "spec": "4.23.1"
+        },
+        {
+          "from": "node_modules/tsx",
+          "to": "node_modules/tsx/node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "~0.28.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/vite",
+      "version": "5.4.21",
+      "engines": {
+        "node": "^18.0.0 || >=20.0.0"
+      },
+      "dependencies": {
+        "esbuild": "^0.21.3",
+        "postcss": "^8.4.43",
+        "rollup": "^4.20.0"
+      },
+      "peerDependencies": {
+        "@types/node": "^18.0.0 || >=20.0.0",
+        "less": "*",
+        "lightningcss": "^1.21.0",
+        "sass": "*",
+        "sass-embedded": "*",
+        "stylus": "*",
+        "sugarss": "*",
+        "terser": "^5.4.0"
+      },
+      "incoming": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "5.4.21"
+        },
+        {
+          "from": "node_modules/@vitejs/plugin-react",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "peerDependencies",
+          "spec": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "peerDependencies",
+          "spec": "^4.0.0 || ^5.0.0"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "5.4.21"
+        }
+      ]
+    }
+  ],
+  "after": [
+    {
+      "path": "node_modules/@vitejs/plugin-react",
+      "version": "5.2.0",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "dependencies": {
+        "@babel/core": "^7.29.0",
+        "@babel/plugin-transform-react-jsx-self": "^7.27.1",
+        "@babel/plugin-transform-react-jsx-source": "^7.27.1",
+        "@rolldown/pluginutils": "1.0.0-rc.3",
+        "@types/babel__core": "^7.20.5",
+        "react-refresh": "^0.18.0"
+      },
+      "peerDependencies": {
+        "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0"
+      },
+      "incoming": [
+        {
+          "from": "",
+          "to": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "5.2.0"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/@vitejs/plugin-react",
+          "name": "@vitejs/plugin-react",
+          "kind": "devDependencies",
+          "spec": "5.2.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/electron-vite",
+      "version": "6.0.0",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "dependencies": {
+        "@babel/core": "^7.29.7",
+        "@babel/plugin-transform-arrow-functions": "^7.29.7",
+        "cac": "^7.0.0",
+        "magic-string": "^1.4.2",
+        "picocolors": "^1.1.1",
+        "rolldown": "~1.2.10"
+      },
+      "peerDependencies": {
+        "@swc/core": "^1.0.0",
+        "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
+      },
+      "incoming": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/electron-vite",
+          "name": "electron-vite",
+          "kind": "devDependencies",
+          "spec": "6.0.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/esbuild",
+      "version": "0.25.12",
+      "engines": {
+        "node": ">=18"
+      },
+      "incoming": [
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "^0.25.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/tsx",
+      "version": "4.23.1",
+      "engines": {
+        "node": ">=18.0.0"
+      },
+      "dependencies": {
+        "esbuild": "~0.28.0"
+      },
+      "incoming": [
+        {
+          "from": "",
+          "to": "node_modules/tsx",
+          "name": "tsx",
+          "kind": "devDependencies",
+          "spec": "4.23.1"
+        },
+        {
+          "from": "node_modules/vite",
+          "to": "node_modules/tsx",
+          "name": "tsx",
+          "kind": "peerDependencies",
+          "spec": "^4.8.1"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/tsx",
+          "name": "tsx",
+          "kind": "devDependencies",
+          "spec": "4.23.1"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/tsx/node_modules/esbuild",
+      "version": "0.28.1",
+      "engines": {
+        "node": ">=18"
+      },
+      "incoming": [
+        {
+          "from": "node_modules/tsx",
+          "to": "node_modules/tsx/node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "~0.28.0"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/tsx",
+          "name": "tsx",
+          "kind": "devDependencies",
+          "spec": "4.23.1"
+        },
+        {
+          "from": "node_modules/tsx",
+          "to": "node_modules/tsx/node_modules/esbuild",
+          "name": "esbuild",
+          "kind": "dependencies",
+          "spec": "~0.28.0"
+        }
+      ]
+    },
+    {
+      "path": "node_modules/vite",
+      "version": "6.4.5",
+      "engines": {
+        "node": "^18.0.0 || ^20.0.0 || >=22.0.0"
+      },
+      "dependencies": {
+        "esbuild": "^0.25.0",
+        "fdir": "^6.4.4",
+        "picomatch": "^4.0.2",
+        "postcss": "^8.5.3",
+        "rollup": "^4.34.9",
+        "tinyglobby": "^0.2.13"
+      },
+      "peerDependencies": {
+        "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0",
+        "jiti": ">=1.21.0",
+        "less": "*",
+        "lightningcss": "^1.21.0",
+        "sass": "*",
+        "sass-embedded": "*",
+        "stylus": "*",
+        "sugarss": "*",
+        "terser": "^5.16.0",
+        "tsx": "^4.8.1",
+        "yaml": "^2.4.2"
+      },
+      "incoming": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        },
+        {
+          "from": "node_modules/@vitejs/plugin-react",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "peerDependencies",
+          "spec": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0"
+        },
+        {
+          "from": "node_modules/electron-vite",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "peerDependencies",
+          "spec": "^6.0.0 || ^7.0.0 || ^8.0.0"
+        }
+      ],
+      "shortestRootChain": [
+        {
+          "from": "",
+          "to": "node_modules/vite",
+          "name": "vite",
+          "kind": "devDependencies",
+          "spec": "6.4.5"
+        }
+      ]
+    }
+  ],
+  "note": "Lock-resolved declared and peer paths, including optional-platform lock entries. npm ls evidence records the installed Windows tree separately. No esbuild override is used."
+}

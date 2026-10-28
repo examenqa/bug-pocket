@@ -10,7 +10,9 @@
     "start": "electron-vite build && node scripts/fix-preload.js && electron .",
     "dist": "electron-vite build && node scripts/fix-preload.js && electron-builder --win nsis",
     "test": "npm run test:dependency-constraints && npm run test:backup-extraction && npm run test:navigation && npm run test:workspace-selection && npm run test:keep-alive && npm run test:invite-token && npm run test:support-feedback && npm run test:lifecycle && npm run test:security:supabase-schema-repeatability && npm run test:security:phase1 && npm run test:security:logout-db-handle && npm run test:security:destructive-backup-restore && npm run test:regression:taxonomy-uuid && npm run test:ai-fallback && npm run test:ai-error-ui && npm run test:phase1 && npm run test:sync-protocol && npm run test:ai-integrity && npm run test:restore-integrity",
-    "test:dependency-constraints": "node scripts/test-dependency-constraints.cjs",
+    "test:dependency-constraints": "node scripts/test-dependency-constraints.cjs && npm run test:toolchain-security",
+    "test:toolchain-security": "node scripts/test-vite-security.cjs",
+    "test:toolchain-startup": "node scripts/test-toolchain-startup.cjs dev start packaged",
     "test:backup-extraction": "node --import tsx --test src/main/sync/backupArchiveReader.test.ts src/main/sync/backupExtraction.test.ts && node scripts/run-electron-test.cjs src/main/sync/backupRecovery.test.ts src/main/sync/backupZip64.test.ts",
     "test:packaged-smoke": "node scripts/smoke-test.cjs",
     "test:packaged-smoke:build": "npm run build && electron-builder --win --dir && npm run test:packaged-smoke",
@@ -107,16 +109,16 @@
     "@types/react-dom": "18.3.7",
     "@types/ws": "8.18.1",
     "@types/yauzl": "3.4.0",
-    "@vitejs/plugin-react": "4.7.0",
+    "@vitejs/plugin-react": "5.2.0",
     "electron": "^43.1.0",
     "electron-builder": "26.18.1",
-    "electron-vite": "2.3.0",
+    "electron-vite": "6.0.0",
     "tsx": "4.23.1",
     "typescript": "5.9.3",
-    "vite": "5.4.21"
+    "vite": "6.4.5"
   },
   "buildNotes": {
-    "preload": "fix-preload.js bridges an electron-vite@2.3.0 internal path-rewrite behavior. Do not upgrade electron-vite without re-testing the preload loading pipeline."
+    "preload": "The explicit CommonJS build emits index.js; fix-preload.js retains the application's preferred production index.mjs copy. Verify dev, start and packaged normal IPC with test:toolchain-startup when changing this pipeline."
   },
   "author": "Examen QA",
   "overrides": {

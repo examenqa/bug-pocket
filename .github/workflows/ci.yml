@@ -42,3 +42,6 @@ jobs:
 
       - name: Run packaged smoke test
         run: npm run test:packaged-smoke:build
+
+      - name: Verify normal development, start and packaged IPC
+        run: npm run test:toolchain-startup

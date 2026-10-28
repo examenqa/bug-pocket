@@ -1,0 +1,86 @@
+{
+  "ghsa_id": "GHSA-67mh-4wv8-2f99",
+  "cve_id": null,
+  "url": "https://api.github.com/advisories/GHSA-67mh-4wv8-2f99",
+  "html_url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
+  "summary": "esbuild enables any website to send any requests to the development server and read the response",
+  "description": "### Summary\n\nesbuild allows any websites to send any request to the development server and read the response due to default CORS settings.\n\n### Details\n\nesbuild sets `Access-Control-Allow-Origin: *` header to all requests, including the SSE connection, which allows any websites to send any request to the development server and read the response.\n\nhttps://github.com/evanw/esbuild/blob/df815ac27b84f8b34374c9182a93c94718f8a630/pkg/api/serve_other.go#L121\nhttps://github.com/evanw/esbuild/blob/df815ac27b84f8b34374c9182a93c94718f8a630/pkg/api/serve_other.go#L363\n\n**Attack scenario**:\n\n1. The attacker serves a malicious web page (`http://malicious.example.com`).\n1. The user accesses the malicious web page.\n1. The attacker sends a `fetch('http://127.0.0.1:8000/main.js')` request by JS in that malicious web page. This request is normally blocked by same-origin policy, but that's not the case for the reasons above.\n1. The attacker gets the content of `http://127.0.0.1:8000/main.js`.\n\nIn this scenario, I assumed that the attacker knows the URL of the bundle output file name. But the attacker can also get that information by\n\n- Fetching `/index.html`: normally you have a script tag here\n- Fetching `/assets`: it's common to have a `assets` directory when you have JS files and CSS files in a different directory and the directory listing feature tells the attacker the list of files\n- Connecting `/esbuild` SSE endpoint: the SSE endpoint sends the URL path of the changed files when the file is changed (`new EventSource('/esbuild').addEventListener('change', e => console.log(e.type, e.data))`)\n- Fetching URLs in the known file: once the attacker knows one file, the attacker can know the URLs imported from that file\n\nThe scenario above fetches the compiled content, but if the victim has the source map option enabled, the attacker can also get the non-compiled content by fetching the source map file.\n\n### PoC\n\n1. Download [reproduction.zip](https://github.com/user-attachments/files/18561484/reproduction.zip)\n2. Extract it and move to that directory\n1. Run `npm i`\n1. Run `npm run watch`\n1. Run `fetch('http://127.0.0.1:8000/app.js').then(r => r.text()).then(content => console.log(content))` in a different website's dev tools.\n\n![image](https://github.com/user-attachments/assets/08fc2e4d-e1ec-44ca-b0ea-78a73c3c40e9)\n\n### Impact\n\nUsers using the serve feature may get the source code stolen by malicious websites.",
+  "type": "reviewed",
+  "severity": "medium",
+  "repository_advisory_url": "https://api.github.com/repos/evanw/esbuild/security-advisories/GHSA-67mh-4wv8-2f99",
+  "source_code_location": "https://github.com/evanw/esbuild",
+  "identifiers": [
+    {
+      "value": "GHSA-67mh-4wv8-2f99",
+      "type": "GHSA"
+    }
+  ],
+  "references": [
+    "https://github.com/evanw/esbuild/security/advisories/GHSA-67mh-4wv8-2f99",
+    "https://github.com/evanw/esbuild/commit/de85afd65edec9ebc44a11e245fd9e9a2e99760d",
+    "https://github.com/advisories/GHSA-67mh-4wv8-2f99"
+  ],
+  "published_at": "2025-02-10T17:48:07Z",
+  "updated_at": "2025-02-10T17:48:08Z",
+  "github_reviewed_at": "2025-02-10T17:48:07Z",
+  "nvd_published_at": null,
+  "withdrawn_at": null,
+  "vulnerabilities": [
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "esbuild"
+      },
+      "vulnerable_version_range": "<= 0.24.2",
+      "first_patched_version": "0.25.0",
+      "vulnerable_functions": []
+    }
+  ],
+  "cvss_severities": {
+    "cvss_v3": {
+      "vector_string": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N",
+      "score": 5.3
+    },
+    "cvss_v4": {
+      "vector_string": null,
+      "score": 0.0
+    }
+  },
+  "cwes": [
+    {
+      "cwe_id": "CWE-346",
+      "name": "Origin Validation Error"
+    }
+  ],
+  "credits": [
+    {
+      "user": {
+        "login": "sapphi-red",
+        "id": 49056869,
+        "node_id": "MDQ6VXNlcjQ5MDU2ODY5",
+        "avatar_url": "https://avatars.githubusercontent.com/u/49056869?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/sapphi-red",
+        "html_url": "https://github.com/sapphi-red",
+        "followers_url": "https://api.github.com/users/sapphi-red/followers",
+        "following_url": "https://api.github.com/users/sapphi-red/following{/other_user}",
+        "gists_url": "https://api.github.com/users/sapphi-red/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/sapphi-red/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/sapphi-red/subscriptions",
+        "organizations_url": "https://api.github.com/users/sapphi-red/orgs",
+        "repos_url": "https://api.github.com/users/sapphi-red/repos",
+        "events_url": "https://api.github.com/users/sapphi-red/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/sapphi-red/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "type": "reporter"
+    }
+  ],
+  "comments": 5,
+  "cvss": {
+    "vector_string": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N",
+    "score": 5.3
+  }
+}

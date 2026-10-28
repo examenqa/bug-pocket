@@ -1,0 +1,53 @@
+{
+  "version": "0.9.9",
+  "name": "bug-pocket",
+  "dependencies": {
+    "@vitejs/plugin-react": {
+      "version": "4.7.0",
+      "resolved": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-4.7.0.tgz",
+      "overridden": false,
+      "dependencies": {
+        "vite": {
+          "version": "5.4.21"
+        }
+      }
+    },
+    "electron-vite": {
+      "version": "2.3.0",
+      "resolved": "https://registry.npmjs.org/electron-vite/-/electron-vite-2.3.0.tgz",
+      "overridden": false,
+      "dependencies": {
+        "esbuild": {
+          "version": "0.21.5",
+          "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.21.5.tgz",
+          "overridden": false
+        },
+        "vite": {
+          "version": "5.4.21"
+        }
+      }
+    },
+    "tsx": {
+      "version": "4.23.1",
+      "resolved": "https://registry.npmjs.org/tsx/-/tsx-4.23.1.tgz",
+      "overridden": false,
+      "dependencies": {
+        "esbuild": {
+          "version": "0.28.1",
+          "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.28.1.tgz",
+          "overridden": false
+        }
+      }
+    },
+    "vite": {
+      "version": "5.4.21",
+      "resolved": "https://registry.npmjs.org/vite/-/vite-5.4.21.tgz",
+      "overridden": false,
+      "dependencies": {
+        "esbuild": {
+          "version": "0.21.5"
+        }
+      }
+    }
+  }
+}

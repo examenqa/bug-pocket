@@ -1,0 +1,99 @@
+{
+  "date": "2026-10-28T06:10:23.553Z",
+  "platform": "win32",
+  "hostNode": "v24.22.1",
+  "vite": "6.4.5",
+  "fixturePaths": {
+    "requestedTemp": "C:\\Users\\vali2\\AppData\\Local\\Temp",
+    "canonicalTemp": "C:\\Users\\vali2\\AppData\\Local\\Temp",
+    "fixture": "C:\\Users\\vali2\\AppData\\Local\\Temp\\bug-pocket-exa70-security-cQhzwT",
+    "originalCwd": "C:\\Users\\vali2\\OneDrive\\My Apps\\Bug Pocket\\exa-70-vite-toolchain",
+    "fixtureCwd": "C:\\Users\\vali2\\AppData\\Local\\Temp\\bug-pocket-exa70-security-cQhzwT"
+  },
+  "bundledSource": {
+    "file": "node_modules/vite/dist/node/chunks/dep-CkSfqg8D.js",
+    "sha256": "d079b31bef701ca4a06372c93638c168de7511be6af6ccd8385474a1bd751eed",
+    "editorSectionSha256": "83ed8e8372f47f2f65b37cfb47d9344e57b4f093f8d364c8e730d2682b15ca12"
+  },
+  "checks": [
+    {
+      "check": "GHSA-v6wh-96g9-6wx3 bundled UNC pre-filesystem rejection",
+      "cases": 3,
+      "filesystemCalls": 0,
+      "editorCommands": 0,
+      "method": "actual bundled code with inert filesystem/child_process doubles"
+    },
+    {
+      "check": "GHSA-698v-4r3x-3vcv bundled percent and newline command rejection",
+      "cases": 4,
+      "editorCommands": 0,
+      "realShellExecuted": false
+    },
+    {
+      "check": "GHSA-587h-7wmj-h5pm bundled suffix removal then canonicalization",
+      "existsSyncArgument": "C:\\synthetic",
+      "editorReceivedAttackerSegment": false,
+      "note": "Existing parent directory may open; unnormalized attacker component never reaches editor command"
+    },
+    {
+      "check": "GHSA-r825-w8mm-5pxw bundled editor flag disambiguation",
+      "windowsCases": 8,
+      "simulatedWslCases": 2,
+      "realWslExecuted": false
+    },
+    {
+      "check": "GHSA-rq7h-c2jc-7f22 source fix and platform boundary",
+      "disposition": "Patched resolvedId registration present; official advisory excludes Windows host",
+      "nonWindowsRuntimeReproduction": false
+    },
+    {
+      "check": "Vite cross-origin response and DNS-rebinding controls",
+      "remoteOriginAccessControl": null,
+      "unapprovedHostStatus": 403,
+      "loopbackAloneIsNotDisposition": true
+    },
+    {
+      "check": "GHSA-fx2h-pf6j-xcff Windows ADS and tilde alternate-path rejection",
+      "deniedRequests": 6,
+      "realNtfsShortAliasGeneration": false,
+      "note": "Existing tilde fixture checks unconditional short-path rejection without depending on volume 8.3 settings"
+    },
+    {
+      "check": "GHSA-4w7w-66w2-5vf9 optimized sourcemap traversal",
+      "rawFsPositiveStatus": 200,
+      "fileGuardAllowedPositive": true,
+      "fileGuardOutsideDenied": true,
+      "directOutsideStatus": 403,
+      "legitimateOptimizedMapStatus": 200,
+      "traversalStatuses": [
+        404,
+        404
+      ],
+      "encodedSlashResult": "Empty dummy map, no synthetic outside content"
+    },
+    {
+      "check": "GHSA-9jrq-w75r-8gcw custom HTML transform module origin",
+      "moduleSources": [
+        "/@vite/client",
+        "/@id/__x00__/exa70-origin.invalid/payload.js?/../../package.json?html-proxy&index=0.js"
+      ],
+      "browserPayloadExecuted": false,
+      "assertion": "Every generated module URL resolves to the local origin"
+    },
+    {
+      "check": "GHSA-67mh-4wv8-2f99 actual esbuild serve response and SSE CORS",
+      "esbuildVersion": "0.25.12",
+      "resolvedModule": "node_modules/esbuild/lib/main.js",
+      "normalStatus": 200,
+      "crossOriginScriptStatus": 200,
+      "crossOriginSseStatus": 200,
+      "wildcardAccessControl": false
+    }
+  ],
+  "limitations": [
+    "No real editor, command payload, SMB connection, NTLM authentication or WSL runtime was executed",
+    "No denied-secret-file 8.3 aliases generated; explicit tilde-path rejection checked here and actual temporary-root alias normalization exercised separately",
+    "Non-Windows GHSA-rq7h runtime reproduction remains unexecuted; fixed source is inspected",
+    "HTTP header and transformed URL checks establish server controls; no malicious website or exploit payload was executed"
+  ]
+}

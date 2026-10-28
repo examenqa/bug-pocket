@@ -1,0 +1,121 @@
+{
+  "issue": "EXA-70",
+  "capturedOn": "2026-10-28",
+  "baselineCommit": "2ef9a0fe89b8bc5f06a30a0ead931e842815792b",
+  "snapshots": [
+    {
+      "phase": "before",
+      "scope": "full",
+      "file": "audit-before-full.json",
+      "rawWindowsSnapshotSha256": "3738d4a1bcf5ac69aeb2559cf6879f076d7662f12fa1aeb8e2fcb9c1cf008ec8",
+      "normalizedLfSha256": "3738d4a1bcf5ac69aeb2559cf6879f076d7662f12fa1aeb8e2fcb9c1cf008ec8",
+      "packageEntries": {
+        "info": 0,
+        "low": 0,
+        "moderate": 2,
+        "high": 2,
+        "critical": 0,
+        "total": 4
+      },
+      "distinctGhsaRecords": 21,
+      "ghsaIds": [
+        "GHSA-gr2m-v5gq-v685",
+        "GHSA-j84w-jfhq-vhvj",
+        "GHSA-qmv3-fv6v-rmhq",
+        "GHSA-9qh4-3jw8-366w",
+        "GHSA-fw47-9c62-h3vw",
+        "GHSA-2p8c-gr87-2676",
+        "GHSA-x562-297c-g43g",
+        "GHSA-98mx-cjp9-gchm",
+        "GHSA-3qxv-5xgr-q7w9",
+        "GHSA-h3v5-h239-pg29",
+        "GHSA-997q-gvvc-jwmx",
+        "GHSA-jr5w-w6x2-84p9",
+        "GHSA-67mh-4wv8-2f99",
+        "GHSA-4w7w-66w2-5vf9",
+        "GHSA-v6wh-96g9-6wx3",
+        "GHSA-698v-4r3x-3vcv",
+        "GHSA-r825-w8mm-5pxw",
+        "GHSA-587h-7wmj-h5pm",
+        "GHSA-9jrq-w75r-8gcw",
+        "GHSA-rq7h-c2jc-7f22",
+        "GHSA-fx2h-pf6j-xcff"
+      ],
+      "source": "npm audit --json",
+      "expectedNpmAuditExitFromFindings": 1
+    },
+    {
+      "phase": "before",
+      "scope": "production",
+      "file": "audit-before-production.json",
+      "rawWindowsSnapshotSha256": "26b26b9ab8225d06d634ac3e5719390ab5db6c0878d66de34d29f3fd0dfe48f8",
+      "normalizedLfSha256": "26b26b9ab8225d06d634ac3e5719390ab5db6c0878d66de34d29f3fd0dfe48f8",
+      "packageEntries": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "distinctGhsaRecords": 0,
+      "ghsaIds": [],
+      "source": "npm audit --omit=dev --json",
+      "expectedNpmAuditExitFromFindings": 0
+    },
+    {
+      "phase": "after",
+      "scope": "full",
+      "file": "audit-after-full.json",
+      "rawWindowsSnapshotSha256": "16d5ce55d7c78c883712d441effdf0a9898dc5f2e044b039245cac68e8951750",
+      "normalizedLfSha256": "16d5ce55d7c78c883712d441effdf0a9898dc5f2e044b039245cac68e8951750",
+      "packageEntries": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 1,
+        "critical": 0,
+        "total": 1
+      },
+      "distinctGhsaRecords": 12,
+      "ghsaIds": [
+        "GHSA-gr2m-v5gq-v685",
+        "GHSA-j84w-jfhq-vhvj",
+        "GHSA-qmv3-fv6v-rmhq",
+        "GHSA-9qh4-3jw8-366w",
+        "GHSA-fw47-9c62-h3vw",
+        "GHSA-2p8c-gr87-2676",
+        "GHSA-x562-297c-g43g",
+        "GHSA-98mx-cjp9-gchm",
+        "GHSA-3qxv-5xgr-q7w9",
+        "GHSA-h3v5-h239-pg29",
+        "GHSA-997q-gvvc-jwmx",
+        "GHSA-jr5w-w6x2-84p9"
+      ],
+      "source": "npm audit --json",
+      "expectedNpmAuditExitFromFindings": 1
+    },
+    {
+      "phase": "after",
+      "scope": "production",
+      "file": "audit-after-production.json",
+      "rawWindowsSnapshotSha256": "78c9262b3caea358ecf1759b7902add0f48af53c2ec9df318a77433dd029eae5",
+      "normalizedLfSha256": "78c9262b3caea358ecf1759b7902add0f48af53c2ec9df318a77433dd029eae5",
+      "packageEntries": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "distinctGhsaRecords": 0,
+      "ghsaIds": [],
+      "source": "npm audit --omit=dev --json",
+      "expectedNpmAuditExitFromFindings": 0
+    }
+  ],
+  "hashConvention": "Raw Windows capture bytes are preserved. PowerShell redirection and core.autocrlf=true can leave CRLF captures but LF Git blobs; normalizedLfSha256 replaces only CRLF with LF for cross-checkout verification. No raw snapshot bytes were rewritten to force a checksum match.",
+  "note": "Audit exit 1 records findings, not a failed JSON capture. Full/production package-entry counts differ from distinct GHSA records. Electron runtime advisory matches remain owned by EXA-66; production npm audit omits shipped Electron because it is a development declaration.",
+  "exa68HistoricalCacheDisposition": "GHSA-ch52-4w7c-c8xp remains audit-range removal; upstream-disputed report. Historical EXA-68 snapshots were not rewritten."
+}

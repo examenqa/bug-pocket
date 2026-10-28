@@ -1,0 +1,38 @@
+{
+  "issue": "EXA-70",
+  "capturedOn": "2026-10-28",
+  "sources": [
+    {
+      "source": "https://vite.dev/releases",
+      "downloadedDocumentSha256": "ae4680cc1be3100fe5f98f84b0f89beaec1dca70319080b5aee24183623734b6",
+      "excerpt": "Security patches are also backported to `vite@6.4` and `vite@8.1`.",
+      "observation": "The current policy also gives 8.3 regular patches and 7.3/8.2 important and security patches; older minors are unsupported."
+    },
+    {
+      "source": "https://github.com/alex8088/electron-vite/releases/tag/v6.0.0",
+      "publishedAt": "2026-10-14T16:29:04Z",
+      "excerpt": "while retaining compatibility with Vite 6 and 7.",
+      "observation": "Stable v6.0.0 is the current release; its new config bundler is Rolldown. Official release body was saved in the workspace research capture."
+    },
+    {
+      "source": "https://raw.githubusercontent.com/vitejs/vite-plugin-react/plugin-react%405.2.0/packages/plugin-react/README.md",
+      "downloadedDocumentSha256": "4f381499b31f544d9a5fc214d8a4e91c7098e0b177c2fe011ea056f227dc35f2",
+      "line": 5,
+      "excerpt": "requires react >= 16.9",
+      "observation": "Documented Fast Refresh React minimum includes unchanged React 18.3.1. Default automatic JSX runtime and react() configuration remain supported."
+    },
+    {
+      "source": "https://raw.githubusercontent.com/vitejs/vite-plugin-react/plugin-react%405.2.0/packages/plugin-react/CHANGELOG.md",
+      "downloadedDocumentSha256": "97c343276c7dc158ccb467974c928d85c185a92743932299a49104294169cb38",
+      "excerpt": "Require Node 20.19+, 22.12+",
+      "observation": "v5.2.0 expands the Vite peer range while retaining Vite 6. The v5 changes remove implicit react/react-dom resolve.dedupe entries; the application has a single unchanged React 18.3.1 pair and no configuration adaptation is introduced absent a demonstrated failure."
+    },
+    {
+      "source": "https://github.com/vitejs/vite-plugin-react/releases/tag/plugin-react%405.2.0",
+      "tag_name": "plugin-react@5.2.0",
+      "published_at": "2026-03-12T14:27:47Z",
+      "html_url": "https://github.com/vitejs/vite-plugin-react/releases/tag/plugin-react%405.2.0",
+      "body": "### Add Vite 8 to peerDependencies range [#1143](https://github.com/vitejs/vite-plugin-react/pull/1143)\n\nThis plugin is compatible with Vite 8."
+    }
+  ]
+}

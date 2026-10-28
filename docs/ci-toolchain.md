@@ -1,5 +1,12 @@
 # Windows CI and toolchain (EXA-68)
 
+**28 October 2026 follow-up:** [EXA-70's Vite migration](vite-toolchain.md)
+records the subsequent Vite/electron-vite/React-plugin selection, bundled editor
+repairs and Windows development/start/packaged verification. The EXA-68 narrative
+and snapshots below remain historical; their residual Vite records and Todo
+status describe that earlier checkpoint. Its disputed HTTP-cache record retains
+the audit-range-only classification, and EXA-66's runtime hold remains separate.
+
 Baseline: main `569fbeea537c8669df0be12578b239c4f9c0968a`, inspected 28 October 2026.
 Resolve actual dependencies from the lockfile. The audit snapshots in
 [`evidence/exa-68`](evidence/exa-68) are dated evidence, not permanent safety claims.
