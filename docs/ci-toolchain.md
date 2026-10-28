@@ -42,18 +42,30 @@ builder-util-runtime 9.7.1 and @electron/rebuild 4.2.1. The builder update fixes
 the credential-redirect advisory and the Linux AppImage search-path advisory
 (the latter route is not used by Windows NSIS/dir targets).
 
-Targeted updates within parent semver ranges repair XML/YAML, tar, undici/HTTP
-cache, browserslist and CSS processing paths. No new override is introduced.
+Targeted updates within parent semver ranges repair XML/YAML, tar, undici,
+browserslist and CSS processing paths. The HTTP-cache change has the separate
+audit-range disposition below. No new override is introduced.
 The approved minimatch 3/5/9/10 brace resolutions and their compatibility tests,
 yauzl 3.4.0 archive remediation, Electron, Vite 5.4.21 and electron-vite 2.3.0
 remain. `lock-changes.json` records every changed package record and rationale;
 `advisory-dispositions.json` records every baseline advisory, resolved dependency
-chains, patched versions or residual scope and primary advisory links.
+chains, audit-range observations, patched versions or residual scope and primary
+advisory links.
 
 Fresh full audit: **21 entries (17 high, 4 moderate) -> 4 (2 high, 2 moderate)**.
 Production-only: **0 -> 0**. Entries include propagated package findings; these
 totals are not counts of distinct exploitable vulnerabilities. Production-only
 omits the separately shipped Electron runtime.
+
+The 66 distinct GHSA records are **44 fixed, 1 audit-range removal with an
+upstream-disputed report, 12 pending EXA-66 and 9 pending EXA-70**.
+[GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp)
+falls outside the captured audit range after http-cache-semantics 4.2.0 -> 4.3.0,
+but the official advisory lists no patched version and the
+[upstream owner disputes the report](https://github.com/kornelski/http-cache-semantics/issues/56#issuecomment-5975759591).
+This records audit-range removal without claiming a verified code-level security
+fix or a demonstrated Bug Pocket exploit. The dated raw audit snapshots remain
+unchanged. See [the review follow-up](evidence/exa-68/REVIEW_FOLLOWUP.md).
 
 Remaining findings are explicit unresolved work, with no exception granted:
 
@@ -68,7 +80,9 @@ Remaining findings are explicit unresolved work, with no exception granted:
   custom middleware or non-Windows paths, as recorded per advisory. Build and
   packaged production execution do not start those development servers.
 
-The broader migration must verify development, start and packaged preload paths,
+The separate unresolved migration is tracked in existing
+[EXA-70](https://linear.app/examen-qa/issue/EXA-70/migrate-vite-toolchain-and-remediate-residual-development-server),
+which remains Todo. It must verify development, start and packaged preload paths,
 patched editor middleware and esbuild. Do not force incompatible esbuild versions
 into the existing toolchain or treat the default loopback bind as an exception.
 
@@ -117,7 +131,11 @@ the existing afterPack icon hook remains responsible for icon editing. These
 diagnostics do not establish NSIS installed acceptance.
 
 Implementation, local verification, passing PR CI, external final review,
-maintainer approval and release acceptance are distinct. Keep the PR draft until
-independent external final review and maintainer approval. EXA-46/61 must reassess
+maintainer approval and release acceptance are distinct. The independent GPT-6
+High review of head `23850ea792ea767de8ea0f17ac9175c64aef7209` found no PR-specific
+code blocker and requested this documentation correction. No further full review
+or local application retest is required solely for this documentation delta.
+PR #9 remains draft and EXA-68 In Progress pending the maintainer merge decision.
+EXA-46/61 must reassess
 the now-updated v26 packaging candidate through installed feasibility; no Store
 format choice or release approval is inferred from unpacked validation.

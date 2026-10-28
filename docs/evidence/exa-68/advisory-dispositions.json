@@ -28,7 +28,8 @@
     },
     "distinctGhsaCount": 66,
     "distinctGhsaDispositions": {
-      "fixed": 45,
+      "fixed": 44,
+      "audit-range removal; upstream-disputed report": 1,
       "pending EXA-66": 12,
       "pending broader Vite migration": 9
     },
@@ -41,7 +42,7 @@
     "allAdvisoriesResolved": false,
     "mergeReady": false,
     "releaseReady": false,
-    "note": "Remaining findings require explicit independent review and maintainer disposition. Production-only audit excludes shipped Electron and is not a runtime security clearance. Local/CI validation does not establish installed NSIS/Store acceptance."
+    "note": "Independent final review of 23850ea792ea767de8ea0f17ac9175c64aef7209 found no PR-specific code blocker; its documentation correction is recorded here. Maintainer merge/scope disposition remains pending. EXA-70 tracks unresolved Vite work and EXA-66 retains its runtime hold. Production-only audit excludes shipped Electron; local/CI validation does not establish installed NSIS/Store acceptance."
   },
   "packageAggregates": {
     "@xmldom/xmldom": {
@@ -2169,10 +2170,25 @@
           "affectedAfterNodes": []
         }
       ],
-      "disposition": "fixed",
+      "disposition": "audit-range removal; upstream-disputed report",
       "remainingInAfterAudit": false,
       "dependencyEvidenceKey": "http-cache-semantics",
-      "applicabilityProfile": "http-cache-semantics"
+      "applicabilityProfile": "http-cache-semantics",
+      "reviewDisposition": {
+        "reviewedOn": "2026-10-28",
+        "auditRangeRemoval": "Captured http-cache-semantics 4.2.0 -> 4.3.0 leaves the published <=4.2.0 range; the dated after audit omits this GHSA.",
+        "codeLevelSecurityFixVerified": false,
+        "bugPocketExploitDemonstrated": false,
+        "upstreamReportDisputed": true,
+        "officialPatchedVersionListed": "None (official advisory inspected 2026-10-28)",
+        "sources": [
+          "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+          "https://github.com/kornelski/http-cache-semantics/issues/56#issuecomment-5975759591"
+        ],
+        "externalReviewRecord": "https://linear.app/examen-qa/issue/EXA-68/align-windows-ci-node-support-and-remediate-build-tool-advisories",
+        "reproductionAttribution": "The external reviewer reported the same max-stale behavior in 4.2.0 and 4.3.0. This documentation follow-up did not rerun that reproduction.",
+        "externalReviewCommentId": "2e0d6e4e-6bce-4cd2-b2e6-0a109b5f2638"
+      }
     },
     {
       "ghsa": "GHSA-2883-xcg3-v3hh",
@@ -4513,7 +4529,7 @@
     "GHSA-h3v5-h239-pg29": "Explicitly concerns macOS off-screen rendering and GPU-supplied frame geometry. Windows is the current target. The vulnerable Electron version is nevertheless unchanged and its runtime security hold remains with EXA-66; this individual platform observation does not clear that hold.",
     "GHSA-jr5w-w6x2-84p9": "Shipped Electron certificate-trust mitigation, distinct from npm package-only production audit and host Node. No configuration-based inapplicability is claimed; remains under the EXA-66 runtime/Chromium hold.",
     "esbuild": "esbuild serve API CORS/source disclosure. Inspected project scripts and installed electron-vite/Vite use build/transform/context and did not establish an esbuild serve endpoint. The vulnerable esbuild package remains at 0.21.5 and is retained as unresolved rather than accepted risk. Vite separately runs its own dev server, which has distinct advisories. Patched esbuild >=0.25.0 does not satisfy electron-vite ^0.21.5 or Vite ^0.21.3.",
-    "http-cache-semantics": "Build-only old @electron/get -> got -> cacheable-request graph. The advisory needs cross-user shared cached responses and max-stale processing; inspected GotDownloader forwards supplied got options without itself setting up a shared cross-user cache, so that exploit scenario was not established. Version 4.3.0 fits the existing ^4.0.0 range and is absent from the after audit; the advisory webpage may lag registry patch availability. No exception granted.",
+    "http-cache-semantics": "Build-only old @electron/get -> got -> cacheable-request graph. The alleged cross-user shared-cache/max-stale Bug Pocket exploit was not demonstrated. The captured compatible update 4.2.0 -> 4.3.0 leaves the published <=4.2.0 range and removes this entry from the dated after audit. The official advisory lists no patched version; the upstream owner disputes the report. Audit-range removal is not evidence of a verified code-level security fix. No security exception or application exploit claim is made.",
     "js-yaml": "Build-tool YAML config parser can exhaust CPU on malicious YAML merge/omap constructs. Repository config uses package.json, but this is a parser repair rather than a configuration exception.",
     "nanoid": "Dev-only PostCSS graph; affected custom generator behavior can loop indefinitely with zero size. Compatible patched 3.x version is locked; no production application API is inferred from this dev dependency.",
     "postcss": "Dev-only Vite CSS build processing; crafted sourceMappingURL with from unset can read arbitrary source maps. Compatible patched PostCSS 8.x version is locked; build-input trust is not used as an exception.",
@@ -4532,12 +4548,14 @@
   "scopeByDisposition": {
     "fixed": "Compatible package update already locked; verify through clean installation, checks, build and packaged smoke.",
     "pending EXA-66": "Keep EXA-66 runtime/security remediation and its Chromium hold separate. This PR does not upgrade Electron or approve release.",
-    "pending broader Vite migration": "Coordinate supported Vite/electron-vite major migration and patched esbuild/bundled launch-editor, then verify development, start and packaged preload pipeline including fix-preload.js. Maintainer disposition required; no security exception is authorized here."
+    "pending broader Vite migration": "EXA-70 separately tracks the unresolved supported Vite/electron-vite major migration and patched esbuild/bundled launch-editor, including development, start and packaged preload validation. The issue remains Todo; linking it does not start remediation or grant an exception. https://linear.app/examen-qa/issue/EXA-70/migrate-vite-toolchain-and-remediate-residual-development-server",
+    "audit-range removal; upstream-disputed report": "Record audit-range removal and the upstream dispute separately from the 44 fixed records. Preserve the official advisory, owner response and dated audit evidence; no verified code fix or demonstrated Bug Pocket exploit is claimed."
   },
   "rangeValidationByDisposition": {
     "fixed": "No installed after-lock node matches any captured affected range, and the after audit no longer reports the GHSA.",
     "pending EXA-66": "At least one after-lock node still matches the captured affected range; no security exception authorized.",
-    "pending broader Vite migration": "At least one after-lock node still matches the captured affected range; no security exception authorized."
+    "pending broader Vite migration": "At least one after-lock node still matches the captured affected range; no security exception authorized.",
+    "audit-range removal; upstream-disputed report": "No after-lock node matches the captured <=4.2.0 range and the dated after audit omits the GHSA. This range/audit observation does not establish a code-level security patch; the official advisory lists no patched version and the upstream report is disputed."
   },
   "evidenceLookup": "Each advisory references packageEvidence by package name. Its per-snapshot node IDs index dependencyGraphs.before/after.nodes. Each chain is an ordered array of edge IDs indexing that snapshot's edges; edge from/to IDs identify exact lock paths and versions. Source-range affected node IDs use the same snapshot tables. Applicability, proposed scope and range validation are shared by explicit profile/disposition keys to avoid repeated prose. Raw audits retain original CVSS/CWE metadata."
 }
