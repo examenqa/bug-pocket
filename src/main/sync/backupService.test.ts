@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import Database from 'better-sqlite3';
 import { createBackupArchive, restoreBackupArchive, type BackupArchiveSource } from './backupService';
+import { extractBackupArchive } from './backupExtraction';
 
 interface ArchiveEntry {
   name: string;
@@ -105,7 +106,7 @@ test('corrupted staged backup is rejected without replacing either live database
     assert.deepEqual(readFileSync(workspacePath), originalWorkspaceBytes);
     assert.equal(readSentinel(localPath), 'live-local-data');
     assert.equal(readSentinel(workspacePath), 'live-workspace-data');
-    assert.equal(existsSync(join(dataDir, '.staging_restore')), false, 'failed staging directories must be removed');
+    assert.equal(readdirSync(dataDir).some(name => name.startsWith('.staging_restore-')), false, 'failed staging directories must be removed');
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
   }
@@ -148,7 +149,7 @@ test('validated databases replace live files only after beforeCommit and survive
     assert.equal(afterCommitCalled, true);
     assert.equal(readSentinel(localPath), 'new-local');
     assert.equal(readSentinel(workspacePath), 'new-workspace');
-    assert.equal(existsSync(join(dataDir, '.staging_restore')), false);
+    assert.equal(readdirSync(dataDir).some(name => name.startsWith('.staging_restore-')), false);
     assert.equal(existsSync(join(dataDir, '.restore_rollback')), false);
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
@@ -193,7 +194,7 @@ test('post-commit failure rolls both databases back to their original bytes', as
     assert.deepEqual(readFileSync(workspacePath), originalWorkspace);
     assert.equal(readSentinel(localPath), 'old-local');
     assert.equal(readSentinel(workspacePath), 'old-workspace');
-    assert.equal(existsSync(join(dataDir, '.staging_restore')), false);
+    assert.equal(readdirSync(dataDir).some(name => name.startsWith('.staging_restore-')), false);
     assert.equal(existsSync(join(dataDir, '.restore_rollback')), false);
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
@@ -307,11 +308,7 @@ test('active workspace backup excludes attachments referenced only by an inactiv
     const result = await createBackupArchive(backupPath, source, dataDir);
     assert.equal(result.success, true, result.error);
 
-    const extractZipModule = (await import('extract-zip')) as unknown as {
-      default?: (zipPath: string, options: { dir: string }) => Promise<void>;
-    } & ((zipPath: string, options: { dir: string }) => Promise<void>);
-    const extractZip = extractZipModule.default ?? extractZipModule;
-    await extractZip(backupPath, { dir: inspectDir });
+    await extractBackupArchive(backupPath, inspectDir);
 
     assert.equal(existsSync(join(inspectDir, 'ws_A.sqlite')), true);
     assert.equal(existsSync(join(inspectDir, 'ws_B.sqlite')), false, 'the inactive workspace database itself is scoped out');

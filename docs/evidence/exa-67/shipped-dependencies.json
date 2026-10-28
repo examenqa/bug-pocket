@@ -1,0 +1,70 @@
+{
+  "capturedAt": "2026-10-28T00:42:49.946Z",
+  "artifact": "release-build/win-unpacked/resources/app.asar",
+  "sha256": "e8d025c0b5dae6f3d444dcb21dc6e676226fe4d50e25c0b23e8a843dd94e75de",
+  "fileCount": 5254,
+  "extractZipPresent": false,
+  "builtMainLoadsYauzl": true,
+  "packages": [
+    {
+      "path": "node_modules/archiver/package.json",
+      "name": "archiver",
+      "version": "8.0.0",
+      "dependencies": {
+        "async": "^3.2.4",
+        "buffer-crc32": "^1.0.0",
+        "is-stream": "^4.0.0",
+        "lazystream": "^1.0.0",
+        "normalize-path": "^3.0.0",
+        "readable-stream": "^4.0.0",
+        "readdir-glob": "^3.0.0",
+        "tar-stream": "^3.0.0",
+        "zip-stream": "^7.0.2"
+      },
+      "sha256": "b1af65c1e377c292f053742626492662fae916b3ebeef92e9b7b8fac4a5b2805"
+    },
+    {
+      "path": "node_modules/brace-expansion/package.json",
+      "name": "brace-expansion",
+      "version": "5.0.12",
+      "dependencies": {
+        "balanced-match": "^4.0.2"
+      },
+      "sha256": "bcf80e9c9126fac5b5aaddd75e59542fa828937f5fbb71e655106d94684f97e9"
+    },
+    {
+      "path": "node_modules/minimatch/package.json",
+      "name": "minimatch",
+      "version": "10.2.5",
+      "dependencies": {
+        "brace-expansion": "^5.0.5"
+      },
+      "sha256": "e6ba51215fc924ac7c0379ab6b4e462100de77669a29b66ec3a1af768b77a52a"
+    },
+    {
+      "path": "node_modules/pend/package.json",
+      "name": "pend",
+      "version": "1.2.0",
+      "sha256": "3bbc8c48320e1f3fd6cce3417ee48d555b3aa86e50cc795a6c48b1c556aeedd2"
+    },
+    {
+      "path": "node_modules/readdir-glob/package.json",
+      "name": "readdir-glob",
+      "version": "3.0.0",
+      "dependencies": {
+        "minimatch": "^10.2.2"
+      },
+      "sha256": "7200b0ecb00a787c8cd883d2641c92c9eb66639ff466773450452ba45c40abaa"
+    },
+    {
+      "path": "node_modules/yauzl/package.json",
+      "name": "yauzl",
+      "version": "3.4.0",
+      "dependencies": {
+        "pend": "~1.2.0"
+      },
+      "sha256": "f48a228f8d22b5f56f97cd19ff953bf0ecb4ea47727c7089cede30510fcd0914"
+    }
+  ],
+  "installedElectron": "43.1.0"
+}

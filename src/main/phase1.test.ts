@@ -6,6 +6,7 @@ import test from 'node:test';
 import Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
 import { createBackupArchive, restoreBackupArchive } from './sync/backupService';
+import { extractBackupArchive } from './sync/backupExtraction';
 import { BugPocketDatabase } from './database';
 
 const hash = 'a'.repeat(64);
@@ -156,8 +157,7 @@ test('restart recovers unexpired captures and expires only marked captures acros
 });
 
 async function extract(archive: string, dir: string): Promise<void> {
-  const unzip = (await import('extract-zip')).default;
-  await unzip(archive, { dir });
+  await extractBackupArchive(archive, dir);
 }
 
 async function writeArchive(path: string, entries: Array<{ name: string; bytes: Buffer }>): Promise<void> {
