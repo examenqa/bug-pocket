@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import test from 'node:test';
 import { BugPocketDatabase } from '../database';
 import { createBackupArchive, restoreBackupArchive } from './backupService';
+import { extractBackupArchive } from './backupExtraction';
 
 const input = (note:string, attachment_ids:number[] = []) => ({entry_type:'Bug',application_id:null,module_id:null,environment_id:null,user_role_id:null,note,attachment_ids});
 interface Manifest { archived_attachments:Array<{file_name:string;content_hash:string;file_size:number}> }
@@ -56,8 +57,7 @@ for (const scenario of ['valid lowercase','valid uppercase','tampered byte','wro
       const original=join(root,'original.bugpocket'),candidate=join(root,'candidate.bugpocket');
       const exported=await createBackupArchive(original,source,root);
       assert.equal(exported.success,true,exported.error);
-      const extraction=await import('extract-zip');
-      await extraction.default(original,{dir:extracted});
+      await extractBackupArchive(original,extracted);
       const manifestPath=join(extracted,'manifest.json');
       const manifest=JSON.parse(readFileSync(manifestPath,'utf8')) as Manifest;
       assert.equal(manifest.archived_attachments.length,2);
@@ -94,7 +94,7 @@ for (const scenario of ['valid lowercase','valid uppercase','tampered byte','wro
         assert.equal(live.getBug(liveBug.id)?.note,'live workspace','existing handle remains usable');
         live.connectToWorkspace(''); assert.equal(live.getBug(1)?.note,'live local');
       }
-      assert.equal(existsSync(join(liveDir,'.staging_restore')),false);
+      assert.equal(readdirSync(liveDir).some(name=>name.startsWith('.staging_restore-')),false);
       assert.equal(existsSync(join(liveDir,'.restore_rollback')),false);
     } finally {source.close();live.close();rmSync(root,{recursive:true,force:true});}
   });

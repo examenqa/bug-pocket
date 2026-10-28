@@ -1,0 +1,153 @@
+{
+  "capturedAt": "2026-10-28T00:52:11.089Z",
+  "base": "3ee28728b4e9522e182d43c025652a5d8f441c8b",
+  "branch": "fix/exa-67-archive-remediation",
+  "environment": {
+    "platform": "win32",
+    "release": "10.0.26300",
+    "arch": "x64",
+    "node": "v24.13.1",
+    "npm": "11.8.0",
+    "electron": "43.1.0"
+  },
+  "shippedRuntime": {
+    "node": "24.18.0",
+    "acorn": "8.16.0",
+    "ada": "3.4.4",
+    "amaro": "1.1.9",
+    "ares": "1.34.6",
+    "brotli": "1.2.0",
+    "cldr": "48.0",
+    "icu": "78.2",
+    "llhttp": "9.4.2",
+    "merve": "1.2.2",
+    "modules": "148",
+    "napi": "10",
+    "nbytes": "0.1.4",
+    "ncrypto": "0.0.1",
+    "nghttp2": "1.69.0",
+    "nghttp3": "",
+    "ngtcp2": "",
+    "openssl": "0.0.0",
+    "simdjson": "4.6.4",
+    "simdutf": "7.7.0",
+    "sqlite": "3.53.1",
+    "tz": "2025c",
+    "undici": "7.28.0",
+    "unicode": "17.0",
+    "uv": "1.52.1",
+    "uvwasi": "0.0.23",
+    "v8": "15.0.245.13-electron.0",
+    "zlib": "1.3.2.1-motley",
+    "zstd": "1.6.0",
+    "electron": "43.1.0",
+    "chrome": "150.0.7871.47"
+  },
+  "lockSha256": "b6460cac5422605bbc85cb85a6f55ccd2841f66adab0b4c5828f585879b8c42b",
+  "lockLfSha256": "f2d8bcdd21a018a609d24d5a1314187dd649725bac9e94f31a2ffc6c8a639af9",
+  "dependencyCompatibility": {
+    "installedMinimatchLocations": 6,
+    "majors": [
+      3,
+      5,
+      9,
+      10
+    ],
+    "braceVersions": [
+      "1.1.21",
+      "2.1.7",
+      "5.0.12"
+    ],
+    "commonJsAndImportPatternsPassed": true,
+    "changedPackageRecords": 23,
+    "unrelatedVersionChanges": 0
+  },
+  "extractionCeilings": {
+    "entries": 10000,
+    "fileBytes": 2147483648,
+    "inflatedBytes": 8589934592,
+    "archiveBytes": 10737418240,
+    "manifestBytes": 4194304,
+    "retainedCentralMetadataBytes": 16777216,
+    "depth": 16,
+    "pathUtf8Bytes": 1024
+  },
+  "recoveryScope": [
+    "Real Windows deny-delete failures were reproduced and reported in Linear before narrowly adjusting recovery behavior.",
+    "Pending recovery artifacts block subsequent restore before lifecycle and are not erased.",
+    "Precommit cancellation and pre-swap setup failure preserve live files and permit retry.",
+    "Swap or afterCommit failure attempts existing reverse rollback; if rollback cannot complete, retain originals and both errors.",
+    "Recovery cleanup after successful afterCommit cannot initiate rollback after deletion of originals has started; validated live files stay installed."
+  ],
+  "checks": {
+    "cleanNpmCi": "passed (required postinstall executed)",
+    "fullTests": {
+      "tests": 277,
+      "passed": 277,
+      "failed": 0,
+      "skippedReportedByRunner": 0,
+      "rendererPasses": 21
+    },
+    "retainedBackupRegressions": 32,
+    "extractionTests": 126,
+    "recoveryTests": 7,
+    "build": "passed",
+    "unpackedSmoke": "passed",
+    "shippedDependencyInventory": "passed"
+  },
+  "priorCiAttempt": {
+    "runId": 40610621151,
+    "head": "2a2b087f9eec28dd19801e0c791bd73d2e2a39f9",
+    "conclusion": "failure",
+    "cleanInstall": "passed",
+    "extraction": {
+      "passed": 104,
+      "failed": 14,
+      "skipped": 0
+    },
+    "buildAndSmoke": "skipped",
+    "cause": "Legitimate Windows8.3 RUNNER~1 root spelling was rejected as a link; addressed with filesystem identity checks and real generated8.3 regressions. Archive short-name alias candidates rejected before writes."
+  },
+  "audit": {
+    "full": {
+      "info": 0,
+      "low": 0,
+      "moderate": 4,
+      "high": 17,
+      "critical": 0,
+      "total": 21
+    },
+    "production": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  },
+  "executionNotes": [
+    "Windows host Node24 local schema-install filter excludes the existing Supabase boundary case despite runner reporting zero skips; local zero skips is not boundary acceptance.",
+    "npm ci emitted existing deprecation notices, unknown build-from-source env warning and native rebuild space-in-path message; exit0 and subsequent actual Electron/native tests and unpacked smoke passed.",
+    "Unpacked smoke built only --win --dir. No NSIS installer or Store package was produced.",
+    "Before-fix Windows failures and temporary fixture trees remain outside the checkout in reports/exa-67-implementation."
+  ],
+  "openAcceptance": [
+    "Independent external review and exact-head Windows CI.",
+    "EXA-66 Chromium/runtime security hold remains; Electron43.1.0 unchanged on independent main-based branch.",
+    "Combined PR6/PR7 integration, interactive/installed/Store/live Supabase and provider acceptance remain open.",
+    "Representative multi-GiB/long-path backup acceptance for documented ceilings; crash/power-loss and automatic recovery of retained artifacts not implemented.",
+    "Same-account ancestor replacement cannot be atomically excluded by Node path APIs; private staging, exclusive writes and repeated identity checks mitigate but do not certify that adversary.",
+    "Reparse privilege-disabled standard-account matrix not separately run locally."
+  ],
+  "evidenceFiles": {
+    "npm-ci.log": "89b8181638a83d768e3f19b9942fe9a6bb891470a9669ce484285738a340851d",
+    "npm-test-final.log": "efa0ea7beb6d1b3c017b621368ab5ef5674325fa8c5577ad76f31125d56defa0",
+    "build.log": "29e9bae6ff1b4b94ae36db45dd8e2c4932e0bac2cebfb1e82a2ab7404d6040a4",
+    "unpacked-smoke.log": "7f9d833b17b59f6fe75e000e7ef3669b10c64271f1658f02dd20bcd1d93f70a3",
+    "audit-after-full.json": "6ca71d3ca31e6cdcbe5a07335e774541a6c061423610507585410dfbde6faad3",
+    "audit-after-production.json": "3163dd4438ab27179e59fb80feb25c16aa2f19600ffb1f329a7bc2a99f8502c2",
+    "recovery-review-before-fixes.log": "f9e31d43047f5a87bc0092d89afee33420783c172f5dde7eeb31c1cc73236398",
+    "recovery-review-after-fixes.log": "41d2ba39cfc24bf16cf226f5b131d805834cad23e8634849c6e5855ba08865c2"
+  }
+}

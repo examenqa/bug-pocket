@@ -4,6 +4,7 @@ import {
   createReadStream,
   createWriteStream,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -14,13 +15,13 @@ import {
   writeFileSync
 } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { basename, join, resolve, sep } from 'node:path';
+import { basename, join } from 'node:path';
 import type { BackupExportResult } from '../../shared/types';
 import { operationBarrier } from '../OperationBarrier';
 import { validateAttachmentMetadata } from './attachmentPaths';
+import { createBackupStagingDirectory, extractBackupArchive } from './backupExtraction';
 
 const manifestNames = ['manifest.json', 'backup-manifest.json'] as const;
-const stagingDirectoryName = '.staging_restore';
 const rollbackDirectoryName = '.restore_rollback';
 
 type DatabaseRole = 'local' | 'workspace';
@@ -253,29 +254,6 @@ export function createBackupArchive(
   return operationBarrier.acquire(() => createBackupArchiveInternal(filePath, source, tempDirectory));
 }
 
-function validateArchivePath(rawPath: string, stagingPath: string): string {
-  const normalized = rawPath.replace(/\\/g, '/');
-  const isDirectory = normalized.endsWith('/');
-  const pathWithoutTrailingSlash = isDirectory ? normalized.slice(0, -1) : normalized;
-  const parts = pathWithoutTrailingSlash.split('/');
-  if (
-    !pathWithoutTrailingSlash ||
-    normalized.includes('\0') ||
-    normalized.startsWith('/') ||
-    /^[a-zA-Z]:/.test(normalized) ||
-    parts.some((part) => !part || part === '.' || part === '..')
-  ) {
-    throw new Error(`Backup archive contains an unsafe path: '${rawPath}'.`);
-  }
-
-  const resolvedTarget = resolve(stagingPath, ...parts);
-  const stagingRoot = resolve(stagingPath);
-  if (resolvedTarget !== stagingRoot && !resolvedTarget.startsWith(`${stagingRoot}${sep}`)) {
-    throw new Error(`Backup archive path escapes the staging directory: '${rawPath}'.`);
-  }
-  return parts.join('/');
-}
-
 function validateManifestFileName(value: unknown, label: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`Backup manifest is missing ${label}.`);
   const cleaned = value.trim();
@@ -356,10 +334,10 @@ function readAndValidateManifest(stagingPath: string, archiveEntries: Set<string
     if (parsed.format_version == null && attachment.content_hash == null && attachment.file_size == null) {
       const legacyHash = fileName.slice(0, extensionIndex);
       validateAttachmentMetadata(legacyHash, fileName.slice(extensionIndex));
-      const bytes = readFileSync(join(stagingPath, 'attachments', fileName));
-      if (createHash('sha256').update(bytes).digest('hex') !== legacyHash.toLowerCase()) throw new Error('Legacy attachment content hash mismatch.');
+      // The same streaming SHA-256 gate below verifies legacy bytes. Do not
+      // buffer a potentially large attachment merely to infer its size.
       attachment.content_hash = legacyHash;
-      attachment.file_size = bytes.length;
+      attachment.file_size = statSync(join(stagingPath, 'attachments', fileName)).size;
     }
     const metadata = validateAttachmentMetadata(
       attachment.content_hash,
@@ -465,6 +443,16 @@ function rollbackSwap(entries: SwapEntry[]): void {
   }
 }
 
+function assertNoPendingRecovery(rollbackPath: string): void {
+  try {
+    lstatSync(rollbackPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  throw new Error(`A previous restore needs recovery. Preserve '${rollbackPath}' before trying again.`);
+}
+
 async function commitValidatedBackup(
   validated: ValidatedBackup,
   stagingPath: string,
@@ -472,13 +460,10 @@ async function commitValidatedBackup(
   hooks: RestoreBackupHooks
 ): Promise<void> {
   const rollbackPath = join(userDataPath, rollbackDirectoryName);
-  rmSync(rollbackPath, { recursive: true, force: true });
-  mkdirSync(rollbackPath, { recursive: true });
+  assertNoPendingRecovery(rollbackPath);
 
   const liveAttachmentsPath = join(userDataPath, 'attachments');
   const rollbackAttachmentsPath = join(rollbackPath, 'attachments');
-  mkdirSync(liveAttachmentsPath, { recursive: true });
-  mkdirSync(rollbackAttachmentsPath, { recursive: true });
 
   const entries: SwapEntry[] = [
     {
@@ -512,22 +497,45 @@ async function commitValidatedBackup(
     hadLiveEntry: false
   });
   await hooks.beforeCommit();
-  cleanupSqliteSidecars(userDataPath);
+  // A rejected lifecycle hook has not changed live files and must remain
+  // retryable. Create recovery storage only once that hook has succeeded.
+  mkdirSync(rollbackPath);
   const movedEntries: SwapEntry[] = [];
   try {
-    for (const entry of entries) {
-      entry.hadLiveEntry = existsSync(entry.destination);
-      if (entry.hadLiveEntry) renameSync(entry.destination, entry.rollback);
-      movedEntries.push(entry);
-      renameSync(entry.source, entry.destination);
+    try {
+      mkdirSync(liveAttachmentsPath, { recursive: true });
+      mkdirSync(rollbackAttachmentsPath);
+      cleanupSqliteSidecars(userDataPath);
+      for (const entry of entries) {
+        entry.hadLiveEntry = existsSync(entry.destination);
+        if (entry.hadLiveEntry) renameSync(entry.destination, entry.rollback);
+        movedEntries.push(entry);
+        renameSync(entry.source, entry.destination);
+      }
+      await hooks.afterCommit?.();
+    } catch (error) {
+      try {
+        await hooks.beforeRollback?.();
+        rollbackSwap(movedEntries);
+        rmSync(rollbackPath, { recursive: true, force: true });
+      } catch (recoveryError) {
+        const originalMessage = error instanceof Error ? error.message : String(error);
+        const recoveryMessage = recoveryError instanceof Error ? recoveryError.message : String(recoveryError);
+        throw new Error(`${originalMessage} Restore rollback could not complete: ${recoveryMessage} Recovery files were retained at '${rollbackPath}'.`, {
+          cause: new AggregateError([error, recoveryError], 'Restore and rollback failed.')
+        });
+      }
+      throw error;
     }
-    await hooks.afterCommit?.();
-    rmSync(rollbackPath, { recursive: true, force: true });
-  } catch (error) {
-    await hooks.beforeRollback?.();
-    rollbackSwap(movedEntries);
-    rmSync(rollbackPath, { recursive: true, force: true });
-    throw error;
+    try {
+      rmSync(rollbackPath, { recursive: true, force: true });
+    } catch (error) {
+      // afterCommit succeeded. Some original copies may already be gone, so
+      // cleanup failure cannot safely initiate a rollback of validated live data.
+      throw new Error(`Backup restored, but recovery cleanup failed. Live files were kept; preserve remaining recovery files at '${rollbackPath}'.`, {
+        cause: error
+      });
+    }
   } finally {
     rmSync(stagingPath, { recursive: true, force: true });
   }
@@ -538,33 +546,12 @@ async function restoreBackupArchiveInternal(
   userDataPath: string,
   hooks: RestoreBackupHooks
 ): Promise<void> {
-  const stagingPath = join(userDataPath, stagingDirectoryName);
-  rmSync(stagingPath, { recursive: true, force: true });
-  mkdirSync(stagingPath, { recursive: true });
+  const rollbackPath = join(userDataPath, rollbackDirectoryName);
+  assertNoPendingRecovery(rollbackPath);
+  const stagingPath = await createBackupStagingDirectory(userDataPath);
 
   try {
-    const extractZipModule = (await import('extract-zip')) as unknown as {
-      default?: (
-        zipPath: string,
-        options: { dir: string; onEntry?: (entry: { fileName: string; externalFileAttributes: number }) => void }
-      ) => Promise<void>;
-    } & ((
-      zipPath: string,
-      options: { dir: string; onEntry?: (entry: { fileName: string; externalFileAttributes: number }) => void }
-    ) => Promise<void>);
-    const extractZip = extractZipModule.default ?? extractZipModule;
-    if (typeof extractZip !== 'function') throw new Error('Backup extractor could not be loaded.');
-
-    const archiveEntries = new Set<string>();
-    await extractZip(backupPath, {
-      dir: stagingPath,
-      onEntry: (entry) => {
-        const normalizedPath = validateArchivePath(entry.fileName, stagingPath);
-        const mode = (entry.externalFileAttributes >> 16) & 0xffff;
-        if ((mode & 0xf000) === 0xa000) throw new Error(`Backup archive contains a symbolic link: '${entry.fileName}'.`);
-        archiveEntries.add(normalizedPath);
-      }
-    });
+    const archiveEntries = await extractBackupArchive(backupPath, stagingPath);
 
     const validated = readAndValidateManifest(stagingPath, archiveEntries);
     await verifyAttachmentIntegrity(validated.attachmentFiles);

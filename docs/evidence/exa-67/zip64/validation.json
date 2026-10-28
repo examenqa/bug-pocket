@@ -1,0 +1,100 @@
+{
+  "capturedAt": "2026-10-28T02:38:26.449Z",
+  "reviewParent": "4c9b897d9ebe0cea2d6b7a64464457368070690f",
+  "branch": "fix/exa-67-archive-remediation",
+  "pullRequest": "https://github.com/examenqa/bug-pocket/pull/8",
+  "fixture": {
+    "bytes": 250,
+    "sha256": "a47c70e7439f47a02270d3f1596238b57548ed91f6bcce942d8457e58a29e9b1",
+    "locatorOffset": "0xffffffffffffffff"
+  },
+  "before": {
+    "isolatedElectronChildExit": 1,
+    "normalRejection": false,
+    "escapedError": "ERR_OUT_OF_RANGE",
+    "restoreStagingRetained": true
+  },
+  "sameNewRegression": {
+    "baselineRevision": "4c9b897d9ebe0cea2d6b7a64464457368070690f",
+    "savedBaselineSha256": "3adbd28fa367eeea9f9e7c4ffc3d00251b169bdc56f4c7981cc1358990d96597",
+    "baselineFailed": true,
+    "baselineModuleMarkerObserved": true,
+    "baselineEscapedRangeError": true,
+    "baselineNormalRejectionAbsent": true,
+    "fixedPassed": true,
+    "baselineTestExit": 1,
+    "fixedTestExit": 0
+  },
+  "checks": {
+    "readerBoundaryCases": 39,
+    "retainedExtractionCases": 126,
+    "isolatedZip64Cases": 11,
+    "retainedRecoveryCases": 7,
+    "focusedPasses": 183,
+    "fullTests": {
+      "entries": 327,
+      "passed": 327,
+      "failed": 0,
+      "skippedReportedByLocalRunner": 0,
+      "rendererPasses": 21
+    },
+    "retainedBackupCompatibilityCases": 32,
+    "build": "passed",
+    "unpackedSmoke": "passed",
+    "isolatedChildren": [
+      "ordinary promise rejection and natural exit0",
+      "actual archive fds EBADF",
+      "private restore staging removed",
+      "live/workspace/attachment/outside hashes unchanged",
+      "production barrier idle and subsequent acquire succeeds",
+      "subsequent valid ZIP64 SQLite+manifest restore succeeds"
+    ]
+  },
+  "environment": {
+    "platform": "win32",
+    "osRelease": "10.0.26300",
+    "arch": "x64",
+    "hostNode": "v24.13.1",
+    "npm": "11.8.0",
+    "electron": "43.1.0",
+    "childNode": "24.18.0",
+    "abi": 148
+  },
+  "lockSha256": "b6460cac5422605bbc85cb85a6f55ccd2841f66adab0b4c5828f585879b8c42b",
+  "lockLfSha256": "f2d8bcdd21a018a609d24d5a1314187dd649725bac9e94f31a2ffc6c8a639af9",
+  "dependencyChanges": false,
+  "artifact": {
+    "asarSha256": "85a59faf295393240b4fba6a234035825326cb2528f1699ae3d1597b34d5e512",
+    "builtMainContainsBoundedReader": true,
+    "builtMainUsesGuardedParserEntry": true,
+    "smokeScope": "Windows --dir/unpacked startup only",
+    "packagedMaliciousInputInteraction": "not executed; no packaged-app crash claim"
+  },
+  "notes": [
+    "No global uncaughtException/unhandledRejection production handler or production timeout added.",
+    "Parent child-test watchdog is test-only; success requires normal rejection markers, all assertions, and natural exit0.",
+    "Metadata and stream ranges validate safe integer/overflow/buffer/file bounds before underlying I/O on one borrowed FileHandle.",
+    "Local Node24 schema-install filter omits the existing Supabase boundary case despite reported0skips; it is not boundary acceptance.",
+    "Prior4c9b897 dependency audit and CI snapshots remain unchanged and historical; this code-only follow-up did not rerun local installation/audits."
+  ],
+  "prSpecificRequirements": [
+    "Exact-head Windows CI success for this delta",
+    "Targeted external independent review accepting the ZIP64 fix and regressions",
+    "Explicit disposition of the P2 blocker and maintainer approval; keep PR draft and EXA-67 In Progress meanwhile"
+  ],
+  "separateLaunchGates": [
+    "EXA-66 Chromium/runtime hold",
+    "combined PR6/7/8 integration",
+    "representative large/long-path and standard-account matrix",
+    "crash/manual recovery",
+    "interactive/installed/Store/live-provider/Supabase acceptance"
+  ],
+  "evidenceSha256": {
+    "baseline-result.json": "144f023b13145c737ddd161658982a822041da79a22a28ac5fbf8700102fb788",
+    "same-new-regression-before-after.json": "6d4c2e88aba50e19750efc07a8d5f0e296c586063ff257bf82b78f680925461a",
+    "focused-final.log": "693f1e2b23104537d7f480ea77469bc40cdce203305d8535b0a9f51124e150b0",
+    "full-tests.log": "97421a9227cf631238671a1fdca80c582d05306787f7e1e17c2e98d94c219b4e",
+    "build.log": "bf23ed84b13118e388657bfd42b3bf3ff4a9bddfb9fdc6c7783ce8cfd88b7c6b",
+    "unpacked-smoke.log": "6845eb8f0a5adfb708dc025a8cc86e8096fb4692b2ff9207720c284aefae3a1f"
+  }
+}
