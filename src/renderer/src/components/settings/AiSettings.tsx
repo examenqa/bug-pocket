@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { AiByokConfig, AiConfigSaveInput, AiProvider } from '../../../../shared/types';
+import { normalizeOllamaModelName } from '../../../../shared/ollamaModel';
 
 interface AiSettingsProps {
   mutationReady: boolean;
@@ -59,6 +60,120 @@ const providerPresets: Record<AiProvider, { baseUrl: string; modelId: string }> 
     modelId: 'qwen3-vl:8b'
   }
 };
+
+// Keep native drafts and saves separate from every BYOK field and key operation.
+export function NativeOllamaSettings({ mutationReady, refresh }: AiSettingsProps) {
+  const [enabled, setEnabled] = useState(false);
+  const [modelName, setModelName] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const mounted = useRef(false);
+  const readGeneration = useRef(0);
+  const savingRef = useRef(false);
+  const draftDirty = useRef(false);
+  const modelEdited = useRef(false);
+  const reloadNativeSettings = useRef<(() => Promise<void>) | null>(null);
+
+  useEffect(() => {
+    mounted.current = true;
+    const loadNativeSettings = async (): Promise<void> => {
+      const generation = ++readGeneration.current;
+      try {
+        const settings = await window.bugPocket.getSettings();
+        if (!mounted.current || generation !== readGeneration.current) return;
+        if (!settings || typeof settings.aiTriageEnabled !== 'boolean' || typeof settings.ollamaModelName !== 'string') {
+          throw new Error('Invalid native Ollama settings response.');
+        }
+        if (!draftDirty.current && !savingRef.current) {
+          setEnabled(settings.aiTriageEnabled);
+          setModelName(settings.ollamaModelName);
+        }
+        setLoaded(true);
+        setError('');
+      } catch {
+        if (!mounted.current || generation !== readGeneration.current) return;
+        setLoaded(false);
+        setError('Unable to read native Ollama settings. Reopen AI Settings to retry.');
+      }
+    };
+    reloadNativeSettings.current = loadNativeSettings;
+    const unsubscribe = window.bugPocket.onSettingsChanged(() => { void loadNativeSettings(); });
+    void loadNativeSettings();
+    return () => {
+      mounted.current = false;
+      ++readGeneration.current;
+      reloadNativeSettings.current = null;
+      unsubscribe();
+    };
+  }, []);
+
+  const saveNativeSettings = async (): Promise<void> => {
+    if (!mutationReady || !loaded || savingRef.current) return;
+    // Empty is the existing IPC retain-model sentinel, never an edited replacement.
+    let replacement = '';
+    try {
+      if (modelEdited.current) {
+        if (!modelName.trim()) throw new Error('Native Ollama model name is required.');
+        replacement = normalizeOllamaModelName(modelName);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Invalid native Ollama model name.');
+      return;
+    }
+    savingRef.current = true;
+    ++readGeneration.current;
+    setSaving(true);
+    setError('');
+    setStatus('');
+    try {
+      const saved = await window.bugPocket.updateAiTriageOptions(enabled, replacement);
+      if (!mounted.current) return;
+      setEnabled(saved.enabled);
+      setModelName(saved.modelName);
+      draftDirty.current = false;
+      modelEdited.current = false;
+      setStatus('Native Ollama settings saved.');
+      await refresh();
+    } catch {
+      if (mounted.current) setError('Unable to save native Ollama settings. Check the model name and try again.');
+    } finally {
+      savingRef.current = false;
+      if (mounted.current) {
+        setSaving(false);
+        // A notification may have resolved while Save protected its drafts.
+        // Reconcile after releasing that guard so a cross-window update is not lost.
+        void reloadNativeSettings.current?.();
+      }
+    }
+  };
+
+  return (
+    <div className="panel ai-processing-panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Native Ollama</h2>
+          <p className="settings-helper">A saved key for the active BYOK provider takes precedence. Native Ollama is used only when no active BYOK key is saved and this option is enabled.</p>
+        </div>
+      </div>
+      <label>
+        <input type="checkbox" checked={enabled} disabled={!loaded || saving || !mutationReady} onChange={(event) => { draftDirty.current = true; setEnabled(event.target.checked); }} />
+        Enable native Ollama triage
+      </label>
+      <label>
+        <span>Native Ollama model</span>
+        <input value={modelName} disabled={!loaded || saving || !mutationReady} onChange={(event) => { draftDirty.current = true; modelEdited.current = true; setModelName(event.target.value); }} placeholder="qwen3-vl:8b" />
+      </label>
+      <p className="settings-helper">Uses Ollama's native chat API. Saving only stores these options; it does not check or start Ollama, install or pull a model, or generate content. Enablement does not confirm that Ollama or the named model is available.</p>
+      <div className="sync-action-row">
+        <button className="primary" type="button" disabled={!loaded || saving || !mutationReady} onClick={() => void saveNativeSettings()}>{saving ? 'Saving...' : 'Save Native Ollama Settings'}</button>
+        {status && <span className="sync-test-result success" role="status">{status}</span>}
+        {error && <span className="sync-test-result warning" role="alert">{error}</span>}
+      </div>
+    </div>
+  );
+}
 
 export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
   const [provider, setProvider] = useState<AiProvider>('OpenRouter');
@@ -120,8 +235,8 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
     try {
       const cleanedBaseUrl = baseUrl.trim().replace(/\/+$/, '');
       const cleanedModelId = modelId.trim();
-      if (!cleanedBaseUrl) throw new Error('Base URL is required.');
-      if (!cleanedModelId) throw new Error('Model ID is required.');
+      if (!clearApiKey && !cleanedBaseUrl) throw new Error('Base URL is required.');
+      if (!clearApiKey && !cleanedModelId) throw new Error('Model ID is required.');
       const replacementKey = apiKey.trim();
       const apiKeyOperation: AiConfigSaveInput['apiKeyOperation'] = clearApiKey
         ? { action: 'clear' }
@@ -130,19 +245,22 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
           : undefined;
       const config = (await window.bugPocket.saveAiConfig({
         provider,
-        baseUrl: cleanedBaseUrl,
-        modelId: cleanedModelId,
+        baseUrl: clearApiKey ? '' : cleanedBaseUrl,
+        modelId: clearApiKey ? '' : cleanedModelId,
         apiKeyOperation,
-        customSystemPrompt: customSystemPrompt.trim() || defaultPrompt
+        customSystemPrompt: clearApiKey ? '' : customSystemPrompt.trim() || defaultPrompt
       })) as AiByokConfig;
-      setProvider(config.provider);
-      setBaseUrl(config.baseUrl || cleanedBaseUrl);
-      setModelId(config.modelId || cleanedModelId);
       setConfiguredProviders(config.configuredProviders);
-      const normalizedPrompt = normalizePrompt(config.customSystemPrompt);
-      setCustomSystemPrompt(normalizedPrompt);
-      setPromptBeforeEdit(normalizedPrompt);
-      setIsEditingPrompt(false);
+      // Clear returns the persisted active configuration, not this provider's draft.
+      if (!clearApiKey) {
+        setProvider(config.provider);
+        setBaseUrl(config.baseUrl || cleanedBaseUrl);
+        setModelId(config.modelId || cleanedModelId);
+        const normalizedPrompt = normalizePrompt(config.customSystemPrompt);
+        setCustomSystemPrompt(normalizedPrompt);
+        setPromptBeforeEdit(normalizedPrompt);
+        setIsEditingPrompt(false);
+      }
       setApiKey('');
       await refresh();
       setStatus(clearApiKey ? `${provider} API key cleared.` : 'AI processing settings saved.');
@@ -175,6 +293,7 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
 
   return (
     <div className="settings-tab-stack">
+      <NativeOllamaSettings mutationReady={mutationReady} refresh={refresh} />
       <div className="panel ai-processing-panel">
         <div className="panel-heading">
           <div>
@@ -193,6 +312,7 @@ export function AiSettings({ mutationReady, refresh }: AiSettingsProps) {
           <label>
             <span>Base URL</span>
             <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} disabled={saving || !mutationReady} placeholder="https://api.openai.com/v1" />
+            <span className="settings-helper">Remote providers require HTTPS. HTTP is supported for local AI on localhost or a loopback IP address.</span>
           </label>
           <label>
             <span>Model ID</span>

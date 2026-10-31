@@ -27,3 +27,15 @@ Gemini uses the configured model first. Only an empty setting uses the default m
 Existing fallback models are deduplicated after the primary model and tried only for
 HTTP 429 or 5xx responses. Other failures, including 401 and 404, stop immediately.
 Fallback attempts log model names without prompts/keys and never modify saved settings.
+
+Remote BYOK base URLs require HTTPS. HTTP is allowed for localhost and loopback
+IP addresses only; LAN HTTP servers must enable HTTPS. Configure an absolute API
+base URL with no embedded credentials, query string or fragment. Redirects are
+rejected for both BYOK and local Ollama requests, so use the final endpoint directly.
+The main process validates settings before saving or replacing a key and validates
+stored endpoints again before a request, including endpoints saved by older versions.
+
+Removing a provider key works even when endpoint or model fields are empty or
+invalid. Removal changes only that provider's credentials and clears the legacy
+single-key fallback atomically; endpoint, model, prompt and other providers' keys
+remain saved. A clear operation does not save edits made to those configuration fields.

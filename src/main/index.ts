@@ -1,4 +1,6 @@
 import { AiRequestRegistry } from './ai/aiRequestRegistry';
+import { createTriageDispatchGuard, type AiDispatchGuard } from './ai/triageDispatchGuard';
+import { AiPublicError, parseAiErrorCode } from '../shared/aiError';
 import type { CaptureContext } from '../shared/types';
 import { DetailsFlushGate } from './detailsFlush';
 import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog, safeStorage } from 'electron';
@@ -917,19 +919,20 @@ async function discardPendingQuickScreenshot(): Promise<void> {
 }
 
 
-async function triageBugWithConfiguredAi(bugData: unknown, signal: AbortSignal): Promise<string> {
+async function triageBugWithConfiguredAi(bugData: unknown, signal: AbortSignal, dispatchGuard: AiDispatchGuard): Promise<string> {
   const verifiedPayload = bugData as AiTriageBugPayload;
   const byokConfig = getByokAiConfig(db);
-  if (byokConfig.hasApiKey) return triageBugWithByokAi(db, verifiedPayload, signal);
+  if (byokConfig.hasApiKey) return triageBugWithByokAi(db, verifiedPayload, signal, dispatchGuard);
 
   if (db.getAiTriageEnabled()) {
     const verifiedImagePath = resolveVerifiedTriageAttachmentPath(db, verifiedPayload);
-    const localResult = await triageBugWithOllama(verifiedPayload, db.getOllamaModelName(), verifiedImagePath, signal);
-    if (!localResult.success) throw new Error(localResult.error || 'Local AI triage failed.');
+    const localResult = await triageBugWithOllama(verifiedPayload, db.getOllamaModelName(), verifiedImagePath, signal, dispatchGuard);
+    // This result comes from our native adapter, which emits only owned error codes.
+    if (!localResult.success) throw new AiPublicError(parseAiErrorCode(localResult.error) ?? 'AI_NATIVE_FAILED');
     return JSON.stringify(normalizeOllamaTriageResult(localResult.result));
   }
 
-  throw new Error('AI triage is not configured. Add a BYOK API key or enable local Ollama triage in Settings.');
+  throw new AiPublicError('AI_NOT_CONFIGURED');
 }
 
 function normalizeOllamaTriageResult(result: AiTriageResult): Record<string, string> {
@@ -1194,7 +1197,14 @@ function registerIpc(): void {
   }));
   secureIpc.handle('ai:triageBug', (event, bugData: unknown, requestId: string) => {
     assertAppAcceptingMutations();
-    return operationBarrier.acquire(() => aiRequests.run(event.sender.id, requestId, signal => triageBugWithConfiguredAi(bugData, signal)));
+    assertCurrentWorkspaceWriteAccess();
+    const dispatchGuard = createTriageDispatchGuard({
+      getCurrentWorkspaceId: () => db.getCurrentWorkspaceId(),
+      canWrite: workspaceId => db.getWorkspacePermissions(workspaceId).canWrite,
+      isShuttingDown: () => shutdownInProgress,
+      isInMaintenance: () => operationBarrier.isInMaintenance
+    });
+    return operationBarrier.acquire(() => aiRequests.run(event.sender.id, requestId, signal => triageBugWithConfiguredAi(bugData, signal, dispatchGuard)));
   });
   secureIpc.handle('ai:processIssueWithByok', (event, payload: AiIssueProcessPayload, requestId: string) => {
     assertAppAcceptingMutations();

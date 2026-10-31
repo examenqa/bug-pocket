@@ -1,4 +1,5 @@
 import { AiCancelledError, AiTimeoutError, withAiDeadline, type AiRequestResult } from '../../shared/aiRequest';
+import { serializeAiError } from '../../shared/aiError';
 
 export class AiRequestRegistry {
   private current = new Map<number, { id: string; controller: AbortController }>();
@@ -21,7 +22,7 @@ export class AiRequestRegistry {
     } catch (error) {
       if (error instanceof AiCancelledError) return { status: 'cancelled', message: error.message };
       if (error instanceof AiTimeoutError) return { status: 'timed_out', message: error.message };
-      return { status: 'failed', message: error instanceof Error ? error.message : 'AI request failed.' };
+      return { status: 'failed', message: serializeAiError(error) };
     } finally {
       if (this.current.get(owner) === request) this.current.delete(owner);
     }

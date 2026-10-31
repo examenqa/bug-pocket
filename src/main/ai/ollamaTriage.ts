@@ -1,10 +1,12 @@
+import type { AiDispatchGuard } from './triageDispatchGuard';
 import { withAiDeadline } from '../../shared/aiRequest';
+import { normalizeOllamaModelName } from '../../shared/ollamaModel';
+import { AiPublicError, serializeAiError } from '../../shared/aiError';
 import { readFile } from 'node:fs/promises';
 import { nativeImage } from 'electron';
 import type { AiTriageBugPayload, AiTriageResponse, AiTriageResult } from '../../shared/types';
 
 const ollamaChatUrl = 'http://localhost:11434/api/chat';
-const modelNameRegex = /^[a-zA-Z0-9\-:._]+$/;
 const maxVisionImageEdge = 1280;
 const visionJpegQuality = 78;
 
@@ -22,18 +24,16 @@ export async function triageBugWithOllama(
   payload: AiTriageBugPayload,
   configuredModelName: string,
   verifiedImagePath?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  dispatchGuard?: AiDispatchGuard
 ): Promise<AiTriageResponse> {
   return withAiDeadline(async requestSignal => {
-    const imageBase64 = verifiedImagePath ? await readImageAsBase64(verifiedImagePath) : '';
-
     try {
-      const model = configuredModelName.trim() || 'qwen3-vl:8b';
-      if (!modelNameRegex.test(model)) {
-        throw new Error(
-          `Invalid model name configured: '${configuredModelName}'. Only alphanumeric characters, hyphens, colons, underscores, and periods are allowed.`
-        );
-      }
+      const imageBase64 = verifiedImagePath ? await readImageAsBase64(verifiedImagePath).catch(() => {
+        requestSignal.throwIfAborted();
+        throw new AiPublicError('AI_IMAGE_ENCODING');
+      }) : '';
+      const model = normalizeOllamaModelName(configuredModelName);
 
       const requestBody = {
         model,
@@ -55,29 +55,51 @@ export async function triageBugWithOllama(
         },
         stream: false
       };
-      const response = await fetch(ollamaChatUrl, {
+      const request: RequestInit = {
         method: 'POST',
+        // Local AI must not redirect captured evidence to another endpoint.
+        redirect: 'error',
         signal: requestSignal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
+      };
+      // Preparation may outlive cancellation, maintenance or a permission refresh.
+      requestSignal.throwIfAborted();
+      dispatchGuard?.(requestSignal);
+      const response = await fetch(ollamaChatUrl, request).catch(() => {
+        requestSignal.throwIfAborted();
+        throw new AiPublicError('AI_NATIVE_CONNECTION');
       });
 
-      const body = (await response.json().catch(() => ({}))) as OllamaChatResponse;
-      if (!response.ok) throw new Error(classifyOllamaHttpError(response.status, body.error));
-      if (body.error) throw new Error(classifyOllamaMessage(body.error));
+      // Failed responses may echo credentials or captured evidence. Do not read them.
+      if (!response.ok) {
+        try { void response.body?.cancel().catch(() => {}); } catch { /* Discard cleanup diagnostics. */ }
+        throw classifyOllamaHttpError(response.status);
+      }
+      const body = await response.json().catch(() => {
+        throw new AiPublicError('AI_NATIVE_RESPONSE_INVALID');
+      }) as OllamaChatResponse;
+      if (body?.error) throw new AiPublicError('AI_NATIVE_FAILED');
+      if (typeof body?.message?.content !== 'string') throw new AiPublicError('AI_NATIVE_RESPONSE_INVALID');
+
+      let result: AiTriageResult;
+      try {
+        result = parseTriageJson(body.message.content);
+      } catch {
+        throw new AiPublicError('AI_NATIVE_RESPONSE_INVALID');
+      }
 
       return {
         success: true,
         model,
-        result: parseTriageJson(body.message?.content ?? '')
+        result
       };
     } catch (caught) {
       requestSignal.throwIfAborted();
-      console.error('[OLLAMA TRIAGE ERROR]', caught instanceof Error ? caught.stack || caught.message : caught);
       return {
         success: false,
         model: 'fallback',
-        error: normalizeOllamaError(caught),
+        error: serializeAiError(caught),
         result: fallbackTriage(payload)
       };
     }
@@ -214,23 +236,8 @@ function cleanString(value: unknown): string {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
 }
 
-function classifyOllamaHttpError(status: number, message = ''): string {
-  if (status === 404) return `Ollama model is not available locally. ${message}`.trim();
-  if (status === 503 || status === 500) return `Ollama hardware/runtime error. ${message}`.trim();
-  return `Ollama request failed with HTTP ${status}. ${message}`.trim();
-}
-
-function classifyOllamaMessage(message: string): string {
-  const normalized = message.toLowerCase();
-  if (normalized.includes('memory') || normalized.includes('cuda') || normalized.includes('gpu') || normalized.includes('resource')) {
-    return `Ollama hardware resource error: ${message}`;
-  }
-  return message;
-}
-
-function normalizeOllamaError(caught: unknown): string {
-  if (caught instanceof Error && caught.name === 'AbortError') return 'Ollama request was aborted before completing.';
-  if (caught instanceof TypeError) return 'Could not connect to Ollama at http://localhost:11434. Is the daemon running?';
-  if (caught instanceof Error) return caught.message;
-  return 'Ollama triage failed.';
+function classifyOllamaHttpError(status: number): AiPublicError {
+  if (status === 404) return new AiPublicError('AI_NATIVE_MODEL_UNAVAILABLE');
+  if (status === 503 || status === 500) return new AiPublicError('AI_NATIVE_RESOURCE');
+  return new AiPublicError('AI_NATIVE_FAILED');
 }

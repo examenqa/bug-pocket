@@ -20,7 +20,7 @@ test('explicit cancellation settles promptly and retains its distinct reason',as
 });
 test('provider failure remains distinct from intentional cancellation',async()=>{
   const registry=new AiRequestRegistry();
-  assert.deepEqual(await registry.run(1,'a',async()=>{throw new Error('provider unavailable');}),{status:'failed',message:'provider unavailable'});
+  assert.deepEqual(await registry.run(1,'a',async()=>{throw new Error('provider unavailable');}),{status:'failed',message:'{"code":"AI_FAILED"}'});
 });
 test('a newer owner request supersedes an older one and a late answer cannot become authoritative',async()=>{
   const registry=new AiRequestRegistry(),old=deferred<string>();

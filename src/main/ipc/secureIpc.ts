@@ -351,7 +351,7 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   validators['settings:updateJiraWorkspaceUrl'] = args(stringValue(2_048));
   validators['settings:updateAutoBackupDirectoryPath'] = args(stringValue(4_096));
   validators['settings:updateQuickCaptureAnnotationReview'] = args(booleanValue);
-  validators['settings:updateAiTriageOptions'] = args(booleanValue, nonEmptyString(500));
+  validators['settings:updateAiTriageOptions'] = args(booleanValue, stringValue(500));
   validators['save-ai-config'] = args(aiConfigInput);
   validators['settings:updateSupabaseSettings'] = twoOrThreeArgs(stringValue(2_048), stringValue(20_000), emailAddress);
   validators['settings:toggleStartup'] = args(booleanValue);

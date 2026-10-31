@@ -1,10 +1,11 @@
 import { Dispatch, MutableRefObject, SetStateAction, useEffect, useRef, useState } from 'react';
-import type { AiByokConfig, BugDetails, SettingsData } from '../../../shared/types';
+import type { BugDetails, SettingsData } from '../../../shared/types';
 import { abortable } from '../../../shared/aiRequest';
 import { LatestAiRequest, aiPatch, mergeAiPatch, type AiField, type AiFieldVersions } from '../utils/aiDraft';
 import { parseErrorForUI } from '../utils/errors';
 import { getEntryDisplay } from '../utils/display';
 import type { AiTriageStatus } from '../utils/bugUpdate';
+import { AiReadinessMonitor, aiConfigurationReady, type AiReadiness } from '../utils/aiReadiness';
 
 interface UseAiTriageOptions {
   bug: BugDetails | null;
@@ -26,48 +27,52 @@ export function useAiTriage({
   showToast
 }: UseAiTriageOptions) {
   const [aiStatus, setAiStatus] = useState<AiTriageStatus>('idle');
-  const [byokAiReady, setByokAiReady] = useState(false);
+  const [aiReadiness, setAiReadiness] = useState<AiReadiness>({ status: 'unknown' });
+  const readinessMonitor = useRef<AiReadinessMonitor | null>(null);
   const [showAiRefinement, setShowAiRefinement] = useState(false);
   const [aiRefinementNote, setAiRefinementNote] = useState('');
+  const requestBusy = useRef(false);
   const requests = useRef(new LatestAiRequest(id => { void window.bugPocket.cancelAiRequest(id).catch(() => {}); }));
   const fieldVersions = useRef<AiFieldVersions>({});
-  const cancelAi = (): void => { requests.current.cancel(); setAiStatus('idle'); };
+  const cancelAi = (): void => { requests.current.cancel(); requestBusy.current = false; setAiStatus('idle'); };
   const noteUserEdit = (field: keyof BugDetails): void => {
     fieldVersions.current[field as AiField] = (fieldVersions.current[field as AiField] ?? 0) + 1;
   };
   useEffect(() => {
+    requestBusy.current = false;
     setAiStatus('idle');
-    return () => requests.current.cancel();
+    return () => { requests.current.cancel(); requestBusy.current = false; };
   }, [bug?.id, settings.currentWorkspaceId]);
   useEffect(() => {
-    const cancel = () => { requests.current.cancel(); setAiStatus('idle'); };
+    const cancel = () => { requests.current.cancel(); requestBusy.current = false; setAiStatus('idle'); };
     const stopShutdown = window.bugPocket.onAppShutdownStarted(cancel);
     const stopDeparture = window.bugPocket.onDetailsFlushRequest(cancel);
     return () => { stopShutdown(); stopDeparture(); };
   }, []);
   const triaging = aiStatus === 'loading';
-  const aiTriageDisabled = developerReadOnly || triaging || !byokAiReady;
+  const aiTriageDisabled = developerReadOnly || triaging || !aiConfigurationReady(aiReadiness);
 
   useEffect(() => {
-    let cancelled = false;
-    const checkAiStatus = async (): Promise<void> => {
-      try {
-        const config = (await window.bugPocket.getAiConfig()) as AiByokConfig;
-        if (!cancelled) setByokAiReady(Boolean(config?.hasApiKey));
-      } catch {
-        if (!cancelled) setByokAiReady(false);
-      }
-    };
-    void checkAiStatus();
+    const monitor = new AiReadinessMonitor(
+      () => window.bugPocket.getAiConfig(),
+      () => window.bugPocket.getSettings(),
+      setAiReadiness
+    );
+    readinessMonitor.current = monitor;
+    const unsubscribe = window.bugPocket.onSettingsChanged(() => { void monitor.refresh(); });
+    void monitor.refresh();
     return () => {
-      cancelled = true;
+      unsubscribe();
+      monitor.dispose();
+      if (readinessMonitor.current === monitor) readinessMonitor.current = null;
     };
-  }, []);
+  }, [settings.aiTriageEnabled, settings.ollamaModelName, settings.currentWorkspaceId]);
 
   const triageWithLocalAi = async (refinementNote = ''): Promise<void> => {
-    if (developerReadOnly) return;
+    if (developerReadOnly || triaging || requestBusy.current) return;
     const currentBug = bugRef.current ?? bug;
     if (!currentBug) return;
+    requestBusy.current = true;
     const request = requests.current.start();
     const signal = request.controller.signal;
     const versionsAtStart = { ...fieldVersions.current };
@@ -76,13 +81,14 @@ export function useAiTriage({
     const currentApplication = settings.applications.find((application) => application.id === currentBug.application_id);
     const currentModule = settings.modules.find((module) => module.id === currentBug.module_id);
     try {
-      const aiConfig = await abortable(window.bugPocket.getAiConfig(), signal) as AiByokConfig;
+      const monitor = readinessMonitor.current;
+      if (!monitor) throw new Error('Could not read AI configuration. Please retry.');
+      const configuration = await abortable(monitor.refresh(), signal);
       if (!requests.current.isCurrent(request)) return;
-      const apiKeyReady = Boolean(aiConfig?.hasApiKey);
-      setByokAiReady(apiKeyReady);
-      if (!apiKeyReady) {
+      if (!monitor.isCurrent(configuration)) throw new Error('Could not read current AI configuration. Please retry.');
+      if (!aiConfigurationReady(configuration)) {
         setAiStatus('idle');
-        showToast('Please configure your AI API key in Settings.', 'error');
+        showToast('Configure an AI API key or enable native Ollama in Settings.', 'error');
         return;
       }
       const result = await abortable(window.bugPocket.triageBug({
@@ -129,6 +135,8 @@ export function useAiTriage({
       if (!requests.current.isCurrent(request)) return;
       setAiStatus('idle');
       showToast(parseErrorForUI(caught), 'error');
+    } finally {
+      if (requests.current.isCurrent(request)) requestBusy.current = false;
     }
   };
 

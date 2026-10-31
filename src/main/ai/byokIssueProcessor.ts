@@ -1,9 +1,14 @@
-import { withAiDeadline } from '../../shared/aiRequest';
+import type { AiDispatchGuard } from './triageDispatchGuard';
+import { AiCancelledError, AiTimeoutError } from '../../shared/aiRequest';
+import { AiPublicError, serializeAiError } from '../../shared/aiError';
+import { callOpenAiCompatibleChatWithFallback, GEMINI_MODEL_CASCADE } from './openAiCompatibleChat';
+export { callOpenAiCompatibleChatWithFallback } from './openAiCompatibleChat';
 import { nativeImage, safeStorage } from 'electron';
 import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiIssueProcessResult, AiProvider, AiTriageBugPayload } from '../../shared/types';
 import type { BugPocketDatabase } from '../database';
 import { buildRendererByokAiConfig, decryptStoredApiKey } from './byokConfigResponse';
 import { resolveVerifiedTriageAttachmentPath } from './triageAttachment';
+import { normalizeByokBaseUrl } from './byokEndpoint';
 
 const legacyDefaultSystemPrompts = [
   'You are a Senior QA Engineer. Analyze the user\'s text and the provided Base64 screenshot. Identify exact UI elements, button states, and error messages. You MUST generate the following details as a strict JSON object with exactly these keys:\n\ntitle: A strict limit of 50 characters maximum (5-7 words). Do not include error codes or lengthy descriptions here.\n\nbugNote: A highly detailed description of the failure and visual UI state.\n\nstepsToReproduce: You MUST write 3 to 5 numbered steps reverse-engineered from the visual context. NEVER leave this blank and NEVER use placeholders. Assume the logical journey required to reach the screen.\n\nexpectedResult: What should have happened.\n\nactualResult: What actually happened.\nDo not output any markdown outside this JSON object.',
@@ -31,19 +36,6 @@ You MUST generate the output as a strict, valid JSON object using exactly the st
 "actualResult": "What actually happened."
 }`;
 
-const GEMINI_MODEL_CASCADE = [
-  'gemini-3.5-flash',
-  'gemini-3.1-flash-lite',
-  'gemini-2.5-flash'
-] as const;
-
-type ChatCompletionResponse = {
-  choices?: Array<{ message?: { content?: string } }>;
-  error?: { message?: string; type?: string; code?: string } | string;
-  message?: string;
-  detail?: string;
-};
-
 export function getByokAiConfig(database: BugPocketDatabase): AiByokConfig {
   return buildRendererByokAiConfig(database);
 }
@@ -52,27 +44,35 @@ export function saveByokAiConfig(
   database: BugPocketDatabase,
   input: AiConfigSaveInput
 ): AiByokConfig {
+  // Credential removal must work even when legacy endpoint settings are invalid.
+  if (input.apiKeyOperation?.action === 'clear') {
+    database.clearByokAiApiKey(input.provider);
+    return getByokAiConfig(database);
+  }
+  const baseUrl = normalizeByokBaseUrl(input.baseUrl);
+  const modelId = input.modelId.trim();
+  if (!baseUrl) throw new AiPublicError('AI_BASE_URL_REQUIRED');
+  if (!modelId) throw new AiPublicError('AI_MODEL_REQUIRED');
   let encryptedApiKey: string | null | undefined;
-  if (input.apiKeyOperation?.action === 'clear') encryptedApiKey = '';
-  else if (input.apiKeyOperation?.action === 'replace') {
+  if (input.apiKeyOperation?.action === 'replace') {
     const replacementKey = input.apiKeyOperation.value.trim();
-    if (!replacementKey) throw new Error('Replacement API key cannot be empty.');
+    if (!replacementKey) throw new AiPublicError('AI_REPLACEMENT_KEY_EMPTY');
     encryptedApiKey = encryptApiKey(replacementKey);
   }
 
-  database.updateByokAiConfig(input.provider, normalizeBaseUrl(input.baseUrl), input.modelId.trim(), encryptedApiKey, input.customSystemPrompt);
+  database.updateByokAiConfig(input.provider, baseUrl, modelId, encryptedApiKey, input.customSystemPrompt);
   return getByokAiConfig(database);
 }
 
 export async function processIssueWithByokAi(database: BugPocketDatabase, payload: AiIssueProcessPayload, signal?: AbortSignal): Promise<AiIssueProcessResult> {
   const config = getByokAiConfig(database);
   const apiKey = decryptStoredApiKey(database.getEncryptedByokAiApiKey(config.provider), safeStorage);
-  if (!apiKey) return { success: false, provider: config.provider, error: 'AI API key is not configured.' };
+  if (!apiKey) return { success: false, provider: config.provider, error: serializeAiError(new AiPublicError('AI_KEY_NOT_CONFIGURED')) };
 
-  const baseUrl = normalizeBaseUrl(config.baseUrl);
+  const baseUrl = normalizeByokBaseUrl(config.baseUrl);
   const modelId = config.modelId.trim() || (config.provider === 'Gemini' ? GEMINI_MODEL_CASCADE[0] : '');
-  if (!baseUrl) return { success: false, provider: config.provider, error: 'AI Base URL is not configured.' };
-  if (!modelId) return { success: false, provider: config.provider, error: 'AI Model ID is not configured.' };
+  if (!baseUrl) return { success: false, provider: config.provider, error: serializeAiError(new AiPublicError('AI_BASE_URL_REQUIRED')) };
+  if (!modelId) return { success: false, provider: config.provider, error: serializeAiError(new AiPublicError('AI_MODEL_REQUIRED')) };
 
   const systemPrompt = normalizeSystemPrompt(config.customSystemPrompt);
   const userPrompt = buildIssuePrompt(payload);
@@ -89,33 +89,31 @@ export async function processIssueWithByokAi(database: BugPocketDatabase, payloa
     });
     return { success: true, output, provider: config.provider };
   } catch (caught) {
-    return { success: false, provider: config.provider, error: caught instanceof Error ? caught.message : 'AI processing failed.' };
+    signal?.throwIfAborted();
+    if (caught instanceof AiCancelledError || caught instanceof AiTimeoutError) throw caught;
+    return { success: false, provider: config.provider, error: serializeAiError(caught) };
   }
 }
-export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: unknown, signal?: AbortSignal): Promise<string> {
+export async function triageBugWithByokAi(database: BugPocketDatabase, bugData: unknown, signal?: AbortSignal, dispatchGuard?: AiDispatchGuard): Promise<string> {
   const config = getByokAiConfig(database);
   const apiKey = decryptStoredApiKey(database.getEncryptedByokAiApiKey(config.provider), safeStorage);
-  if (!apiKey) throw new Error('AI API key is not configured. Add one in Settings > AI Processing.');
+  if (!apiKey) throw new AiPublicError('AI_KEY_NOT_CONFIGURED');
 
-  const baseUrl = normalizeBaseUrl(config.baseUrl);
+  const baseUrl = normalizeByokBaseUrl(config.baseUrl);
   const modelId = config.modelId.trim() || (config.provider === 'Gemini' ? GEMINI_MODEL_CASCADE[0] : '');
-  if (!baseUrl) throw new Error('AI Base URL is not configured.');
-  if (!modelId) throw new Error('AI Model ID is not configured.');
+  if (!baseUrl) throw new AiPublicError('AI_BASE_URL_REQUIRED');
+  if (!modelId) throw new AiPublicError('AI_MODEL_REQUIRED');
 
   const systemPrompt = normalizeSystemPrompt(config.customSystemPrompt);
   const userPrompt = buildTriagePrompt(bugData);
   const imageDataUrl = readBugImageDataUrl(database, bugData);
-  const output = await callOpenAiCompatibleChatWithFallback({ apiKey, baseUrl, modelId, provider: config.provider, systemPrompt, userPrompt, imageDataUrl, signal });
+  const output = await callOpenAiCompatibleChatWithFallback({ apiKey, baseUrl, modelId, provider: config.provider, systemPrompt, userPrompt, imageDataUrl, signal, dispatchGuard });
   return extractJsonObjectString(output);
 }
 
 function encryptApiKey(apiKey: string): string {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure key storage is not available on this Windows profile.');
+  if (!safeStorage.isEncryptionAvailable()) throw new AiPublicError('AI_SECURE_STORAGE_UNAVAILABLE');
   return safeStorage.encryptString(apiKey).toString('base64');
-}
-
-function normalizeBaseUrl(value: string): string {
-  return value.trim().replace(/\/+$/, '');
 }
 
 function normalizeSystemPrompt(value: string): string {
@@ -158,7 +156,7 @@ function readBugImageDataUrl(database: BugPocketDatabase, bugData: unknown): str
 
   const image = nativeImage.createFromPath(imageFilePath);
   if (image.isEmpty()) {
-    throw new Error('Image payload failed to encode. The AI cannot process this request without visual context.');
+    throw new AiPublicError('AI_IMAGE_ENCODING');
   }
 
   const size = image.getSize();
@@ -225,154 +223,6 @@ function buildIssuePrompt(payload: AiIssueProcessPayload): string {
     '',
     'Task: Return only the final formatted issue text. Do not include prefaces, explanations, or code fences.'
   ].join('\n');
-}
-
-function parseChatCompletionResponse(rawBody: string): ChatCompletionResponse {
-  if (!rawBody.trim()) return {};
-  try {
-    return JSON.parse(rawBody) as ChatCompletionResponse;
-  } catch {
-    return { message: rawBody.trim() };
-  }
-}
-
-function extractProviderErrorMessage(body: ChatCompletionResponse, rawBody: string): string {
-  if (typeof body.error === 'string') return body.error;
-  if (body.error?.message) return body.error.message;
-  if (body.message) return body.message;
-  if (body.detail) return body.detail;
-  return rawBody.trim();
-}
-async function callOpenAiCompatibleChat(input: {
-  apiKey: string;
-  baseUrl: string;
-  modelId: string;
-  provider: AiProvider;
-  systemPrompt: string;
-  userPrompt: string;
-  imageDataUrl?: string;
-  signal?: AbortSignal;
-}): Promise<string> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${input.apiKey}`,
-    'Content-Type': 'application/json'
-  };
-
-  if (input.provider === 'OpenRouter') {
-    headers['HTTP-Referer'] = 'https://bugpocket.app';
-    headers['X-Title'] = 'Bug Pocket';
-  }
-
-  const response = await fetch(`${input.baseUrl}/chat/completions`, {
-    method: 'POST',
-    signal: input.signal,
-    headers,
-    body: JSON.stringify({
-      model: input.modelId,
-      messages: [
-        { role: 'system', content: input.systemPrompt },
-        {
-          role: 'user',
-          content: input.imageDataUrl
-            ? [
-                { type: 'text', text: input.userPrompt },
-                { type: 'image_url', image_url: { url: input.imageDataUrl } }
-              ]
-            : input.userPrompt
-        }
-      ],
-      temperature: 0.2,
-      response_format: { type: 'json_object' }
-    })
-  });
-
-  const rawBody = await response.text();
-  const data = parseChatCompletionResponse(rawBody);
-
-  if (!response.ok) {
-    throw createAiProviderError(response.status, response.statusText, data, rawBody);
-  }
-
-  if (!data.choices || data.choices.length === 0) {
-    throw new Error('AI provider returned an empty success response.');
-  }
-
-  const output = data.choices[0]?.message?.content?.trim();
-  if (!output) throw new Error('AI provider returned an empty success response.');
-  return output;
-}
-
-export async function callOpenAiCompatibleChatWithFallback(input: {
-  apiKey: string;
-  baseUrl: string;
-  modelId: string;
-  provider: AiProvider;
-  systemPrompt: string;
-  userPrompt: string;
-  imageDataUrl?: string;
-  signal?: AbortSignal;
-}): Promise<string> {
-  return withAiDeadline(async signal => {
-    const configured = input.modelId.trim();
-    const models = input.provider === 'Gemini'
-      ? [...new Set([configured || GEMINI_MODEL_CASCADE[0], ...GEMINI_MODEL_CASCADE])]
-      : [configured];
-    for (let index = 0; index < models.length; index += 1) {
-      signal.throwIfAborted();
-      try {
-        const output = await callOpenAiCompatibleChat({ ...input, signal, modelId: models[index] });
-        signal.throwIfAborted();
-        return output;
-      } catch (caught) {
-        signal.throwIfAborted();
-        if (index === models.length - 1 || !isRetryableAiProviderError(caught)) throw caught;
-        console.info('[Bug Pocket AI] Retrying Gemini with fallback model', models[index + 1]);
-      }
-    }
-    throw new Error('AI provider returned no result.');
-  }, input.signal);
-}
-
-function isRetryableAiProviderError(error: unknown): boolean {
-  const status = error && typeof error === 'object' && 'status' in error
-    ? Number((error as { status?: unknown }).status)
-    : null;
-  return status === 429 || (status !== null && status >= 500 && status <= 599);
-}
-
-class AiProviderError extends Error {
-  constructor(
-    readonly status: number,
-    statusText: string,
-    data: ChatCompletionResponse,
-    rawBody: string
-  ) {
-    const userMessage = getAiProviderUserMessage(status, statusText, data, rawBody);
-    const rawDetailsBody = rawBody.trim() || JSON.stringify(data);
-    super(JSON.stringify({
-      userMessage,
-      rawDetails: `HTTP ${status}: ${rawDetailsBody || statusText}`
-    }));
-    this.name = 'AiProviderError';
-  }
-}
-
-function createAiProviderError(status: number, statusText: string, data: ChatCompletionResponse, rawBody: string): Error {
-  return new AiProviderError(status, statusText, data, rawBody);
-}
-
-function getAiProviderUserMessage(status: number, statusText: string, data: ChatCompletionResponse, rawBody: string): string {
-  let userMessage = 'An unexpected AI provider error occurred.';
-  if (status === 401) userMessage = 'Invalid API Key. Please check your AI Settings.';
-  else if (status === 402) userMessage = 'API Key lacks sufficient funds or credits.';
-  else if (status === 429) userMessage = 'API rate limit or free tier quota exceeded.';
-  else if (status >= 500) userMessage = 'AI Provider is currently experiencing server issues.';
-  else {
-    const providerMessage = extractProviderErrorMessage(data, rawBody);
-    if (providerMessage) userMessage = providerMessage;
-  }
-
-  return userMessage;
 }
 
 
