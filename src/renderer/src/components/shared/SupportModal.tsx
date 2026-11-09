@@ -1,170 +1,219 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import type { FeedbackPayload } from '../../../../shared/types';
-import type { SupportImageMimeType } from '../../../../shared/supportFeedback';
 import {
-  submitSupportFeedback,
-  validateSupportImageFile
-} from '../../utils/supportFeedback';
+  MAX_SUPPORT_BODY_BYTES,
+  MAX_SUPPORT_EMAIL_LENGTH,
+  MAX_SUPPORT_MESSAGE_BYTES,
+  normalizeSupportFeedbackPayload,
+  SUPPORT_FORWARDING_ENABLED,
+  utf8ByteLength
+} from '../../../../shared/supportFeedback';
+import { submitSupportFeedback } from '../../utils/supportFeedback';
+import {
+  appendSupportText,
+  getSupportDraftController,
+  selectedSupportText,
+  supportPayloadForDraft,
+  type SupportDraftMode,
+  type SupportTextSelection
+} from '../../utils/supportDraft';
 
-export type SupportModalMode = 'bug' | 'feature';
+export type SupportModalMode = SupportDraftMode;
 
 interface SupportModalProps {
   mode: SupportModalMode;
   open: boolean;
   onClose: () => void;
+  textSelections?: readonly SupportTextSelection[];
 }
 
-function stripImageDataUrlPrefix(value: string): string {
-  return value.replace(/^data:image\/(png|jpe?g);base64,/i, '');
-}
-
-function supportTypeForMode(mode: SupportModalMode): FeedbackPayload['type'] {
-  return mode === 'feature' ? 'Feature' : 'Bug';
-}
+const noTextSelections: readonly SupportTextSelection[] = [];
 
 function titleForMode(mode: SupportModalMode): string {
+  if (mode === 'ai_output') return 'Report inappropriate AI output';
   return mode === 'feature' ? 'Request a Feature' : 'Report a Bug';
 }
 
-export function SupportModal({ mode, open, onClose }: SupportModalProps) {
-  const [message, setMessage] = useState('');
-  const [email, setEmail] = useState('');
-  const [imageBase64, setImageBase64] = useState('');
-  const [imageMimeType, setImageMimeType] = useState<SupportImageMimeType | ''>('');
-  const [imagePreviewUrl, setImagePreviewUrl] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState('');
+export function SupportModal({ mode, open, onClose, textSelections = noTextSelections }: SupportModalProps) {
+  const controller = getSupportDraftController(mode);
+  const draft = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectionNotice, setSelectionNotice] = useState('');
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const messageRef = useRef<HTMLTextAreaElement | null>(null);
+  const closeRef = useRef(onClose);
+  const formId = useId();
+
+  const closeAndKeepDraft = (): void => {
+    setSelectedIds([]);
+    setSelectionNotice('');
+    onClose();
+  };
 
   useEffect(() => {
-    if (!open) return;
-    setMessage('');
-    setEmail('');
-    setImageBase64('');
-    setImageMimeType('');
-    setImagePreviewUrl('');
-    setIsSubmitting(false);
-    setSent(false);
-    setError('');
-  }, [mode, open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && !isSubmitting) onClose();
+    closeRef.current = () => {
+      setSelectedIds([]);
+      setSelectionNotice('');
+      onClose();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSubmitting, onClose, open]);
+  }, [onClose]);
+
+  useEffect(() => {
+    // Reopening never overwrites an existing message/email; uninserted choices reset.
+    setSelectedIds([]);
+    setSelectionNotice('');
+  }, [mode, open, draft.category]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    messageRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const elements = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button, input, textarea, select, [tabindex="0"]'
+      ) ?? []).filter((element) => !element.matches(':disabled') && element.tabIndex >= 0);
+      if (!elements?.length) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialogRef.current?.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialogRef.current?.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [open]);
 
   if (!open) return null;
 
-  const attachFile = (file: File | null): void => {
-    if (!file) return;
-    const validationError = validateSupportImageFile(file);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+  const payload = supportPayloadForDraft(draft);
+  const validation = normalizeSupportFeedbackPayload(payload);
+  const messageBytes = utf8ByteLength(draft.message.trim());
+  const bodyBytes = validation.success ? utf8ByteLength(validation.body) : utf8ByteLength(JSON.stringify(payload));
+  const preview = selectedSupportText(textSelections, selectedIds);
+  const unknown = draft.result?.delivery_status === 'unknown';
+  const accepted = draft.result?.success === true && draft.result.delivery_status === 'accepted_by_recipient';
+  const inputDisabled = draft.isSubmitting;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-      if (!dataUrl) {
-        setError('Could not read the selected image.');
-        return;
-      }
-      setImagePreviewUrl(dataUrl);
-      setImageBase64(stripImageDataUrlPrefix(dataUrl));
-      setImageMimeType(file.type as SupportImageMimeType);
-      setError('');
-    };
-    reader.onerror = () => setError('Could not read the selected image.');
-    reader.readAsDataURL(file);
+  const submit = (): void => {
+    if (!SUPPORT_FORWARDING_ENABLED || draft.isSubmitting || !validation.success) return;
+    void controller.submit((value) => submitSupportFeedback(window.bugPocket.sendFeedback, value));
   };
 
-  const removeImage = (): void => {
-    setImageBase64('');
-    setImageMimeType('');
-    setImagePreviewUrl('');
+  const insertSelectedText = (): void => {
+    if (!preview || draft.isSubmitting) return;
+    controller.update({ message: appendSupportText(draft.message, preview) });
+    setSelectedIds([]);
+    setSelectionNotice('Selected current text added. You can edit or remove it in the message.');
+    messageRef.current?.focus();
   };
 
-  const submit = async (): Promise<void> => {
-    const cleanedMessage = message.trim();
-    if (!cleanedMessage) {
-      setError('Please add a short message before sending.');
-      return;
-    }
-    setIsSubmitting(true);
-    setError('');
-    const result = await submitSupportFeedback(window.bugPocket.sendFeedback, {
-      type: supportTypeForMode(mode),
-      message: cleanedMessage,
-      user_email: email.trim() || undefined,
-      image_base64: imageBase64 || undefined,
-      image_mime_type: imageBase64 && imageMimeType ? imageMimeType : undefined
-    });
-    setIsSubmitting(false);
-    if (!result.success) {
-      setError(result.error || 'Could not send feedback right now. Please try again.');
-      return;
-    }
-    setSent(true);
-    window.setTimeout(onClose, 800);
+  const discard = (): void => {
+    if (controller.discard()) onClose();
   };
 
   return createPortal(
-    <div className="support-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSubmitting) onClose(); }}>
-      <section className="support-modal" role="dialog" aria-modal="true" aria-labelledby="support-modal-title">
+    <div className="support-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAndKeepDraft(); }}>
+      <section
+        ref={dialogRef}
+        className="support-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`${formId}-title`}
+        aria-describedby={`${formId}-availability`}
+        style={{ maxHeight: '90vh', overflowY: 'auto' }}
+      >
         <header>
           <div>
-            <h2 id="support-modal-title">{titleForMode(mode)}</h2>
-            <p>Submit a bug report or feature request directly to the team.</p>
+            <h2 id={`${formId}-title`}>{titleForMode(draft.category)}</h2>
+            <p>Prepare a text-only support draft. Images cannot be attached.</p>
           </div>
-          <button className="icon-button" type="button" aria-label="Close support form" disabled={isSubmitting} onClick={onClose}><X size={18} /></button>
+          <button className="icon-button" type="button" aria-label="Close and keep support draft" onClick={closeAndKeepDraft}><X size={18} /></button>
         </header>
 
+        <p id={`${formId}-availability`} role="status">Support submission is unavailable in this version. You can prepare a draft here; nothing will be sent.</p>
+        <p>Your draft stays in this app window's memory when you close this dialog. Use Discard draft to remove it.</p>
+        {(draft.message || draft.email) && <p>A draft is already in progress. Review it before inserting any more text from this page.</p>}
+
         <label>
-          <span>Message</span>
-          <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="What should we know?" disabled={isSubmitting || sent} autoFocus />
+          <span>Category</span>
+          <select value={draft.category} disabled={inputDisabled} onChange={(event) => controller.update({ category: event.target.value as SupportModalMode })}>
+            <option value="bug">Bug feedback</option>
+            <option value="feature">Feature feedback</option>
+            <option value="ai_output">Inappropriate AI output</option>
+          </select>
+        </label>
+
+        {textSelections.length > 0 && (
+          <fieldset disabled={inputDisabled}>
+            <legend>Choose current text to include</legend>
+            <p>Nothing is selected automatically. Current text may include your edits; it is not a saved original AI response. Preview your choices before inserting them.</p>
+            {textSelections.map((option) => (
+              <label key={option.id}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(option.id)}
+                  disabled={inputDisabled || !option.text.trim()}
+                  onChange={(event) => setSelectedIds((current) => event.target.checked
+                    ? [...current, option.id]
+                    : current.filter((id) => id !== option.id))}
+                />
+                <span>{option.label}{!option.text.trim() ? ' (empty)' : ''}</span>
+              </label>
+            ))}
+            <label>
+              <span>Selected text preview</span>
+              <textarea value={preview} readOnly placeholder="Choose text above to preview it here." />
+            </label>
+            <button type="button" disabled={!preview || inputDisabled} onClick={insertSelectedText}>Insert selected text into message</button>
+            {selectionNotice && <p role="status">{selectionNotice}</p>}
+          </fieldset>
+        )}
+
+        <label>
+          <span>Final message</span>
+          <textarea
+            ref={messageRef}
+            value={draft.message}
+            onChange={(event) => controller.update({ message: event.target.value })}
+            placeholder="Describe what you want to report."
+            disabled={inputDisabled}
+            aria-describedby={`${formId}-limits`}
+          />
         </label>
 
         <label>
           <span>Email <em>optional</em></span>
-          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" disabled={isSubmitting || sent} />
+          <input type="email" value={draft.email} maxLength={MAX_SUPPORT_EMAIL_LENGTH} onChange={(event) => controller.update({ email: event.target.value })} placeholder="you@example.com" disabled={inputDisabled} />
         </label>
-
-        <div className="support-screenshot-row">
-          <div>
-            <strong>Image</strong>
-            <p>{imageBase64 ? 'Image attached for support context.' : 'Optional. Attach a PNG or JPEG up to 5 MB.'}</p>
-          </div>
-          <div className="support-screenshot-actions">
-            {imageBase64 && <button type="button" disabled={isSubmitting || sent} onClick={removeImage}>Remove</button>}
-            <label className="support-file-button">
-              Attach Image
-              <input
-                type="file"
-                accept="image/png,image/jpeg"
-                disabled={isSubmitting || sent}
-                onChange={(event) => {
-                  attachFile(event.target.files?.[0] ?? null);
-                  event.currentTarget.value = '';
-                }}
-              />
-            </label>
-          </div>
-        </div>
-        {imagePreviewUrl && <img className="support-screenshot-preview" src={imagePreviewUrl} alt="Attached support image preview" />}
-
-        {error && <p className="support-modal-error" role="alert">{error}</p>}
-        {sent && <p className="support-modal-success" role="status">Sent!</p>}
+        <p id={`${formId}-limits`}>{messageBytes.toLocaleString()} / {MAX_SUPPORT_MESSAGE_BYTES.toLocaleString()} message bytes; {bodyBytes.toLocaleString()} / {MAX_SUPPORT_BODY_BYTES.toLocaleString()} JSON bytes. Review the final text and remove confidential information.</p>
+        {draft.message.trim() && !validation.success && <p className="support-modal-error" role="alert">{validation.result.error}</p>}
+        {draft.result && !draft.result.success && <p className="support-modal-error" role="alert">{draft.result.error}</p>}
+        {unknown && <p role="alert">We could not confirm whether support received this report. It may have arrived. Retrying may send a duplicate. Your draft has been kept.</p>}
+        {accepted && <p className="support-modal-success" role="status">Accepted by the recipient service. This does not mean it has been reviewed.</p>}
+        {draft.isSubmitting && <p role="status">Waiting for an acknowledgement. Closing this dialog does not retract a request already sent.</p>}
 
         <footer>
-          <button type="button" disabled={isSubmitting} onClick={onClose}>Cancel</button>
-          <button className="primary" type="button" disabled={isSubmitting || sent || !message.trim()} onClick={() => void submit()}>{isSubmitting ? 'Sending...' : sent ? 'Sent' : 'Send'}</button>
+          <button type="button" disabled={draft.isSubmitting} onClick={discard}>Discard draft</button>
+          <button type="button" onClick={closeAndKeepDraft}>Close and keep draft</button>
+          <button className="primary" type="button" disabled={!SUPPORT_FORWARDING_ENABLED || draft.isSubmitting || !validation.success} onClick={submit}>
+            {draft.isSubmitting ? 'Sending...' : unknown ? 'Retry (may duplicate)' : 'Send unavailable'}
+          </button>
         </footer>
       </section>
     </div>,

@@ -201,6 +201,17 @@ export interface BugUpdateInput {
   tags: string;
 }
 
+export interface StartupStatus {
+  mode: 'store' | 'ordinary';
+  state: 'enabled' | 'disabled' | 'blocked' | 'disabledByUser' | 'disabledByPolicy' | 'enabledByPolicy' | 'unsupported' | 'unavailable';
+  // null means the OS state is unknown; it must not be presented as disabled.
+  enabled: boolean | null;
+  taskId?: string;
+  canEnable?: boolean;
+  canDisable?: boolean;
+  message: string;
+}
+
 export interface SettingsData {
   applications: Application[];
   modules: Module[];
@@ -219,6 +230,9 @@ export interface SettingsData {
   autoBackupDirectoryPath: string | null;
   quickCaptureAnnotateScreenshots: boolean;
   runOnSystemStartup: boolean;
+  // Added by the main-process OS adapter; the persisted preference is separate.
+  startupStatus?: StartupStatus;
+  startupChoiceRequired?: boolean;
   aiTriageEnabled: boolean;
   ollamaModelName: string;
   supabaseProjectUrl: string | null;
@@ -426,8 +440,11 @@ export interface FeedbackPayload {
   type: 'Bug' | 'Feature';
   message: string;
   user_email?: string;
+  report_kind?: 'feedback' | 'ai_output';
+  // Retained only so legacy callers receive an explicit text-only refusal.
   image_base64?: string;
   image_mime_type?: 'image/png' | 'image/jpeg';
+  image_url?: string;
 }
 export interface AiTriageBugPayload {
   id?: number;

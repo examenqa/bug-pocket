@@ -1,4 +1,5 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron';
+import { normalizeSupportFeedbackPayload } from '../../shared/supportFeedback';
 
 type ValueValidator = (value: unknown, path: string) => void;
 export type IpcArgumentValidator = (args: readonly unknown[]) => void;
@@ -306,14 +307,10 @@ const aiTriagePayload = plainObject({ note: stringValue(maxTextLength) }, {
   refinement_note: optional(stringValue(maxTextLength))
 });
 
-const feedbackPayload = plainObject({
-  type: enumeration(['Bug', 'Feature']),
-  message: nonEmptyString(maxTextLength)
-}, {
-  user_email: optional(stringValue(500)),
-  image_base64: optional(stringValue(maxDataUrlLength)),
-  image_mime_type: optional(enumeration(['image/png', 'image/jpeg']))
-});
+const feedbackPayload: ValueValidator = (value, path) => {
+  const prepared = normalizeSupportFeedbackPayload(value);
+  if (!prepared.success) fail(path, 'a valid bounded text-only support payload');
+};
 
 export function createIpcArgumentValidators(): Record<string, IpcArgumentValidator> {
   const validators: Record<string, IpcArgumentValidator> = {};

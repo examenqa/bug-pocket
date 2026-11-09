@@ -2189,6 +2189,17 @@ Attachments:
     return enabled;
   }
 
+  hasStoreStartupChoice(): boolean {
+    return this.getSetting('store_startup_choice') === 'chosen';
+  }
+
+  recordStoreStartupChoice(enabled: boolean): void {
+    this.localDb.transaction(() => {
+      this.updateRunOnSystemStartup(enabled);
+      this.setSetting('store_startup_choice', 'chosen');
+    })();
+  }
+
   getAiTriageEnabled(): boolean {
     const value = this.getSetting('ai_triage_enabled');
     return value === 'true' || value === '1';

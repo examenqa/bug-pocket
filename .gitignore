@@ -156,3 +156,9 @@ supabase/snippets/
 
 # Incomplete local workflow drafts
 .github/workflows/build.yml
+
+# Store AppX output (separate from NSIS)
+release-store/
+
+# Fixed Store startup addon build output
+/native/store-startup/build/

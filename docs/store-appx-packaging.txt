@@ -1,0 +1,195 @@
+Bug Pocket — Store/AppX trial preparation and completed artwork
+8 November 2026 • Asia/Calcutta
+
+Result and changed files
+- Existing electron-builder.store.cjs remains unchanged: explicit provisional minVersion and maxVersionTested, both 10.0.19045.0. Missing/malformed-value and custom-artwork checks remain.
+- Existing scripts/prepare-store-artwork.ps1 was reviewed before execution and remains byte-for-byte unchanged. Prepare and Check both completed successfully.
+- Generated only build/appx/StoreLogo.png, Square150x150Logo.png, Square44x44Logo.png and Wide310x150Logo.png; updated this existing report.
+Actual process identity was verified as Amigo\BugPocketQA (case-insensitive match to AMIGO\BugPocketQA), with actual profile and USERPROFILE C:\Users\BugPocketQA, in the existing C:\MyApps\BugPocket-exa66-45-2-1 worktree. The helper independently enforced these conditions in both successful runs.
+The bounded converter, pinned built-in System.Drawing assembly and startup-fragment XML parser ran. No Node/config syntax check, config import, builder, package, hook, application, Electron or native application binding ran.
+
+Provisional Windows declarations
+  MinVersion="10.0.19045.0"
+  MaxVersionTested="10.0.19045.0"
+Electron 45.2.1 documents Windows 10 and newer/x64, not build 19045 as its minimum. The desktop StartupTask/FullTrustProcess schema is available from Windows 10 1607/build 14393; schema availability does not prove application/native compatibility.
+19045 deliberately matches the selected Windows 10 22H2 first trial. It exceeds the extension requirement and retains Windows 10 eligibility. Choosing 14393/19041 would widen this unverified trial surface without being required for the declared startup task.
+MinVersion is the trial's deployment floor. MaxVersionTested declares compatibility BEHAVIOUR, not an installation ceiling; equal values are permitted and later Windows 11 remains eligible. This is a proposed compatibility target, not evidence that 19045 was tested or is the lowest supported build.
+The accepted Windows 10/older-current Windows 11 installed/runtime matrix remains pending. Completed installed testing is NOT required merely to prepare this trial configuration. The previous report's stronger prerequisite for an actually validated maxVersionTested is superseded. No builder defaults or CLI/environment bypass are used.
+
+Artwork — existing brand, no redesign
+Source: src/renderer/public/favicon.png, 256x256.
+SHA-256: 89D8416E6FFADD613BBC4A785F5834BE6E93517E29860010E1AFE230255227E2
+Read-only ICO byte hashing proved that this PNG is the identical 256px frame embedded in build/icon.ico. It keeps the Store set consistent with the existing Windows executable mark. The illustrated 958px resource was previewed but is not mixed into this set.
+
+Target                       Canvas     Unstretched mark    Transparent offset
+StoreLogo.png                 50x50      42x42               x4,y4
+Square150x150Logo.png         150x150    126x126              x12,y12
+Square44x44Logo.png            44x44      36x36               x4,y4
+Wide310x150Logo.png           310x150    126x126              x92,y12
+The helper preserves the square source's proportions, centers it on 32-bit ARGB transparent canvases, uses high-quality bicubic drawing and writes PNG at 96 DPI. No crop/stretch, vendor sample, font or new design is introduced. Encoder bytes are not promised identical across Windows/.NET versions.
+
+Automated artwork results — completed 8 November 2026
+Prepare exit 0 and a subsequent separate Check invocation exit 0; both returned empty stderr and identical per-asset results/hashes. Each decoded as PNG with the required pixel dimensions, Format32bppArgb and all four corner alpha values 0. Decoded DPI was 95.9865952 on both axes for all four files (the PNG encoding of the requested nominal 96 DPI); no exact-96 assertion is claimed.
+
+File                       Pixels     Bytes   SHA-256
+StoreLogo.png              50x50       1616    832F2379E462674F6E7232587078AB19213940C1BAB6A037B67E2453DBE82D7F
+Square150x150Logo.png      150x150     6041    293BA69133A7EA3C6611E7E66A28D1B312FD3081F41F6EE0E4D644DD20C9E0AB
+Square44x44Logo.png         44x44      1355    6AB4DF02EAA3170FAF4817085240C0694D4A3B34BBA013D3C6BD63ED2C2F9A43
+Wide310x150Logo.png        310x150     6458    BA62F39EDB337633507A35E2AF3B9AEAD162DBD6733A2C2C136B55056D8BA1E2
+
+The pinned source SHA-256 above remained unchanged. The startup XML matched E8A275594EEB82EE9F63CB11B21A3AB036C1C3ED8117CB7E30C1C17EAE7B1CF8 and passed the DTD-prohibited, resolver-disabled fragment parser and exact startup declaration checks in both runs. This validates the existing fragment, not a generated AppxManifest or Store acceptance.
+The checker reports PLANNED draw sizes/offsets; it does not measure actual ink bounds, all edge/interior alpha, halos or legibility. Those are not automated pass claims.
+
+Visual inspection — separate from automated checks
+The existing 256px brand source and all four generated PNGs were opened using original-resolution image viewing, individually at native pixel sizes; no enlarged preview was used to claim small-size legibility.
+- StoreLogo.png, 50x50: recognisable navy pocket outline/green centre on the existing white rounded badge; balanced padding, square proportions and complete edges; no visible clipping or added halo.
+- Square150x150Logo.png, 150x150: source branding preserved, smooth complete outline, balanced transparent margin and no visible stretching/clipping.
+- Square44x44Logo.png, 44x44: small mark remains recognisable; navy outline and green centre stay distinct; rounded badge is complete and visibly separated from canvas edges.
+- Wide310x150Logo.png, 310x150: square mark remains centred without horizontal stretching; broad equal side padding and balanced vertical spacing; no visible clipping.
+Transparent canvas and antialiased badge edges were visible against the image viewer's dark surrounding background; automated corner-alpha checks support the transparent-padding observation. A separate light-background composite and actual Windows/Store light/dark tile rendering were not exercised. Native-size artwork visual inspection is complete; theme/installed rendering and platform accessibility are not claimed as validated.
+
+Actual QA execution and reproducible commands
+Used the existing 64-bit Windows PowerShell and built-in .NET Framework System.Drawing; no tools were acquired or installed. Both tool SHA-256 values matched the helper pins before use: PowerShell D8F182560210D43BAAF767D482AD1DC1207372522E91413B9D5E515A875E552D; System.Drawing 182431D774D5B55F4C4EEDA285FD61DB39F49349E3673235BD9B3D5FBE865434.
+The helper verifies real QA identity/profile and USERPROFILE, fixed worktree path and engine/tool pins BEFORE parsing/loading/conversion. It pins the brand source and startup XML, rejects reparse inputs/outputs, renders all four in memory, uses CreateNew/no overwrite and disposes drawing objects. Partial failures preserve created results; no automatic cleanup/deletion.
+Prepare creates/checks; Check only reopens/checks. Results include decoded PNG format, dimensions, corner alpha, DPI and hashes; draw offsets are explicitly PLANNED geometry. No config, builder or app is imported.
+
+Each child used a fresh allowlisted environment: Windows/user location variables only, PATH limited to C:\Windows\System32;C:\Windows, and QA-owned TEMP/TMP C:\Users\BugPocketQA\AppData\Local\Temp\BugPocket-store-artwork-5404c9c340864fb384a2a0a92d216eca. USERPROFILE and any existing HOME were preserved. No inherited module/preload/proxy/CLR-profiler variables were passed.
+The first documented Prepare invocation, without a process policy argument, exited 1 before the script loaded because Windows PowerShell defaulted to Restricted. All five policy scopes were Undefined; the reviewed local helper had no Zone.Identifier. No output directory or assets were created by that failed attempt.
+The successful commands below added only process-scoped RemoteSigned. No Set-ExecutionPolicy, Bypass, persistent machine/user policy change, helper edit or substitute tool was used:
+   & 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File '.\scripts\prepare-store-artwork.ps1' -Mode Prepare
+   & 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File '.\scripts\prepare-store-artwork.ps1' -Mode Check
+Working directory was C:\MyApps\BugPocket-exa66-45-2-1. Prepare must not be rerun over these existing assets: it intentionally refuses overwrite. Check is the read-only revalidation mode.
+
+Remaining gaps
+Config syntax checking (the previously documented Node --check step) was not run in this bounded artwork task. No generated manifest/schema acceptance, builder readiness execution, package build, signing, install, Windows compatibility/native/preload validation or Store certification occurred. The existing runbook and release/security holds still govern those later steps. Artwork completion does not validate either provisional Windows version declaration.
+
+Preserved packaging/runtime boundary
+Store identity remains ExamenQA.BugPocket; publisher CN=8D9BF560-2073-427E-9DB1-92BB6AB1F379; Examen QA; product 9MXD3L6S51ZH; expected family ExamenQA.BugPocket_tgn4dm49y0b56.
+Application.Id BugPocket -> expected AUMID ExamenQA.BugPocket_tgn4dm49y0b56!BugPocket; executable app\Bug Pocket.exe / Windows.FullTrustApplication. Store metadata 1.1.0 + setBuildNumber:false still plans 1.1.0.0, not an emitted/assigned version.
+Root 0.9.9, Electron 45.2.1, builder 26.18.1, NSIS/release-build, release-store isolation, SQLite rebuild/unpacking, ASAR/resources/preload repair and afterPack hook are unchanged.
+At the 8 November artwork checkpoint, build/appx-startup.xml was unchanged: BugPocketStartup/Enabled=false, without the builder's SlackStartup helper. Runtime then still set com.bugpocket.app and lacked Store task coordination. The 9 November source-only addendum below supersedes that runtime status; the manifest preparation default remains unchanged.
+No actual Windows/native/preload/PE-resource/installed compatibility is claimed. Reuse docs/runtime-validation-runbook.txt and accepted packaging findings for later trial authorisation; no security/version-history investigation repeated.
+
+Preservation
+Verified starting origin https://github.com/examenqa/bug-pocket.git, branch codex/exa-66-electron-45-2-1, HEAD 4591ea3bad306bc520c6ea07fa892f69ddfb9bd2; 13 tracked modifications/20 untracked/0 staged. A read-only baseline captured lengths/SHA-256 for all 263 existing tracked/untracked non-ignored files before generation, plus the Git index hash before any artwork write.
+Final read-only comparison: all 262 existing files other than this report retain exact lengths/SHA-256. Only the four expected PNGs were added, with no missing baseline file. The Store config (including both provisional 19045 values), helper, startup XML, existing branding, package/lock and every unrelated source change are unchanged. Origin/branch/HEAD/refs and Git index SHA-256 remain unchanged; final state is 13 tracked modifications/24 untracked/0 staged. All five persistent/parent PowerShell policy scopes remain Undefined after the child processes exited. The QA scratch directory is empty; no evidence archive was created.
+Prior evidence/other changes are preserved. No reset/recreate/stage/commit/push, Linear/PR write, provider change, external submission or large archive. Both support sends, Slack/receipt/bootstrap/email-reporting pauses, unapplied limiter and all runtime/release holds remain unchanged.
+
+Primary requirements reviewed 8 November
+https://github.com/electron/electron/blob/v45.2.1/README.md#platform-support
+https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-desktop-startuptask
+https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-desktop-fulltrustprocess
+https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-targetdevicefamily
+
+9 November 2026 — initial AUMID/startup preparation (historical; superseded by the native integration addendum below)
+
+Result and precise limitation
+Prepared supported AppX/MSIX AUMID selection and safe startup/status handling. Actual Store task opt-in/out is NOT implemented: Electron 45.2.1 exposes no Windows StartupTask API or taskName login-item option, and package.json/package-lock.json contain no Windows Runtime bridge. No dependency was added. This is a partial source preparation with an explicit API limitation, not Store startup acceptance.
+
+Changed files in this amendment
+- src/main/startupPreference.ts: isolated identity selection, Store exclusion from registry login APIs, ordinary OS read-back/status and Windows-disabled guards.
+- src/main/startupPreference.test.ts: nine focused offline fixtures, prepared only; no broad harness or package-script change.
+- src/main/index.ts: selects the AUMID early, supplies OS startup status with settings, saves a changed preference only after matching OS confirmation, and uses guarded launch restoration.
+- src/shared/types.ts and src/preload/index.ts: structured StartupStatus IPC result, separate from the existing persisted preference.
+- src/renderer/src/components/settings/CapturePreferencesPanel.tsx and GeneralSettings.tsx: checkbox retains the persisted preference and the accompanying message reports OS status, explicitly identifying disagreement/unknown state. This permits opt-out when Windows already blocks a saved enabled preference. Failed requests are handled and unsupported control is disabled. No redesign. Stale action feedback is cleared when OS status changes.
+- This existing report. The prior support-related edits in shared/types.ts remain intact.
+
+Identity and startup behavior prepared
+process.platform === 'win32' && process.windowsStore === true selects ExamenQA.BugPocket_tgn4dm49y0b56!BugPocket. Ordinary execution retains com.bugpocket.app. The supported Electron flag means AppX/MSIX package identity (including sideloading); it does not verify Store provenance or the actual expected package family. Actual installed identity remains a later acceptance check. Runtime code does not import the builder configuration or introduce an environment switch.
+
+BugPocketStartup is the single intended task ID in source and the existing fragment. Enabled=false and addAutoLaunchExtension:false remain unchanged; no SlackStartup default is used. Store status returns unsupported with enabled:null and that task ID. No Store login-item read/write, automatic preference replay, enable request, disable request or assumed Windows state occurs. The saved preference is preserved; packaging/first launch cannot opt in through this code. The UI explicitly distinguishes the saved preference from unknown Windows status.
+
+Ordinary Windows execution retains Electron's existing login-item mechanism and --background-start hidden-launch argument. The removed openAsHidden field is unsupported in pinned 45.2.1 and had no Windows effect. Read-back uses the matching current-user com.bugpocket.app launchItems entry and its arguments/approval; executableWillLaunchAtLogin is an aggregate for other entries and is deliberately insufficient. Blocked entries are not re-enabled on launch or explicit retries; Windows Settings remains authoritative. Opt-out may remove the ordinary registration. Unknown status and unconfirmed setter results do not save a new preference or claim success.
+
+Pinned API findings and unfinished Store mechanism
+Electron 45.2.1 browser_win.cc SetLoginItemSettings/GetLoginItemSettings use Run/StartupApproved registry paths. The converter and native LoginItemSettings struct have no taskName or Store task-state fields; name changes a registry value, not a manifest task. Passing an invented taskName would silently leave the wrong mechanism in use. No fallback was added.
+The supported Windows task binding is Windows.ApplicationModel.StartupTask.GetAsync("BugPocketStartup"), with State, RequestEnableAsync and Disable through a maintained bridge/native implementation. A future explicit opt-in must await the actual resulting state; disabledByUser must not be overridden, and policy/unsupported/error states must remain distinct where the API permits. There must be no automatic retry or first-launch opt-in. The builder-linked electron-winstore-auto-launch helper is absent, requires a native NodeRT dependency and selects the first task; it is not an existing exact-task-name solution.
+Remaining concrete source decision: select/authorise a maintained WinRT bridge/native implementation and its compatibility/dependency scope. The accepted manifest task/identity need no repeat decision. This task did not silently introduce a PowerShell/native bridge, dependency acquisition or pin/hook change. Store task control remains unfinished until that mechanism exists; no denied/user-disabled Store state is claimed to have been observed.
+
+Static inspection actually completed
+Verified amigo\amigo, USERPROFILE C:\Users\vali2; existing origin https://github.com/examenqa/bug-pocket.git, branch codex/exa-66-electron-45-2-1, HEAD 4591ea3bad306bc520c6ea07fa892f69ddfb9bd2. Started with 13 tracked modifications/24 untracked/0 staged and preserved unrelated work.
+Read applicable AGENTS.md and the current Store report/config/XML. Graph discovery identified relevant paths but its snippets referenced another checkout/stale offsets, so the actual target files were read directly. Inspected pinned official process/app docs, native bindings/converter and the matching source paths; reviewed the focused diffs and fixtures by reading only. Two settings-component changes received the React skill's static hooks/type/accessibility review. No generated manifest, runtime behavior, syntax/type/schema validation or test pass is asserted.
+
+Later BugPocketQA checks — ALL NOT RUN
+Before any separately authorised execution, switch to BugPocketQA and verify actual account/profile and this existing worktree. EXA-66 still controls executable/runtime/build/package acceptance; these commands are a handoff, not permission to run them.
+1. Offline fixture command (existing approved Node/tsx only):
+   & 'C:\MyApps\BugPocket-tooling\node-v24.22.1-win-x64\node.exe' --import 'file:///C:/MyApps/BugPocket/node_modules/tsx/dist/loader.mjs' --test 'C:\MyApps\BugPocket-exa66-45-2-1\src\main\startupPreference.test.ts'
+   Working directory: C:\MyApps\BugPocket-exa66-45-2-1. Requires the approved local loader/dependencies; do not acquire them as part of this amendment.
+   Fixtures cover identity selection; zero Store registry calls for read/enable/disable/restore; ordinary background arguments and read-back; silent setter failure; repeated Windows-disabled attempts; opt-out; unavailable/missing approval metadata; and another approved entry masking a disabled own entry.
+2. Focused TypeScript/UI validation after separate authorisation. Existing pending Store-config syntax command remains NOT RUN:
+   & 'C:\MyApps\BugPocket-tooling\node-v24.22.1-win-x64\node.exe' --check 'C:\MyApps\BugPocket-exa66-45-2-1\electron-builder.store.cjs'
+3. After build/package/runtime holds permit a trial: verify emitted identity/PFN/Application.Id/AUMID, executable and exact BugPocketStartup/Enabled=false declaration; confirm actual process.windowsStore detection on installed AppX/MSIX and ordinary NSIS/dev execution. Verify taskbar/notification identity and unchanged data locations. No current source flag proves the actual installed family.
+4. Current prepared Store build must show unsupported/unknown startup state, retain saved preference and perform no startup mutation on first/repeated launch. After the later bridge is implemented, separately accept exact-task opt-in, returned-state/read-back confirmation, opt-out, logout/login/background visibility, Windows user-disabled behavior, policy/denied/unsupported failures and repeated launches without forced re-enablement. Do not present this guarded preparation as that future implementation.
+5. Ordinary regression: opt-in/out and --background-start hidden launch; Windows-disabling the own entry must survive app restarts/retries even if another same-executable entry is approved; unknown/error feedback must not report success. Check settings refresh/accessibility and confirm unrelated settings/support behavior remains intact.
+
+Preservation and holds
+Root 0.9.9, Electron 45.2.1, builder 26.18.1, package/lock, NSIS defaults, Store config/XML, Windows trial declarations, four artwork files, SQLite rebuild/unpacking, resources, ASAR, preload repair and packaging hooks were not edited in this amendment. All execution/validation above is NOT RUN. No application/native/Node execution, tests, project scripts, acquisitions/installations, builds, packaging, signing, provider changes, staging/commits/pushes or Linear/PR writes. Both support sends remain disabled; Slack and all EXA-66 runtime/release holds remain.
+
+Primary API references for this amendment
+https://github.com/electron/electron/blob/v45.2.1/docs/api/process.md#processwindowsstore-readonly
+https://github.com/electron/electron/blob/v45.2.1/docs/api/app.md#appsetappusermodelidid-windows
+https://github.com/electron/electron/blob/v45.2.1/shell/common/api/electron_bindings.cc#L66
+https://github.com/electron/electron/blob/v45.2.1/shell/browser/browser_win.cc#L658
+https://github.com/electron/electron/blob/v45.2.1/shell/common/gin_converters/login_item_settings_converter.cc#L42
+https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask.getasync
+https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask.requestenableasync
+https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptaskstate
+
+9 November 2026 — fixed Windows Store startup native integration
+
+Source result and dependencies
+The previously missing Store task bridge is now implemented in source. The first-release in-app startup requirement is retained. This addendum supersedes the earlier unsupported-bridge source status, not its unperformed acceptance checks. Nothing was compiled, loaded, installed or executed.
+Chosen mechanism: a fixed plain Node-API 8 C++17 addon with the Windows SDK's C++/WinRT projection. It uses Windows.ApplicationModel.StartupTask.GetAsync("BugPocketStartup") and Windows.ApplicationModel.AppInstance.GetActivatedEventArgs. No npm/NodeRT/node-addon-api/Windows App SDK runtime dependency, pin change or lockfile entry is needed. Electron 45.2.1's ordinary login-item API remains registry-only and is not used for Store task access.
+
+Files changed in this integration
+- native/store-startup/store_startup.cc, win_delay_load_hook.cc and README.txt: fixed no-argument read/enable/disable/activation exports, Promise completion, identity gates, Windows state handling and native lifetime contract.
+- src/main/storeStartup.ts: fixed resource loader, strict result/activation mapping, serialized calls, cached status and close/drain coordination.
+- src/main/index.ts: verified Store AUMID selection, early activation/single-instance coordination, async trusted IPC, explicit saved intent, first-run route, background presentation and graceful draining. Local windows/tray/shortcuts initialize before optional cloud restoration; cloud-restoration failure does not close local capture. Early-exit shortcut cleanup is guarded by app.isReady(), and asynchronous launch continuations stop if shutdown has begun.
+- src/main/database.ts: two small app_settings accessors record whether an explicit Store startup choice was made and persist its intent atomically. No schema/data-location change or NSIS import.
+- src/main/startupPreference.ts and its existing startupPreference.test.ts: preserve the ordinary adapter/Store registry guard; expand the focused offline fixtures (16 total).
+- src/shared/types.ts and the existing CapturePreferencesPanel.tsx / GeneralSettings.tsx: Windows state/capability feedback and the minimal first-run Enable startup / No thanks choice. Existing preload boolean startup IPC remains the only renderer mutation interface.
+- scripts/build-store-startup.ps1, electron-builder.store.cjs and the native-output .gitignore entry: explicit manual QA build preparation and Store-only resource inclusion. This existing report is updated; no evidence archive.
+
+Fixed identity, task and user choice
+Before each native operation, GetCurrentPackageFamilyName must equal ExamenQA.BugPocket_tgn4dm49y0b56 and GetCurrentApplicationUserModelId must equal ExamenQA.BugPocket_tgn4dm49y0b56!BugPocket. The latter is the package application identity, not the explicit taskbar ID. Failure returns unknown/error before any task or activation API call. process.windowsStore only selects the packaged path; it is not identity proof. Store AUMID assignment waits for native identity verification; ordinary execution still assigns com.bugpocket.app. The runtime never imports builder configuration.
+Only the fixed BugPocketStartup task is accessed. Manifest Enabled=false, executable/entry point, addAutoLaunchExtension:false and all accepted Store identity/artwork/Windows declarations remain unchanged. The first manual Store launch with no recorded choice opens the existing settings/workspace page and presents Enable startup / No thanks. Neither launch, packaging, reading state nor saved intent automatically requests enablement. Later opt-out uses the same bounded interface.
+Explicit Store choices persist user intent independently from actual Windows status, including denied or policy-controlled outcomes. The checkbox represents saved intent; the adjoining read-back message describes actual Windows state and any disagreement. Task operations remain behind the existing trusted sender and boolean argument validation. No arbitrary task ID/path, command execution or general Windows bridge crosses IPC.
+
+States, activation and lifetime
+Enable calls RequestEnableAsync only from Disabled; its returned requestState is retained and State is read again for the actual result. Disable calls Disable only from Enabled. DisabledByUser, DisabledByPolicy and EnabledByPolicy are preserved. Unsupported platforms can also report DisabledByPolicy; the UI describes policy/platform limits without inventing a distinction. Identity failures, denied access, missing addon/APIs and malformed results remain unknown/error. There is no forced re-enablement, polling or automatic enable retry.
+Startup activation uses the Windows-supplied AppInstance getter, not a guessed argument or the Windows App SDK. Packaged-desktop support begins at Windows 10 1809, within the provisional 19045 trial floor. The getter is called once early and cached; only ActivationKind.StartupTask plus exact TaskId counts as startup. Unknown activation retains normal window presentation and is logged. Before Electron's instance lock, the classified fixed marker is passed as additionalData; startup secondary launches do not focus the existing window, while manual launches do, including launches received before window creation. Ordinary --background-start behavior remains intact.
+Known Store startup creates the usual windows hidden, tray and shortcut registration; ordinary manual launches retain visible behavior. Shortcut registration conflicts remain reported by the existing Hotkeys UI and are an acceptance failure for the intended shortcut-readiness trial. Packaging alone does not establish actual login activation or quiet behavior.
+Native identity/WinRT work runs on an MTA async worker, not Electron's UI thread. JavaScript serializes calls; graceful shutdown closes admission and drains native Promises plus OperationBarrier before database closure. Per-work Node-API async cleanup hooks cancel queued work and retain executing work until completion; no JS settlement occurs during environment teardown. An already-issued OS request is not rolled back, and an executing/hung Windows call can delay shutdown. No bounded cancellation or forced-unload safety is claimed; native teardown acceptance remains pending. See native/store-startup/README.txt for the precise contract.
+
+Build/packaging preparation — NOT RUN
+No approved compiler/SDK/header/import-library paths or integrity/provenance were established by this source task. No compiled bridge exists. The manual build script requires actual AMIGO\BugPocketQA / C:\Users\BugPocketQA, the existing worktree and 64-bit Windows PowerShell, approved MSVC x64 tools, an existing Windows SDK >=10.0.19041 with C++/WinRT, and approved Electron 45.2.1 headers plus its x64 node.lib. Existence checks do not prove provenance. No downloads, npm/node-gyp/Node invocation, project hooks or addon load are built into that script.
+The prepared /MT Node-API build links Electron's node.lib, delayimp.lib, WindowsApp.lib, RuntimeObject.lib and kernel32.lib with the directly linked Electron delay-load hook and /DELAYLOAD:node.exe. Output is fixed to native/store-startup/build/Release/bug_pocket_store_startup.node. Nonempty output is preserved/refused rather than overwritten. Store config requires a nonempty regular output file and copies only it to resources/store-startup/bug_pocket_store_startup.node outside ASAR; a missing bridge blocks packaging. This file check is not native correctness or PE validation.
+NSIS default output/config, SQLite rebuilding/unpacking, ASAR rules, preload repair, assets/resources and the existing afterPack hook remain preserved. Root 0.9.9, Electron 45.2.1 and builder 26.18.1 remain pinned. No fabricated dependency or lockfile integrity was introduced.
+
+Minimal later QA commands and acceptance — ALL NOT RUN
+First switch to BugPocketQA and verify actual account/profile and this existing worktree. EXA-66 runtime/build/package/release holds govern every executable step below; source authorisation is not execution authorisation.
+1. Existing focused offline fixture command (using already approved local Node/tsx only):
+   & 'C:\MyApps\BugPocket-tooling\node-v24.22.1-win-x64\node.exe' --import 'file:///C:/MyApps/BugPocket/node_modules/tsx/dist/loader.mjs' --test 'C:\MyApps\BugPocket-exa66-45-2-1\src\main\startupPreference.test.ts'
+   Covers ordinary regression, all Store state mappings, denied/wrong-identity/wrong-task/malformed results, zero launch/read opt-in, actual returned outcomes, activation/manual/second-instance distinctions and queue/drain/error paths. No native module is loaded by these fixtures. TypeScript/UI validation is separately pending.
+2. After explicit approval of existing build inputs, from this worktree (replace placeholders with approved existing paths):
+   & 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File '.\scripts\build-store-startup.ps1' -ElectronIncludeDirectory '<Electron 45.2.1 include/node>' -ElectronNodeLibrary '<Electron 45.2.1 x64 node.lib>' -MsvcToolsDirectory '<approved MSVC tools root>' -WindowsSdkDirectory '<approved Windows Kits/10>' -WindowsSdkVersion '<approved installed SDK version>'
+   Compile/link, x64 PE imports, Electron delay-load resolution and addon loading remain unperformed. The earlier single Store-config Node --check command remains NOT RUN; no configuration import is authorised here.
+3. Only after build/package/install/runtime authorisation: verify emitted manifest/PFN/Application.Id/AUMID/executable/Enabled=false, packaged fixed resource and SQLite/preload/icon behavior. First manual launch must offer the choice without changing the task; Enable/No thanks and later opt-out must preserve intent versus actual state. Verify Windows user-disabled, policy-enabled/disabled, access denial, missing API/task, addon failure and identity mismatch. No registry fallback is permitted.
+4. Real sign-out/sign-in must prove exact startup activation, no main/quick window popup, tray readiness and working global shortcuts, including offline/cloud-failure cases. Manual first/secondary launches must show/focus normally; startup secondary launches must preserve current visibility. Verify unknown activation behavior, shortcut conflicts and shutdown with queued/running requests, including Windows API failure/hang and forced-exit teardown. Keep the existing runtime runbook by reference.
+
+Static findings and preservation
+Actual amigo\amigo / C:\Users\vali2, origin https://github.com/examenqa/bug-pocket.git, branch codex/exa-66-electron-45-2-1 and HEAD 4591ea3bad306bc520c6ea07fa892f69ddfb9bd2 were verified. Reused accepted packaging/API findings and read applicable instructions/current scoped files. Source and diffs received focused independent reviews for native ownership/linkage and activation/IPC/UI flow. No executable validation or fresh broad runtime/security audit occurred.
+All unrelated changes and previous evidence remain preserved; no stage/commit/push or Linear/PR/provider write. Both support sends remain disabled; Slack and runtime qualification remain paused. All EXA-66 execution/build/package/release holds remain. Source integration is prepared; native/build/installed acceptance and approved input availability are still outstanding.
+
+Additional primary references
+https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask?view=winrt-26100
+https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/get-activation-info-for-packaged-apps
+https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.appinstance.getactivatedeventargs
+https://learn.microsoft.com/en-us/windows/win32/api/appmodel/nf-appmodel-getcurrentapplicationusermodelid
+https://github.com/electron/electron/blob/v45.2.1/docs/api/app.md#apprequestsingleinstancelockadditionaldata
+https://github.com/electron/electron/blob/v45.2.1/docs/tutorial/using-native-node-modules.md#a-note-about-win_delay_load_hook
+https://github.com/nodejs/node/blob/v24.22.1/doc/api/n-api.md#napi_add_async_cleanup_hook
+
+9 November 2026 — source-only checkpoint handoff
+The startup-fixture commands above now use the existing explicit file-URL loader because this worktree has no node_modules. Read-only inspection confirmed C:\MyApps\BugPocket\node_modules\tsx\dist\loader.mjs is a regular 743-byte file and its installed package reports tsx 4.23.1, matching the accepted toolchain pin. The loader was not imported or executed; no dependency was installed. Future QA still requires the real BugPocketQA account/profile and the existing approved environment.
+The authorised checkpoint includes reviewed application/support/runtime harness source, Store configuration/artwork and startup-native preparation. It excludes native binaries, runtime/header/toolchain inputs, build/customer data and external evidence packets. Sixteen startup fixtures, compilation, addon loading, typechecks and installed acceptance remain NOT RUN. Historical host/artwork results retain their original scope and dates. Electron remains 45.2.1; both support sends stay disabled, Slack paused and all EXA-66 holds remain.

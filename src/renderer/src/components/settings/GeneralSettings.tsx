@@ -42,7 +42,7 @@ export function GeneralSettings({
         </div>
         <div className="settings-section-grid single-column">
           <ShortcutSettingsPanel shortcuts={settings.shortcuts} refresh={refresh} />
-          <CapturePreferencesPanel screenshotReviewEnabled={settings.quickCaptureAnnotateScreenshots} runOnSystemStartup={settings.runOnSystemStartup} refresh={refresh} />
+          <CapturePreferencesPanel screenshotReviewEnabled={settings.quickCaptureAnnotateScreenshots} runOnSystemStartup={settings.runOnSystemStartup} startupStatus={settings.startupStatus} startupChoiceRequired={settings.startupChoiceRequired} refresh={refresh} />
         </div>
       </section>
 

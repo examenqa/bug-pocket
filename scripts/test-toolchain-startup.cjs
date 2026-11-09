@@ -1,19 +1,15 @@
 // Windows normal-startup acceptance. This intentionally enables loopback-only
 // debuggers for disposable test processes; it does not change app security flags.
 const assert = require('node:assert/strict');
-const { spawn, spawnSync } = require('node:child_process');
+const { spawn } = require('node:child_process');
 const { createHash, randomUUID } = require('node:crypto');
-const { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } = require('node:fs');
 const { createConnection, createServer } = require('node:net');
 const { tmpdir } = require('node:os');
-const { dirname, join, relative, resolve } = require('node:path');
+const { basename, dirname, join, relative, resolve, sep } = require('node:path');
+const { createProcessLifecycle, cleanupAfterClose, appendFailure } = require('./validation-process-lifecycle.cjs');
 
 const root = resolve(__dirname, '..');
-const modes = process.argv.slice(2).filter(arg => !arg.startsWith('--output='));
-assert.ok(modes.length && modes.every(mode => ['dev', 'start', 'packaged'].includes(mode)),
-  'usage: node scripts/test-toolchain-startup.cjs dev|start|packaged [...] [--output=path.json]');
-assert.equal(process.platform, 'win32', 'This acceptance runner exercises Windows behavior.');
-const output = process.argv.find(arg => arg.startsWith('--output='))?.slice('--output='.length);
 const npmCli = process.env.npm_execpath || join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
 const delay = ms => new Promise(resolveDelay => setTimeout(resolveDelay, ms));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -55,6 +51,8 @@ class Cdp {
     this.nextId = 0;
     this.pending = new Map();
     this.listeners = new Map();
+    this.closed = false;
+    socket.addEventListener('close', () => this.rejectPending(new Error('CDP socket closed')));
     socket.addEventListener('message', event => {
       const message = JSON.parse(event.data);
       if (message.id) {
@@ -69,11 +67,31 @@ class Cdp {
       }
     });
   }
-  static async connect(url) {
-    const socket = new WebSocket(url);
+  static async connect(url, { timeoutMs = 10_000, createSocket = target => new WebSocket(target),
+    schedule = setTimeout, cancel = clearTimeout } = {}) {
+    assert.ok(Number.isFinite(timeoutMs) && timeoutMs > 0, 'CDP connection needs a bounded timeout');
+    const socket = createSocket(url);
     await new Promise((resolveOpen, reject) => {
-      socket.addEventListener('open', resolveOpen, { once: true });
-      socket.addEventListener('error', reject, { once: true });
+      let settled = false;
+      let timer;
+      const listeners = {};
+      const settle = error => {
+        if (settled) return;
+        settled = true;
+        cancel(timer);
+        for (const [name, listener] of Object.entries(listeners)) socket.removeEventListener?.(name, listener);
+        if (error) {
+          try { socket.close(); }
+          catch (closeError) { (error.diagnostics ??= []).push('Close opening CDP socket: ' + closeError.message); }
+          reject(error);
+        } else resolveOpen();
+      };
+      listeners.open = () => settle();
+      listeners.close = () => settle(new Error('CDP socket closed before opening'));
+      listeners.error = event => settle(event instanceof Error ? event : event.error instanceof Error
+        ? event.error : new Error(event.message || 'CDP WebSocket opening failed'));
+      for (const [name, listener] of Object.entries(listeners)) socket.addEventListener(name, listener, { once: true });
+      timer = schedule(() => settle(new Error('Timed out opening CDP WebSocket after ' + timeoutMs + 'ms')), timeoutMs);
     });
     return new Cdp(socket);
   }
@@ -83,6 +101,7 @@ class Cdp {
     this.listeners.set(method, listeners);
   }
   send(method, params = {}) {
+    if (this.closed) return Promise.reject(new Error('CDP closed'));
     const id = ++this.nextId;
     return new Promise((resolveCommand, reject) => {
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`CDP timed out: ${method}`)); }, 20_000);
@@ -95,9 +114,13 @@ class Cdp {
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
     return result.result.value;
   }
-  close() {
-    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('CDP closed')); }
+  rejectPending(error) {
+    this.closed = true;
+    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
     this.pending.clear();
+  }
+  close() {
+    this.rejectPending(new Error('CDP closed'));
     this.socket.close();
   }
 }
@@ -108,23 +131,24 @@ async function listTargets(port) {
   return response.json();
 }
 
-function stopTree(child) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return;
-  // The PID is from this runner's own spawn. Never search for/kill an app by name.
-  spawnSync('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' });
-}
-
-async function inspectBeforeStartup(mainPort, userData, child) {
-  const target = await until(async () => {
+async function inspectBeforeStartup(mainPort, userData, child, options = {}) {
+  const { lifecycle, beforeImport, inspectionTimeoutMs = 30_000,
+    connect = url => Cdp.connect(url, { timeoutMs: inspectionTimeoutMs }), targets = listTargets, waitUntil = until,
+    schedule = setTimeout, cancel = clearTimeout, expectedDirectPid } = options;
+  const target = await waitUntil(async () => {
     if (child.exitCode !== null) throw new Error(`startup process exited with ${child.exitCode}`);
-    return (await listTargets(mainPort)).find(item => item.webSocketDebuggerUrl);
-  }, 'main inspector');
-  const cdp = await Cdp.connect(target.webSocketDebuggerUrl);
+    return (await targets(mainPort)).find(item => item.webSocketDebuggerUrl);
+  }, 'main inspector', inspectionTimeoutMs);
+  const cdp = await connect(target.webSocketDebuggerUrl);
   const scripts = new Map();
   cdp.on('Debugger.scriptParsed', script => scripts.set(script.scriptId, script.url));
   let resolvePaused;
   let rejectPaused;
+  let entryHandled = false;
   const paused = new Promise((resolvePause, rejectPause) => { resolvePaused = resolvePause; rejectPaused = rejectPause; });
+  // A pause/injection may reject while debugger setup still awaits a response.
+  // The final race below remains authoritative; this prevents a stray rejection.
+  paused.catch(() => {});
   cdp.on('Debugger.paused', async event => {
     try {
       const frame = event.callFrames[0];
@@ -132,37 +156,189 @@ async function inspectBeforeStartup(mainPort, userData, child) {
       // Unpackaged Electron first pauses in default_app.asar's ESM bootstrap.
       // Run only as far as our CJS entry breakpoint, before its imports/DB setup.
       if (!/\/out\/main\/index\.js$/.test(url)) { await cdp.send('Debugger.resume'); return; }
-      const result = await cdp.send('Debugger.evaluateOnCallFrame', {
-        callFrameId: frame.callFrameId,
-        returnByValue: true,
-        expression: `(() => {
-          const electron = require('electron');
-          const actual = electron.app.getPath('userData');
-          if (actual !== ${JSON.stringify(userData)}) throw new Error('Refusing startup outside isolated userData: ' + actual);
-          globalThis.__exa70Electron = electron;
-          globalThis.__exa70StartupPreference = null;
-          // Do not change the user's real Windows Run registry while checking a
-          // fresh synthetic profile. IPC, windows, SQLite and preload stay real.
-          electron.app.setLoginItemSettings = value => { globalThis.__exa70StartupPreference = value; };
-          return { pid: process.pid, parentPid: process.ppid,
-            userData: actual, sessionData: electron.app.getPath('sessionData'),
-            isPackaged: electron.app.isPackaged, versions: process.versions };
-        })()`
-      });
-      if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
-      resolvePaused(result.result.value);
+      if (entryHandled) return;
+      entryHandled = true;
+      const evaluate = async expression => {
+        const result = await cdp.send('Debugger.evaluateOnCallFrame', {
+          callFrameId: frame.callFrameId, returnByValue: true, expression
+        });
+        if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+        return result.result.value;
+      };
+      const isolation = await evaluate(`(() => {
+        const electron = require('electron');
+        const actual = electron.app.getPath('userData');
+        if (actual !== ${JSON.stringify(userData)}) throw new Error('Refusing startup outside isolated userData: ' + actual);
+        globalThis.__exa70Electron = electron;
+        globalThis.__exa70StartupPreference = null;
+        // Do not change the user's real Windows Run registry while checking a
+        // fresh synthetic profile. IPC, windows, SQLite and preload stay real.
+        electron.app.setLoginItemSettings = value => { globalThis.__exa70StartupPreference = value; };
+        return { pid: process.pid, parentPid: process.ppid, executable: process.execPath,
+          platform: process.platform, arch: process.arch,
+          userData: actual, sessionData: electron.app.getPath('sessionData'),
+          isPackaged: electron.app.isPackaged, versions: process.versions };
+      })()`);
+      assert.ok(Number.isSafeInteger(isolation.pid) && isolation.pid > 0, 'Inspector did not identify an owned Electron PID');
+      if (expectedDirectPid !== undefined) assert.equal(isolation.pid, expectedDirectPid, 'Packaged inspector must belong to the directly spawned executable');
+      if (lifecycle && isolation.pid !== child.pid) {
+        // Register the actual Electron process while it is paused. A wrapper's
+        // close, successful kill request or missing PID is not child closure.
+        await lifecycle.observeOwnedPid(isolation.pid, { label: 'electron', executable: isolation.executable });
+      }
+      if (beforeImport) await beforeImport({ cdp, callFrameId: frame.callFrameId, isolation, evaluate });
+      resolvePaused(isolation);
     } catch (error) { rejectPaused(error); }
   });
-  await cdp.send('Debugger.enable');
-  const breakpoint = await cdp.send('Debugger.setBreakpointByUrl', { urlRegex: '/out/main/index\\.js$', lineNumber: 0 });
-  await cdp.send('Runtime.runIfWaitingForDebugger');
   let pauseTimeout;
-  const isolation = await Promise.race([paused, new Promise((_, reject) => {
-    pauseTimeout = setTimeout(() => reject(new Error('Did not reach app entry isolation breakpoint')), 30_000);
-  })]).finally(() => clearTimeout(pauseTimeout));
-  await cdp.send('Debugger.removeBreakpoint', { breakpointId: breakpoint.breakpointId });
-  await cdp.send('Debugger.resume');
-  return { cdp, isolation };
+  try {
+    await cdp.send('Debugger.enable');
+    const breakpoint = await cdp.send('Debugger.setBreakpointByUrl', { urlRegex: '/out/main/index\\.js$', lineNumber: 0 });
+    await cdp.send('Runtime.runIfWaitingForDebugger');
+    const isolation = await Promise.race([paused, new Promise((_, reject) => {
+      pauseTimeout = schedule(() => reject(new Error('Did not reach app entry isolation breakpoint')), inspectionTimeoutMs);
+    })]).finally(() => cancel(pauseTimeout));
+    await cdp.send('Debugger.removeBreakpoint', { breakpointId: breakpoint.breakpointId });
+    await cdp.send('Debugger.resume');
+    return { cdp, isolation };
+  } catch (error) {
+    cdp.close();
+    throw error;
+  }
+}
+
+function buildModeCommand({ mode, profile, mainPort, rendererPort, devPort, devConfig,
+  applicationRoot = root, npmCliPath = npmCli, nodeExecutable = process.execPath }) {
+  assert.ok(['dev', 'start', 'packaged'].includes(mode), 'Unknown normal-startup mode');
+  const electronFlags = [`--inspect-brk=127.0.0.1:${mainPort}`, `--remote-debugging-port=${rendererPort}`,
+    '--remote-debugging-address=127.0.0.1', `--user-data-dir=${profile}`];
+  if (mode === 'dev') {
+    assert.ok(devConfig && Number.isSafeInteger(devPort), 'Development mode needs an owned config and port');
+    return { executable: nodeExecutable, args: [npmCliPath, 'run', 'dev', '--', '--config', devConfig,
+      '--inspectBrk', String(mainPort), '--remoteDebuggingPort', String(rendererPort),
+      '--', '--remote-debugging-address=127.0.0.1', `--user-data-dir=${profile}`] };
+  }
+  if (mode === 'start') return { executable: nodeExecutable, args: [npmCliPath, 'start', '--', ...electronFlags] };
+  return { executable: resolve(applicationRoot, 'release-build/win-unpacked/Bug Pocket.exe'), args: electronFlags };
+}
+
+async function createApplicationSession(options) {
+  const { mode, profile, beforeImport, applicationRoot = root, inspectionTimeoutMs = 30_000,
+    spawnProcess = spawn, lifecycleFactory = createProcessLifecycle, inspect = inspectBeforeStartup,
+    allocatePort = freePort, exists = existsSync, write = writeFileSync, remove = rmSync,
+    isPortClosed = portClosed, waitUntil = until, gracefulResponseTimeoutMs = 1000,
+    schedule = setTimeout, cancel = clearTimeout } = options;
+  assert.ok(Number.isFinite(gracefulResponseTimeoutMs) && gracefulResponseTimeoutMs > 0, 'Quit response deadline must be positive and finite');
+  const mainPort = options.mainPort ?? await allocatePort();
+  const rendererPort = options.rendererPort ?? await allocatePort();
+  const devPort = mode === 'dev' ? (options.devPort ?? await allocatePort()) : null;
+  const devConfig = mode === 'dev' ? join(applicationRoot, `.exa70-startup-${randomUUID()}.mjs`) : null;
+  const command = buildModeCommand({ ...options, mode, profile, applicationRoot, mainPort, rendererPort, devPort, devConfig });
+  if (mode === 'packaged') assert.ok(exists(command.executable), 'Build the unpacked Windows app before running packaged acceptance.');
+  else assert.ok(exists(options.npmCliPath || npmCli), `npm CLI not found: ${options.npmCliPath || npmCli}`);
+  if (devConfig) {
+    // Import actual configuration and override only this fixture's server port.
+    write(devConfig, `import config from './electron.vite.config.ts';\nexport default { ...config, renderer: { ...config.renderer, server: { ...config.renderer.server, port: ${devPort}, strictPort: true } } };\n`);
+  }
+  const env = { ...process.env, ELECTRON_ENABLE_LOGGING: '1' };
+  for (const key of ['ELECTRON_RUN_AS_NODE', 'BUG_POCKET_PACKAGED_SMOKE_TEST', 'BUG_POCKET_SMOKE_USER_DATA',
+    'ELECTRON_RENDERER_URL', 'NO_SANDBOX', 'V8_INSPECTOR_PORT', 'V8_INSPECTOR_BRK_PORT', 'REMOTE_DEBUGGING_PORT', 'ELECTRON_CLI_ARGS']) delete env[key];
+  const lifecycle = lifecycleFactory({ label: `normal-startup:${mode}` });
+  if (mode !== 'packaged') lifecycle.expectOwnedPid('electron');
+  let child;
+  let main;
+  let stdout = '';
+  let stderr = '';
+  let finishPromise;
+  const session = {
+    child: null, lifecycle, main: null, isolation: null, command: [command.executable, ...command.args],
+    mainPort, rendererPort, devPort, devConfig,
+    stdout: () => stdout, stderr: () => stderr,
+    finish(error) {
+      // Every caller shares this one receipt. No profile is removed here.
+      if (error) lifecycle.recordFailure(error);
+      if (finishPromise) return finishPromise;
+      finishPromise = (async () => {
+        let gracefulError;
+        let gracefulRequest;
+        const receipt = await lifecycle.finish({ error, requestGraceful: main ? () => {
+          gracefulRequest = (async () => {
+            try { await main.evaluate('globalThis.__exa70Electron.app.quit()'); }
+            catch (quitError) { gracefulError = quitError; }
+          })();
+          return gracefulRequest;
+        } : undefined });
+        try { main?.close(); } catch (closeError) { appendFailure(receipt, closeError, 'Close main inspector'); }
+        if (gracefulRequest) {
+          // CDP close rejects its pending command, which can cross several async
+          // continuations. Await that exact request within a separate bound;
+          // neither acknowledgement nor this deadline proves process closure.
+          let responseTimer;
+          const settled = await Promise.race([gracefulRequest.then(() => true), new Promise(resolveResponse => {
+            responseTimer = schedule(() => resolveResponse(false), gracefulResponseTimeoutMs);
+          })]).finally(() => cancel(responseTimer));
+          if (!settled) receipt.diagnostics.push('Graceful quit CDP response remained unsettled after ' + gracefulResponseTimeoutMs + 'ms');
+        }
+        if (gracefulError) receipt.diagnostics.push(`Graceful quit CDP response ended: ${gracefulError.message}`);
+        if (devConfig && receipt.terminationConfirmed) {
+          try {
+            await waitUntil(() => isPortClosed(devPort), 'owned development server to close', 5000);
+            remove(devConfig, { force: true });
+          } catch (cleanupError) {
+            appendFailure(receipt, cleanupError, 'Development server/config cleanup');
+            receipt.terminationConfirmed = false;
+          }
+        }
+        return receipt;
+      })();
+      return finishPromise;
+    }
+  };
+  try {
+    child = spawnProcess(command.executable, command.args, { cwd: applicationRoot, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    session.child = child;
+    lifecycle.trackChild(child, mode === 'packaged' ? { label: 'electron' }
+      : { label: 'npm-wrapper', allowTermination: true, requiresClosed: 'electron' });
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    const spawnFailure = new Promise((_, reject) => child.once('error', reject));
+    const inspected = await Promise.race([
+      inspect(mainPort, profile, child, { lifecycle, beforeImport, inspectionTimeoutMs,
+        expectedDirectPid: mode === 'packaged' ? child.pid : undefined }), spawnFailure
+    ]);
+    main = inspected.cdp;
+    session.main = main;
+    session.isolation = inspected.isolation;
+    if (mode === 'packaged') assert.equal(session.isolation.pid, child.pid, 'Packaged inspector must belong to the directly spawned executable');
+    return session;
+  } catch (error) {
+    const receipt = await session.finish(error);
+    const primary = receipt.error || error;
+    primary.sessionResult = receipt;
+    primary.sessionOutput = { command: session.command, stdout, stderr, profile };
+    throw primary;
+  }
+}
+
+function assertOwnedStartupProfile(directory, owner, io = {}) {
+  const stat = io.lstat || lstatSync;
+  const realpath = io.realpath || realpathSync;
+  const read = io.read || readFileSync;
+  const candidate = resolve(directory);
+  assert.equal(candidate, owner.directory, 'Refusing cleanup outside this startup profile');
+  const rel = relative(owner.base, candidate);
+  assert.ok(rel && !rel.startsWith('..') && !rel.includes(sep) && basename(rel).startsWith('bug-pocket-exa70-startup-'),
+    'Refusing cleanup outside owned startup root');
+  for (let current = candidate; ; current = dirname(current)) {
+    assert.equal(stat(current).isSymbolicLink(), false, `Refusing linked startup cleanup path: ${current}`);
+    const parent = dirname(current);
+    if (parent === current) break;
+  }
+  const normalize = value => process.platform === 'win32' ? resolve(value).toLowerCase() : resolve(value);
+  assert.equal(normalize(realpath(candidate)), normalize(candidate), 'Startup cleanup real path changed');
+  const marker = join(candidate, '.startup-profile-owner');
+  assert.equal(stat(marker).isSymbolicLink(), false, 'Startup ownership marker became a link');
+  assert.equal(read(marker, 'utf8'), owner.token, 'Startup ownership marker changed');
 }
 
 async function runMode(mode) {
@@ -171,38 +347,12 @@ async function runMode(mode) {
   mkdirSync(profile);
   const expectedUserData = mode === 'packaged' ? profile : `${profile}-dev`;
   mkdirSync(expectedUserData, { recursive: true });
-  const mainPort = await freePort();
-  const rendererPort = await freePort();
-  const devPort = mode === 'dev' ? await freePort() : null;
-  const devConfig = mode === 'dev' ? join(root, `.exa70-startup-${randomUUID()}.mjs`) : null;
-  const electronFlags = [`--inspect-brk=127.0.0.1:${mainPort}`, `--remote-debugging-port=${rendererPort}`,
-    '--remote-debugging-address=127.0.0.1', `--user-data-dir=${profile}`];
-  let executable = process.execPath;
-  let args;
-  if (mode === 'dev') {
-    assert.ok(existsSync(npmCli), `npm CLI not found: ${npmCli}`);
-    // The CLI has no --port option and Vite treats port:0 as 5173. Import the
-    // actual config and override only the fixture's port, leaving it untouched.
-    writeFileSync(devConfig, `import config from './electron.vite.config.ts';\nexport default { ...config, renderer: { ...config.renderer, server: { ...config.renderer.server, port: ${devPort}, strictPort: true } } };\n`);
-    args = [npmCli, 'run', 'dev', '--', '--config', devConfig, '--inspectBrk', String(mainPort), '--remoteDebuggingPort', String(rendererPort),
-      '--', '--remote-debugging-address=127.0.0.1', `--user-data-dir=${profile}`];
-  } else if (mode === 'start') {
-    assert.ok(existsSync(npmCli), `npm CLI not found: ${npmCli}`);
-    args = [npmCli, 'start', '--', ...electronFlags];
-  } else {
-    executable = resolve(root, 'release-build/win-unpacked/Bug Pocket.exe');
-    assert.ok(existsSync(executable), 'Build the unpacked Windows app before running packaged acceptance.');
-    args = electronFlags;
-  }
-  const env = { ...process.env, ELECTRON_ENABLE_LOGGING: '1' };
-  for (const key of ['ELECTRON_RUN_AS_NODE', 'BUG_POCKET_PACKAGED_SMOKE_TEST', 'BUG_POCKET_SMOKE_USER_DATA',
-    'ELECTRON_RENDERER_URL', 'NO_SANDBOX', 'V8_INSPECTOR_PORT', 'V8_INSPECTOR_BRK_PORT', 'REMOTE_DEBUGGING_PORT', 'ELECTRON_CLI_ARGS']) delete env[key];
-  const child = spawn(executable, args, { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-  let stdout = '';
-  let stderr = '';
-  child.stdout.on('data', chunk => { stdout += chunk; });
-  child.stderr.on('data', chunk => { stderr += chunk; });
-  const spawnFailure = new Promise((_, reject) => child.once('error', reject));
+  const owner = { directory: resolve(temporary), base: resolve(tmpdir()), token: randomUUID() };
+  writeFileSync(join(temporary, '.startup-profile-owner'), owner.token, { flag: 'wx' });
+  let session;
+  let result;
+  let firstError;
+  let receipt;
   let main;
   let renderer;
   let originalCss;
@@ -210,11 +360,12 @@ async function runMode(mode) {
   const cssPath = join(root, 'src/renderer/src/styles.css');
   const componentPath = join(root, 'src/renderer/src/components/shared/BrandMark.tsx');
   try {
-    const inspected = await Promise.race([inspectBeforeStartup(mainPort, profile, child), spawnFailure]);
+    session = await createApplicationSession({ mode, profile });
+    const inspected = { cdp: session.main, isolation: session.isolation };
     main = inspected.cdp;
     assert.equal(inspected.isolation.isPackaged, mode === 'packaged');
     assert.equal(inspected.isolation.sessionData, profile);
-    const target = await until(async () => (await listTargets(rendererPort))
+    const target = await until(async () => (await listTargets(session.rendererPort))
       .find(item => item.type === 'page' && item.url.includes('#/dashboard')), 'real dashboard renderer');
     renderer = await Cdp.connect(target.webSocketDebuggerUrl);
     const preloadScripts = [];
@@ -302,43 +453,75 @@ async function runMode(mode) {
         sameDocument: true, restoredSha256: cssHash, componentRestoredSha256: hash(originalComponent) };
       originalComponent = null;
     }
-    return { mode, command: [executable, ...args], isolationBeforeUserCode: inspected.isolation,
+    result = { mode, command: session.command, isolationBeforeUserCode: inspected.isolation,
       preferences, preloadScripts, acceptance, hmr, sqlite: join(expectedUserData, 'local.sqlite'),
-      exclusions: ['Windows login Run registry update intercepted to avoid altering user startup preference'],
-      stdout, stderr };
+      exclusions: ['Windows login Run registry update intercepted to avoid altering user startup preference'] };
   } catch (error) {
-    error.stack += `\n[${mode} stdout]\n${stdout}\n[${mode} stderr]\n${stderr}`;
-    throw error;
+    firstError = error;
   } finally {
-    if (originalCss) writeFileSync(cssPath, originalCss);
-    if (originalComponent) writeFileSync(componentPath, originalComponent);
-    renderer?.close();
-    // Ask normal main-process shutdown first. The test owns this process only.
-    if (main) {
-      try { await main.evaluate('globalThis.__exa70Electron.app.quit()'); } catch { /* Process can close before CDP returns. */ }
-      main.close();
+    const fixtureFailures = [];
+    for (const [path, bytes] of [[cssPath, originalCss], [componentPath, originalComponent]]) {
+      if (!bytes) continue;
+      try {
+        writeFileSync(path, bytes);
+        assert.equal(hash(readFileSync(path)), hash(bytes), 'HMR fixture must be restored byte for byte');
+      } catch (error) { fixtureFailures.push(error); }
     }
-    await delay(500);
-    stopTree(child);
-    await delay(300);
-    if (devConfig) {
-      rmSync(devConfig, { force: true });
-      await until(() => portClosed(devPort), 'owned development server to close', 5000);
+    try { renderer?.close(); } catch (error) { fixtureFailures.push(error); }
+    if (!firstError && fixtureFailures.length) firstError = fixtureFailures[0];
+    receipt = session ? await session.finish(firstError)
+      : firstError?.sessionResult || { error: firstError, terminationConfirmed: true, processes: [], diagnostics: [] };
+    for (const error of fixtureFailures) appendFailure(receipt, error, 'Restore startup fixture/renderer');
+    receipt = await cleanupAfterClose(receipt, {
+      profile: temporary, assertOwned: path => assertOwnedStartupProfile(path, owner)
+    });
+  }
+  const streams = { stdout: session?.stdout() || firstError?.sessionOutput?.stdout || '',
+    stderr: session?.stderr() || firstError?.sessionOutput?.stderr || '' };
+  if (receipt.error) {
+    receipt.error.stack += `\n[${mode} stdout]\n${streams.stdout}\n[${mode} stderr]\n${streams.stderr}`;
+    receipt.error.validationResult = { mode, profile: temporary, ...streams, lifecycle: receipt };
+    throw receipt.error;
+  }
+  return { ...result, ...streams, lifecycle: receipt };
+}
+
+function parseStartupCli(argv) {
+  const modes = argv.filter(arg => !arg.startsWith('--output='));
+  assert.ok(modes.length && modes.every(mode => ['dev', 'start', 'packaged'].includes(mode)),
+    'usage: node scripts/test-toolchain-startup.cjs dev|start|packaged [...] [--output=path.json]');
+  const outputs = argv.filter(arg => arg.startsWith('--output='));
+  assert.ok(outputs.length <= 1 && outputs.every(arg => arg.length > '--output='.length), 'Specify one nonempty output path');
+  return { modes, output: outputs[0]?.slice('--output='.length) };
+}
+
+async function main(argv = process.argv.slice(2)) {
+  const { modes, output } = parseStartupCli(argv);
+  assert.equal(process.platform, 'win32', 'This acceptance runner exercises Windows behavior.');
+  const results = [];
+  const save = failure => {
+    if (!output) return;
+    mkdirSync(dirname(resolve(output)), { recursive: true });
+    writeFileSync(output, `${JSON.stringify({ capturedAt: new Date().toISOString(), node: process.version,
+      platform: process.platform, results, ...(failure ? { failure } : {}) }, null, 2)}\n`);
+  };
+  try {
+    for (const mode of modes) {
+      results.push(await runMode(mode));
+      console.log(`${mode}: normal renderer, isolated preload, accepted IPC and SQLite passed${mode === 'dev' ? '; CSS HMR and React Fast Refresh passed' : ''}`);
+      save();
     }
-    // The root was returned by mkdtempSync here; resolve-check it before cleanup.
-    assert.ok(relative(tmpdir(), temporary).startsWith('bug-pocket-exa70-startup-'));
-    rmSync(temporary, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+  } catch (error) {
+    try { save({ message: error.message, diagnostics: error.diagnostics || [], ...error.validationResult,
+      lifecycle: error.validationResult?.lifecycle ? { ...error.validationResult.lifecycle, error: undefined } : undefined }); }
+    catch (saveError) { (error.diagnostics ??= []).push(`Save startup failure evidence: ${saveError.message}`); }
+    throw error;
   }
 }
 
-(async () => {
-  const results = [];
-  for (const mode of modes) {
-    results.push(await runMode(mode));
-    console.log(`${mode}: normal renderer, isolated preload, accepted IPC and SQLite passed${mode === 'dev' ? '; CSS HMR and React Fast Refresh passed' : ''}`);
-    if (output) {
-      mkdirSync(dirname(resolve(output)), { recursive: true });
-      writeFileSync(output, `${JSON.stringify({ capturedAt: new Date().toISOString(), node: process.version, platform: process.platform, results }, null, 2)}\n`);
-    }
-  }
-})().catch(error => { console.error(error.stack || error); process.exitCode = 1; });
+module.exports = { Cdp, freePort, listTargets, until, inspectBeforeStartup, buildModeCommand,
+  createApplicationSession, assertOwnedStartupProfile, parseStartupCli, runMode, main };
+
+if (require.main === module) {
+  main().catch(error => { console.error(error.stack || error); if (error.diagnostics?.length) console.error(error.diagnostics.join('\n')); process.exitCode = 1; });
+}

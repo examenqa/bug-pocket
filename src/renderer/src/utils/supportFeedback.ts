@@ -1,15 +1,16 @@
 import type { FeedbackPayload } from '../../../shared/types';
 import {
+  normalizeSupportFeedbackPayload,
+  safeSupportFeedbackResult,
+  supportFailure,
   SUPPORT_FEEDBACK_ERRORS,
-  validateSupportImageFile
+  SUPPORT_FORWARDING_ENABLED,
+  type SupportFeedbackResult
 } from '../../../shared/supportFeedback';
 
-type FeedbackResult = { success: boolean; error?: string };
-type FeedbackSender = (payload: FeedbackPayload) => Promise<FeedbackResult>;
+export type FeedbackSender = (payload: FeedbackPayload) => Promise<unknown>;
 
 const safeFeedbackErrors = new Set<string>(Object.values(SUPPORT_FEEDBACK_ERRORS));
-
-export { validateSupportImageFile };
 
 export function sanitizeSupportFeedbackError(error: unknown): string {
   if (typeof error === 'string' && safeFeedbackErrors.has(error)) return error;
@@ -19,18 +20,17 @@ export function sanitizeSupportFeedbackError(error: unknown): string {
 export async function submitSupportFeedback(
   sender: FeedbackSender,
   payload: FeedbackPayload
-): Promise<FeedbackResult> {
+): Promise<SupportFeedbackResult> {
+  const validation = normalizeSupportFeedbackPayload(payload);
+  if (!validation.success) return validation.result;
+
+  // This source-only disabled release cannot dispatch, even with an injected sender.
+  if (!SUPPORT_FORWARDING_ENABLED) return supportFailure('unavailable');
+
   try {
-    const result = await sender(payload);
-    if (result.success) return result;
-    return {
-      success: false,
-      error: sanitizeSupportFeedbackError(result.error)
-    };
+    return safeSupportFeedbackResult(await sender(validation.payload));
   } catch {
-    return {
-      success: false,
-      error: SUPPORT_FEEDBACK_ERRORS.generic
-    };
+    // Once a future sender is invoked, a lost response cannot prove non-delivery.
+    return supportFailure('delivery_unknown', 'unknown');
   }
 }

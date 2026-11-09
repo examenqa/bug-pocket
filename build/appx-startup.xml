@@ -1,0 +1,10 @@
+<!-- Application Extensions fragment; the pinned builder supplies the wrapper
+     and desktop namespace. Startup is declared disabled until user preference
+     integration and Windows user-disabled behavior are accepted. -->
+<desktop:Extension Category="windows.startupTask"
+                   Executable="app\Bug Pocket.exe"
+                   EntryPoint="Windows.FullTrustApplication">
+  <desktop:StartupTask TaskId="BugPocketStartup"
+                       Enabled="false"
+                       DisplayName="Bug Pocket" />
+</desktop:Extension>

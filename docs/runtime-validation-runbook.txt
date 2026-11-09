@@ -1,0 +1,178 @@
+EXA-66 — implemented harness runbook
+3 November 2026, Asia/Calcutta
+
+Current authorization
+Only isolated source changes and deterministic host-Node tests are authorized. Runtime/header downloads, installations, Electron/native/SQLite execution, real application children, network requests, npm test, builds/packages, commits/pushes, PR/Linear posts and vendor contact remain outside this authorization.
+Source implementation and the focused host checks are complete. Every runtime stage below is NOT RUN and requires separate authorization.
+
+Source identity
+Baseline: C:\MyApps\BugPocket
+Commit: 4591ea3bad306bc520c6ea07fa892f69ddfb9bd2
+Source aggregate: 8470c78069ce20550cbabf902d7e4db82c3c15811c340fdc293eff4a28413574
+Tracked files: 243
+
+Successor: C:\MyApps\BugPocket-exa66-45-2-1
+Branch: codex/exa-66-electron-45-2-1
+The successor has the same HEAD. Changes remain unstaged and uncommitted. Do not recreate or reset this existing branch/worktree.
+Electron is pinned to 45.2.1. Only its package.json declaration and the corresponding root/Electron lock records change. All other dependency and toolchain pins are preserved. No dependencies are installed in the successor.
+
+Authorized host checks — PASSED
+These checks used the existing portable Node 24.22.1 on Windows x64:
+$node='C:\MyApps\BugPocket-tooling\node-v24.22.1-win-x64\node.exe'
+$work='C:\MyApps\BugPocket-exa66-45-2-1'
+$review='C:\MyApps\BugPocket-compliance-evidence\EXA-66\20261103-harness-implementation-073505'
+$env:TEMP=Join-Path $review 'scratch'
+$env:TMP=$env:TEMP
+$env:BUG_POCKET_HOST_TEST_ROOT=$env:TEMP
+Set-Location -LiteralPath $work
+# --check was run for all12 changed/new CJS files, including the five test files:
+& $node --check scripts/test-runtime-storage-recovery.cjs
+# Exact focused suite; no native imports/app/socket/process launches in fixtures:
+& $node --test --test-isolation=none --test-reporter=tap scripts/runtime-compatibility-driver.test.cjs scripts/validation-process-lifecycle.test.cjs scripts/test-toolchain-startup.test.cjs scripts/validation-paths.test.cjs scripts/test-runtime-storage-recovery.test.cjs
+
+The final combined suite passed 115 tests, with 0 failures, 0 cancellations and 0 skips: 12 unchanged accepted driver regressions, 35 lifecycle/smoke tests, 18 startup tests, 26 path/identity/compatibility tests and 24 storage-recovery tests.
+Use --test-isolation=none to avoid Node test-worker children. Set BUG_POCKET_HOST_TEST_ROOT explicitly. The initial combined attempt omitted that variable and failed during path-test setup; its output is preserved separately. An earlier plain --test attempt encountered sandbox spawn EPERM. No application launched in either attempt.
+Exact commands, outputs, host versions and raw file identities are in the external review directory. Component success messages produced by synthetic fixtures are host-test output, not real runtime/native acceptance.
+
+Implemented lifecycle behavior
+Smoke and normal-startup profiles are deleted only after confirmed process closure. A directly spawned process must emit ChildProcess close. An exit event, success marker, successful kill request or fixed delay is insufficient.
+For npm dev/start, the paused pre-import inspector identifies the actual Electron PID and executable. A Windows process-handle observer opens and holds that process handle before execution resumes. Cleanup requires matching WaitForExit proof and observer close, plus an independent npm-wrapper close. Missing, failed, late or mismatched ownership proof retains the profile.
+A surviving npm/Vite launcher may be terminated during routine cleanup only after its owned Electron process closed normally with confirmed handle proof. The launcher must still close. Forced, abnormal or unknown Electron termination is a failure.
+Teardown is bounded: defaults are 5 seconds for the graceful request/wait and 5 seconds for termination confirmation. Profiles are retained when process closure is uncertain. After closure, cleanup makes at most four attempts for known transient lock errors, with 100/200/300 ms waits and a fresh ownership check before each attempt.
+The first failure is preserved. Termination, evidence, fixture-restoration and cleanup errors are appended as diagnostics. Late pipe/graceful-response errors also remain diagnostics. Startup CDP connection, commands and quit-response settlement are bounded. Existing smoke assertions and startup security, IPC, preload and HMR assertions are preserved.
+The Windows handle observer reads control input through an explicit IO.StreamReader over OpenStandardInput, avoiding the blocking SyncTextReader ReadLineAsync path. The real observer and default Windows reparse-attribute subprocess are NOT RUN. Host tests use injected fixtures.
+
+Runtime prerequisites — NOT RUN
+Review the implementation and patch, then obtain separate authorization for official binary/header acquisition, isolated dependency installation/rebuild, real application launches, full tests, build/unpacked validation and synthetic OS integration checks.
+Use a preprovisioned disposable Windows account/VM with existing Node 24.22.1, npm 11.19.1 and configured MSVC, Python and Windows SDK. Native rebuild 4.2.1 writes to os.homedir()/.electron-gyp and its rebuild cache. Explicit npm/Electron/builder cache variables do not isolate those paths. Do not repurpose HOME or silently write to the owner's native caches.
+Preserve builder 26.18.1, rebuild 4.2.1, node-abi 4.40.0, electron-vite 6.0.0/Vite 6.4.5, SQLite 12.11.1 and the current source security, preload, unpacking and asset hooks.
+Require an interactive desktop, real available Windows safeStorage, fresh synthetic profiles and no .env files or real account/provider credentials. The required OS matrix remains Windows 10 22H2/build 19045 x64, older Windows 11 and current Windows 11. These are validation targets, not a proven installation floor.
+Before execution, refresh only new or materially changed official advisory/support evidence. Preserve the accepted 56-question totals: 45.2.1 = 55 fixes/1 exclusion/0 unresolved; 43.8.6 = 41/7/8. The named lifetime fix and new 76026 exclusion remain separate. Do not reopen unchanged accepted source, AI or notices reviews.
+
+Future session setup — NOT RUN
+Choose a unique external execution root. Precreate the profile/evidence parents and stop if the chosen destination already exists. Review the successor's existing identity and changes before continuing.
+$node='C:\MyApps\BugPocket-tooling\node-v24.22.1-win-x64\node.exe'
+$npm='C:\MyApps\BugPocket-tooling\node-v24.22.1-win-x64\npm.cmd'
+$work='C:\MyApps\BugPocket-exa66-45-2-1'
+$packet='C:\MyApps\BugPocket-compliance-evidence\EXA-66\20261103-runtime-decision-packet'
+$execution='C:\MyApps\BugPocket-compliance-evidence\EXA-66\runtime-execution-45.2.1-'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')
+# Create this unique external root explicitly; precreate profiles/evidenceparents.
+New-Item -ItemType Directory -Path $execution | Out-Null
+foreach($name in @('profiles','scratch','logs','downloads','npm-cache','electron-cache','builder-cache')){
+ New-Item -ItemType Directory -Path (Join-Path $execution $name) | Out-Null
+}
+$env:PATH=(Split-Path $node -Parent)+';'+$env:PATH
+$env:TEMP=Join-Path $execution 'scratch'
+$env:TMP=$env:TEMP
+$env:npm_config_cache=Join-Path $execution 'npm-cache'
+$env:ELECTRON_CACHE=Join-Path $execution 'electron-cache'
+$env:ELECTRON_BUILDER_CACHE=Join-Path $execution 'builder-cache'
+# Reject inherited ELECTRON_RUN_AS_NODE,override/mirror/customdir and old-writer variables.
+# Verify current successorHEAD/branch and review every existing unstaged difference.
+# Record Windows edition,DisplayVersion,build,UBR,x64,desktop,DPI and display layout.
+# Do not overwrite existing evidence files; choose fresh filenames on each attempt.
+function RunChecked([string]$program,[string[]]$commandArgs,[string]$logName){
+ & $program @commandArgs 2>&1 | Tee-Object -FilePath (Join-Path $execution ('logs\'+$logName))
+ if($LASTEXITCODE -ne 0){throw ('Stop after '+$logName+'; exit '+$LASTEXITCODE)}
+}
+
+1. Official acquisition and byte verification — NOT RUN
+Use the original immutable decision packet's exact tag, release, asset and checksum commands before any application/native execution.
+Required annotated tag: 1d087f0d4cf5eff6cf198d639fa1a1cd02d1fd75
+Required commit: f81ca3d4f09f57667238120adacb01239d5ecd89
+Official runtime ZIP:
+https://github.com/electron/electron/releases/download/v45.2.1/electron-v45.2.1-win32-x64.zip
+Asset ID: 693536760
+Size: 158187314 bytes
+SHA256: 7c342aee45d5b4ccafe5dfe9037028796b082735a576e21e2b4e2d8422ebb727
+Official SHASUMS256.txt:
+https://github.com/electron/electron/releases/download/v45.2.1/SHASUMS256.txt
+SHA256: 7ffbf4a406ba5df5bd97e8a549ed1042af209456f98cf041c4dfababdc2f9abb
+Verify current publisher metadata, exact downloaded byte counts/SHA256 and the runtime checksum line. Stop on any changed tag, artifact or digest. Do not substitute another runtime version.
+
+2. Stage dependencies, verified distribution and measured versions — NOT RUN
+Set-Location -LiteralPath $work
+RunChecked $npm @('ci','--ignore-scripts','--no-audit','--no-fund') 'npm-ci-staged.log'
+# Do not require('electron')/runpostinstall/builder before the verified distribution exists:
+# the npm wrapper can automatically download if missing.
+$zip=Join-Path $execution 'downloads\electron-v45.2.1-win32-x64.zip'
+$checksums=Join-Path $execution 'downloads\SHASUMS256.txt'
+$dist=Join-Path $work 'node_modules\electron\dist'
+# Require $dist absent; if it exists, inspect rather than delete/overwrite.
+Expand-Archive -LiteralPath $zip -DestinationPath $dist
+[IO.File]::WriteAllText((Join-Path $work 'node_modules\electron\path.txt'),'electron.exe',[Text.UTF8Encoding]::new($false))
+$electron=Join-Path $dist 'electron.exe'
+$verification=Join-Path $execution 'runtime-verification.json'
+# After all official byte checks, write the exact implemented schema:
+$verified=[ordered]@{
+ schemaVersion=1
+ runtime=@{electron='45.2.1';platform='win32';arch='x64';commit='f81ca3d4f09f57667238120adacb01239d5ecd89'}
+ archive=@{path=$zip;sha256='7c342aee45d5b4ccafe5dfe9037028796b082735a576e21e2b4e2d8422ebb727';size=158187314;assetId=693536760;url='https://github.com/electron/electron/releases/download/v45.2.1/electron-v45.2.1-win32-x64.zip'}
+ checksums=@{path=$checksums;sha256='7ffbf4a406ba5df5bd97e8a549ed1042af209456f98cf041c4dfababdc2f9abb'}
+ executable=@{path=$electron;sha256=(Get-FileHash -LiteralPath $electron -Algorithm SHA256).Hash.ToLowerInvariant();size=(Get-Item -LiteralPath $electron).Length}
+}
+$verified|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $verification
+# The runners rehash actual ZIP/checksum/exe and compare electron.exe bytes to its
+# official ZIP entry; arbitrary JSON hash claims are insufficient. Reader is ZIP32
+# only and rejects split/encrypted/ZIP64/unsupported/malformed inputs. Actual artifact
+# reading is NOT RUN now; unsupported format stops for review, never bypass verification.
+$env:ELECTRON_RUN_AS_NODE='1'
+try {RunChecked $electron @((Join-Path $packet 'future\runtime-version-probe.cjs'),('--output='+$execution+'\versions.json')) 'versions.log'}
+finally {Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue}
+# Require measured45.2.1/Chromium156.0.8078.75/Node24.22.1/V815.6.75.25-electron.0/ABI150/win32/x64 BEFORE rebuild.
+RunChecked $npm @('rebuild','esbuild','electron-winstaller','--foreground-scripts','--no-audit','--no-fund') 'dependency-lifecycles.log'
+RunChecked $npm @('run','postinstall') 'native-postinstall.log'
+
+The implemented verifier checks actual archive, checksum-text and executable bytes. It compares electron.exe with its entry in the verified official ZIP; a hash asserted only in JSON is insufficient. It supplies no additional signature assurance.
+The reader supports ZIP32 only. Split, encrypted, ZIP64, unsupported or malformed input stops verification for review. Do not bypass verification to handle an unsupported format. The real official archive has not been downloaded or parsed in this implementation pass.
+Before rebuilding native dependencies, require measured Electron 45.2.1, Chromium 156.0.8078.75, Node 24.22.1, V8 15.6.75.25-electron.0, ABI 150, win32 and x64.
+
+3. Native rebuild/loading — NOT RUN
+RunChecked (Join-Path $work 'node_modules\.bin\electron-rebuild.cmd') @('--version','45.2.1','--arch','x64','--force','--only','better-sqlite3','--build-from-source') 'sqlite-rebuild.log'
+$env:ELECTRON_RUN_AS_NODE='1'
+try {RunChecked $electron @((Join-Path $packet 'future\runtime-native-probe.cjs'),$work,('--output='+$execution+'\native.json')) 'native.log'}
+finally {Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue}
+Require real native loading, SQL, integrity_check and the measured SQLite library version. Never load the Electron ABI 150 binding in host Node. Do not force an ABI, copy old bindings, change SQLite/toolchain pins or silently use another Electron version.
+
+4. Fresh required tests/build/unpacked/normal startup — NOT RUN
+RunChecked $npm @('run','test') 'full-tests.log'
+RunChecked $npm @('run','build') 'build.log'
+RunChecked (Join-Path $work 'node_modules\.bin\electron-builder.cmd') @('--win','--x64','--dir',('-c.electronDist='+$dist)) 'unpacked-build.log'
+# Verify both asarUnpack patterns and actual resources/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node.
+# Compare source/packaged native bytes; if builder rebuilt differently stop, inspect/re-measure, do not bypass.
+# Compare unchanged runtime DLL/resources to verifieddist. Icon-edited packagedEXE may differ; record its hash and measure versions.
+RunChecked $npm @('run','test:packaged-smoke') 'unpacked-smoke.log'
+RunChecked $npm @('run','test:toolchain-startup','--',('--output='+$execution+'\normal-startup.json')) 'normal-startup.log'
+These commands decompose test:packaged-smoke:build so packaging uses the verified electronDist. Do not report that the unmodified alias ran.
+Normal startup records real dev/start/unpacked preload isolation, accepted secure IPC, invalid-IPC rejection, CSP/navigation/window denial, SQLite, HMR restoration and measured versions. Startup registry writes are intercepted. Actual installed/logon behavior remains a separate gate. Component smoke does not establish normal application IPC acceptance.
+Smoke/startup now require confirmed closure. On uncertainty they retain profiles and report their paths. Record every failure and diagnostic, not only success markers.
+
+5. Implemented same45 component runner — NOT RUN
+RunChecked $node @('scripts/runtime-compatibility.cjs',('--profile-root='+$execution+'\profiles'),('--evidence='+$execution+'\components.json'),('--electron='+$electron),('--verification='+$verification)) 'components.log'
+Both persistence phases use exactly the same verified executable/hash and a fresh owned profile. There is no old-writer option. Record actual versions, ABI, native binding, SQLite, PIDs, output, closure and the unseeded reader result.
+The profile/evidence parents must already exist. Evidence must be a fresh file outside profileRoot. Destinations inside the repository, any Git checkout, OneDrive or system Temp are rejected, as are linked, reparse, escaping and hard-linked paths. The ownership marker, token and tree are rechecked before writes or deletion. Retain profiles on uncertain closure or cleanup failure.
+
+6. Implemented normal-startup storage-recovery runner — NOT RUN
+RunChecked $node @('scripts/test-runtime-storage-recovery.cjs',('--profile-root='+$execution+'\profiles'),('--evidence='+$execution+'\storage-recovery.json'),('--electron='+$electron),('--verification='+$verification),'--modes=start,packaged') 'storage-recovery.log'
+Only start and packaged modes are supported; both run by default. Each mode uses three separate processes, with confirmed closure between phases:
+- Seed: normal app startup with real available safeStorage. The actual current-source database/SafeStorageAdapter/BYOK fixture writes synthetic credentials only.
+- Unavailable: pre-import injection makes safeStorage unavailable. An exact showErrorBox interceptor captures the expected error and returns immediately, allowing the real production catch/app.quit path to run without opening a native modal. A constructor barrier rejects any attempted SQLite open. Encryption/decryption attempts are counted and rejected. The real 10-second production availability deadline is preserved. Automation is bounded by a 35-second phase wait, 60-second inspector timeout, 20-second CDP commands, 1-second quit response and 5-second termination confirmation.
+- Recovery: a new normal startup restores real storage. The reader does not write, seed or repair keys. Require the same primary session/BYOK ciphertext hashes and decrypted values.
+
+Compare raw SQLite/WAL/SHM snapshots before and after the unavailable phase. Electron logs/preferences may change; do not claim byte identity for the entire profile.
+Transient adapter unavailability must throw before decryption and retain ciphertext. During the seed phase only, decryption failure for a distinct disposable key must expire that key while preserving the primary session. Error envelopes preserve the child's primary error name, message, stack and diagnostics across CDP, including database-close failures.
+Each phase pins source/packaged executable, native and source-file hashes before launch and at the pre-import pause. Record the measured PID, platform, architecture, versions and executable, and require confirmed wrapper/Electron closure. Pin the packaged executable across all three launches; icon editing means its hash need not equal the official executable hash.
+App startup is normal. Adapter fixtures load exact current source through pinned tsx in that process; they do not inspect private packaged bundle modules. This does not establish bundled-adapter/private-scope introspection or a real Windows DPAPI outage. No production flags or storage services are changed.
+
+7. Interactive matrix and remaining separate gates — NOT RUN
+Use synthetic windows/profiles and a disposable account. Cover fresh offline local capture; snip/cancel/repeat; annotation arrow/freehand/text/mask/undo; PNG/JPEG/nativeImage conversion and reopen; clipboard; shortcuts/conflicts/unregister; tray, close-to-tray and explicit quit; startup write/read/logon; 100/125/150/200% DPI, negative coordinates and mixed-DPI/multi-monitor layouts; and in-flight graceful flush/drain, sync stop, database close, restart and failed-shutdown recovery.
+Current automated startup intercepts HKCU startup writes. Real startup/logon requires a disposable account with a registry snapshot and restore. It does not establish installed/Store behavior.
+Fresh required full tests, build, unpacked smoke, normal preload, storage/native checks and the interactive OS matrix remain pending. Report exact pass/fail/filtered/skipped counts, test names and reasons. Historical CI passes are not substitutes.
+Live provider/BYOC requests require separately authorized disposable inputs. Do not use customer or real owner credentials. There is no Bug Pocket-hosted datastore.
+This is the first public launch. No old-ABI writer or legacy NSIS-to-Store import is required. Existing owner test data may be discarded when needed, but none was deleted here. Fresh persistence and future Store-update data preservation still require validation.
+Runtime-matched FFmpeg/notices, artwork, Store feasibility, installed behavior, future Store updates, WACK and owner release approval remain separate gates.
+
+Stop conditions and recovery
+Stop on changed security/support/fix evidence; a moved tag/artifact/hash; unexpected lock, tool or source changes; a wrong measured runtime tuple; failed native loading, unpacking, preload, IPC, isolation, persistence or database integrity; a missing prerequisite; a timeout; unconfirmed closure; or an unexplained skip. Preserve the first error and diagnostics, command, PIDs, hashes, output and profile.
+Never delete profiles while closure is uncertain, kill by application name, reset/clean the baseline, overwrite originals, copy old bindings, weaken CSP/sandbox/IPC or substitute another runtime. Retain the failed successor and evidence. Terminate only owned processes through confirmed handles, then require bounded closure confirmation. Any later cleanup must verify absolute owned targets.
+EXA-66 remains In Progress and PR #7 remains draft. This harness implementation does not authorize any runtime stage or release.

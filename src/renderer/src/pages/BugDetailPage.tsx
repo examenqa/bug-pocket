@@ -22,6 +22,7 @@ import { buildBugUpdateInput } from '../utils/bugUpdate';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useAiTriage } from '../hooks/useAiTriage';
 import { useAttachmentSpotlight } from '../hooks/useAttachmentSpotlight';
+import { SupportModal } from '../components/shared/SupportModal';
 
 
 export function BugDetailsView({
@@ -37,6 +38,7 @@ export function BugDetailsView({
   const [copied, setCopied] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [isAiReportOpen, setIsAiReportOpen] = useState(false);
   const [lastEditedField, setLastEditedField] = useState<keyof BugDetails | null>(null);
   const showDetailsToast = useToast();
   const saveBugCallback = useCallback((bugToSave: BugDetails) => window.bugPocket.updateBug(bugToSave.id, buildBugUpdateInput(bugToSave)) as Promise<BugDetails>, []);
@@ -84,7 +86,7 @@ export function BugDetailsView({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && !document.querySelector('.spotlight-backdrop')) onBack();
+      if (event.key === 'Escape' && !document.querySelector('.spotlight-backdrop, .support-modal-backdrop')) onBack();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -351,6 +353,7 @@ export function BugDetailsView({
           <div className="detail-sidebar-section report-actions-section">
             <h2>Generated report preview</h2>
             <textarea className="report-preview" readOnly value={generateReport(reportBug, settings.reportTemplates.find((template) => template.name === 'Full Bug Report'))} />
+            <button type="button" onClick={() => setIsAiReportOpen(true)}>Report inappropriate AI output</button>
             <div className="copy-grid">
               {!developerReadOnly && (
                 <div className="ai-triage-panel">
@@ -383,6 +386,19 @@ export function BugDetailsView({
           </div>
         </aside>
       </div>
+      <SupportModal
+        mode="ai_output"
+        open={isAiReportOpen}
+        onClose={() => setIsAiReportOpen(false)}
+        textSelections={isAiReportOpen ? [
+          { id: 'report', label: 'Current generated report preview', text: generateReport(reportBug, settings.reportTemplates.find((template) => template.name === 'Full Bug Report')) },
+          { id: 'title', label: 'Current title', text: detailTitleValue },
+          { id: 'note', label: 'Current bug note', text: bug.note },
+          { id: 'steps', label: 'Current steps to reproduce', text: bug.steps_to_reproduce },
+          { id: 'expected', label: 'Current expected result', text: bug.expected_result },
+          { id: 'actual', label: 'Current actual result', text: bug.actual_result }
+        ] : undefined}
+      />
       {spotlight && (
         <div className="spotlight-backdrop" role="dialog" aria-modal="true" aria-label="Screenshot preview" onClick={() => closeSpotlight()}>
           <div className="spotlight-panel" onClick={(event) => event.stopPropagation()}>

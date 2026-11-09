@@ -24,6 +24,8 @@ import { normalizeSupabaseCredentials } from './sync/supabaseCredentials';
 import { startSupabaseKeepAlive } from './sync/keepAlive';
 import { createBackupArchive, restoreBackupArchive } from './sync/backupService';
 import { getAssetPath } from './assetPaths';
+import { getAppUserModelId, isStoreExecution, readStartupStatus, requestStartupPreference, restoreStartupPreference, STORE_STARTUP_TASK_ID } from './startupPreference';
+import { createStoreStartupController, isStartupSecondInstance, loadStoreStartupBridge, shouldShowLaunchWindow } from './storeStartup';
 import { runGracefulShutdown } from './lifecycle';
 import { operationBarrier } from './OperationBarrier';
 import { runDestructiveMaintenance } from './destructiveLifecycle';
@@ -41,7 +43,11 @@ if (packagedSmokeTest && packagedSmokeUserData) {
 }
 
 app.name = 'Bug Pocket';
-app.setAppUserModelId('com.bugpocket.app');
+const startupIdentity = { platform: process.platform, windowsStore: process.windowsStore };
+if (!isStoreExecution(startupIdentity)) app.setAppUserModelId(getAppUserModelId(startupIdentity));
+const storeStartup = isStoreExecution(startupIdentity)
+  ? createStoreStartupController(() => loadStoreStartupBridge(process.resourcesPath))
+  : null;
 
 let mainWindow: BrowserWindow | null = null;
 let quickWindow: BrowserWindow | null = null;
@@ -97,7 +103,7 @@ function pauseRendererForShutdown(): void {
     window.setIgnoreMouseEvents(true);
     window.setFocusable(false);
   });
-  globalShortcut.unregisterAll();
+  if (app.isReady()) globalShortcut.unregisterAll();
 }
 
 async function gracefulShutdown(): Promise<void> {
@@ -110,7 +116,10 @@ async function gracefulShutdown(): Promise<void> {
   gracefulShutdownPromise = runGracefulShutdown({
     pauseRenderer: pauseRendererForShutdown,
     collectDrafts: flushMainDetails,
-    drainOperations: () => operationBarrier.drain(),
+    drainOperations: async () => {
+      await storeStartup?.close();
+      await operationBarrier.drain();
+    },
     stopAndDrain: async () => {
       stopSupabaseKeepAlive?.();
       stopSupabaseKeepAlive = null;
@@ -133,6 +142,7 @@ async function gracefulShutdown(): Promise<void> {
     console.error('[shutdown] Graceful shutdown failed. Attempting to restore background services.', error);
     gracefulShutdownPromise = null;
     shutdownInProgress = false;
+    storeStartup?.resume();
     mainWindow?.webContents.send('details:resume');
     isQuitting = false;
     BrowserWindow.getAllWindows().forEach((window) => {
@@ -217,14 +227,6 @@ function preloadPath(): string {
   if (isDev) return join(__dirname, '../preload/index.js');
   const mjsPreload = join(__dirname, '../preload/index.mjs');
   return existsSync(mjsPreload) ? mjsPreload : join(__dirname, '../preload/index.js');
-}
-
-function enforceStartupPreference(enabled: boolean): void {
-  app.setLoginItemSettings({
-    openAtLogin: enabled,
-    openAsHidden: true,
-    args: enabled ? [backgroundStartArg] : []
-  });
 }
 
 function createMainWindow(route = DASHBOARD_ROUTE, showOnReady = true): void {
@@ -484,6 +486,8 @@ function settingsWithShortcutStatus(): SettingsData {
   const settings = db.getSettings();
   return {
     ...settings,
+    startupStatus: storeStartup?.snapshot() ?? readStartupStatus(startupIdentity, app, backgroundStartArg),
+    startupChoiceRequired: Boolean(storeStartup && !db.hasStoreStartupChoice()),
     shortcuts: settings.shortcuts.map((shortcut) => ({
       ...shortcut,
       registration_error: shortcutRegistrationErrors[shortcut.action]
@@ -979,7 +983,11 @@ function registerIpc(): void {
   secureIpc.handle('window:restoreQuickCaptureCompact', () => restoreQuickCaptureCompactSize());
   secureIpc.handle('window:openMain', (_event, route = DASHBOARD_ROUTE) => openMainWindow(route));
   secureIpc.handle('window:openSettings', (_event, section?: string) => openSettings(section));
-  secureIpc.handle('settings:get', () => settingsWithShortcutStatus());
+  secureIpc.handle('settings:get', async () => {
+    if (shutdownInProgress) throw new Error('Bug Pocket is shutting down.');
+    if (storeStartup) await operationBarrier.acquire(() => storeStartup.read());
+    return settingsWithShortcutStatus();
+  });
   secureIpc.handle('settings:addApplication', (_event, name: string, contextDescription?: string | null, issuePrefix = '') => mutateWorkspaceSettings(() => db.addApplication(name, contextDescription ?? '', issuePrefix)));
   secureIpc.handle('settings:updateApplication', (_event, id: TaxonomyId, name: string, contextDescription = '', issuePrefix = '') => mutateWorkspaceSettings(() => db.updateApplication(id, name, contextDescription, issuePrefix)));
   secureIpc.handle('settings:updateApplicationContext', (_event, id: TaxonomyId, contextDescription: string) => mutateWorkspaceSettings(() => db.updateApplicationContext(id, contextDescription)));
@@ -1033,13 +1041,24 @@ function registerIpc(): void {
       return result;
     }))
   );
-  secureIpc.handle('settings:toggleStartup', (_event, enabled: boolean) =>
-    mutateSettings(() => {
-      const value = db.updateRunOnSystemStartup(enabled);
-      enforceStartupPreference(value);
-      return value;
-    })
-  );
+  secureIpc.handle('settings:toggleStartup', (_event, enabled: boolean) => {
+    assertAppAcceptingMutations();
+    if (storeStartup) {
+      return operationBarrier.acquire(async () => {
+        // This is saved user intent, independent of Windows' resulting state.
+        // Only this explicit trusted action records the first-run choice.
+        db.recordStoreStartupChoice(enabled);
+        const status = await storeStartup.set(enabled);
+        notifySettingsChanged();
+        return status;
+      });
+    }
+    return mutateSettings(() => {
+      const status = requestStartupPreference(startupIdentity, app, backgroundStartArg, enabled);
+      if (status.enabled === enabled) db.updateRunOnSystemStartup(enabled);
+      return status;
+    });
+  });
   secureIpc.handle('settings:mergeReference', (_event, tableName: ReferenceTable, sourceId: TaxonomyId, targetId: TaxonomyId) => mutateWorkspaceSettings(() => db.mergeReferenceOption(tableName, sourceId, targetId)));
   secureIpc.handle('settings:createPreset', (_event, input: CapturePresetInput) => mutateSettings(() => db.createPreset(input)));
   secureIpc.handle('settings:updatePreset', (_event, id: number, input: CapturePresetInput) => mutateSettings(() => db.updatePreset(id, input)));
@@ -1213,17 +1232,34 @@ function registerIpc(): void {
   secureIpc.handle('ai:cancel', (event, requestId: string) => aiRequests.cancel(event.sender.id, requestId));
 }
 
-const gotTheLock = app.requestSingleInstanceLock();
+async function startApplication(): Promise<void> {
+  // Retrieve packaged activation once, early, before acquiring Electron's lock.
+  const launch = storeStartup
+    ? await storeStartup.activation()
+    : { identityVerified: false, activationKnown: true, startupActivation: false };
+  if (shutdownInProgress || isQuitting) return;
+  if (storeStartup && launch.identityVerified) app.setAppUserModelId(getAppUserModelId(startupIdentity));
+  if (storeStartup && !launch.activationKnown) log.warn('[startup] Packaged activation is unknown; normal window behavior will be used.');
+  const gotTheLock = app.requestSingleInstanceLock({
+    bugPocketStartup: 1, taskId: STORE_STARTUP_TASK_ID, identityVerified: launch.identityVerified, startupActivation: launch.startupActivation
+  });
 
-if (!gotTheLock) {
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    openMainWindow(DASHBOARD_ROUTE);
+  if (!gotTheLock) {
+    app.quit();
+    return;
+  }
+  let pendingManualLaunch = false;
+  app.on('second-instance', (_event, _argv, _directory, additionalData: unknown) => {
+    if (shutdownInProgress || isQuitting) return;
+    if (storeStartup && isStartupSecondInstance(additionalData)) return;
+    if (!mainWindow) { pendingManualLaunch = true; return; }
+    openMainWindow(storeStartup && !db.hasStoreStartupChoice() ? '/settings/workspace' : DASHBOARD_ROUTE);
   });
 
   app.whenReady().then(async () => {
+    if (shutdownInProgress || isQuitting) return;
     await waitForSafeStorageEncryption();
+    if (shutdownInProgress || isQuitting) return;
     db = new BugPocketDatabase();
     if (packagedSmokeTest) {
       const bugCount = db.getTotalBugCount();
@@ -1264,9 +1300,7 @@ if (!gotTheLock) {
     }
     syncEngine = createSyncEngine();
     syncEngine.initialize();
-    await syncEngine.restorePersistedSession();
-    startSupabaseKeepAliveIfConfigured();
-    enforceStartupPreference(db.getRunOnSystemStartup());
+    restoreStartupPreference(startupIdentity, app, backgroundStartArg, db.getRunOnSystemStartup());
     registerIpc();
     const captureCleanup = setInterval(() => {
       if (db?.isOpen() && !shutdownInProgress && !operationBarrier.isInMaintenance) {
@@ -1274,13 +1308,22 @@ if (!gotTheLock) {
       }
     }, 60 * 60 * 1000);
     captureCleanup.unref();
-    createMainWindow('/dashboard', !process.argv.includes(backgroundStartArg));
+    const showMain = pendingManualLaunch || shouldShowLaunchWindow(Boolean(storeStartup), launch, process.argv.includes(backgroundStartArg));
+    const initialRoute = storeStartup && !db.hasStoreStartupChoice() ? '/settings/workspace' : DASHBOARD_ROUTE;
+    createMainWindow(initialRoute, showMain);
     createQuickWindow();
     createTray();
     registerAppShortcuts();
     setTimeout(() => {
       void runAutomatedStartupBackup();
     }, 1500);
+    // Local capture/shortcuts are ready before optional cloud restoration.
+    try {
+      await syncEngine.restorePersistedSession();
+      startSupabaseKeepAliveIfConfigured();
+    } catch (error) {
+      log.warn('[startup] Cloud session restoration failed; local capture remains available.', error);
+    }
   }).catch((caught) => {
     const message = caught instanceof Error ? caught.message : String(caught);
     log.error('[startup] Bug Pocket initialization failed:', caught);
@@ -1293,6 +1336,11 @@ if (!gotTheLock) {
     app.quit();
   });
 }
+
+void startApplication().catch((error) => {
+  log.error('[startup] Launch coordination failed:', error);
+  app.quit();
+});
 
 app.on('window-all-closed', () => {});
 
@@ -1311,7 +1359,7 @@ app.on('before-quit', (event) => {
 });
 
 app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
+  if (app.isReady()) globalShortcut.unregisterAll();
 });
 
 

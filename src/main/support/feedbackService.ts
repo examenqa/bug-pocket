@@ -1,11 +1,10 @@
-import { Buffer } from 'node:buffer';
 import type { FeedbackPayload } from '../../shared/types';
 import {
-  MAX_SUPPORT_IMAGE_BYTES,
-  SUPPORT_FEEDBACK_ERRORS,
-  isSupportImageMimeType,
-  validateSupportImageFile,
-  type SupportImageMimeType
+  normalizeSupportFeedbackPayload,
+  safeSupportFeedbackResult,
+  supportFailure,
+  utf8ByteLength,
+  type SupportFeedbackResult
 } from '../../shared/supportFeedback';
 
 export const EXAMEN_QA_SUPPORT_ENDPOINT = 'https://bugpocket.app/api/support/feedback';
@@ -14,136 +13,104 @@ type SupportFetchResponse = {
   ok: boolean;
   status: number;
   json?: () => Promise<unknown>;
+  text?: () => Promise<string>;
+  body?: ReadableStream<Uint8Array> | null;
 };
-
 export type SupportFetch = (url: string, init: RequestInit) => Promise<SupportFetchResponse>;
 
-type PreparedSupportImage = {
-  image_base64: string;
-  image_mime_type: SupportImageMimeType;
-};
+const MAX_SUPPORT_REPLY_BYTES = 1024;
 
-function hasPngSignature(bytes: Buffer): boolean {
-  return bytes.length >= 8
-    && bytes[0] === 0x89
-    && bytes[1] === 0x50
-    && bytes[2] === 0x4e
-    && bytes[3] === 0x47
-    && bytes[4] === 0x0d
-    && bytes[5] === 0x0a
-    && bytes[6] === 0x1a
-    && bytes[7] === 0x0a;
+async function readSupportReply(response: SupportFetchResponse, signal: AbortSignal): Promise<unknown> {
+  let text: string;
+  if (response.body) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    let size = 0;
+    let reachedEnd = false;
+    const parts: string[] = [];
+    const cancelRead = (): void => { void reader.cancel().catch(() => {}); };
+    signal.addEventListener('abort', cancelRead, { once: true });
+    if (signal.aborted) cancelRead();
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) { reachedEnd = true; break; }
+        if (!part.value) throw new Error('Invalid response stream.');
+        size += part.value.byteLength;
+        if (size > MAX_SUPPORT_REPLY_BYTES) {
+          cancelRead();
+          return null;
+        }
+        parts.push(decoder.decode(part.value, { stream: true }));
+      }
+      text = parts.join('') + decoder.decode();
+    } finally {
+      signal.removeEventListener('abort', cancelRead);
+      if (!reachedEnd) cancelRead();
+      reader.releaseLock();
+    }
+  } else {
+    // Synthetic response fixtures can supply text without a native stream.
+    // This bounds JSON parsing, not the fixture's own string allocation.
+    if (!response.text) return null;
+    text = await response.text();
+    if (text.length > MAX_SUPPORT_REPLY_BYTES || utf8ByteLength(text) > MAX_SUPPORT_REPLY_BYTES) return null;
+  }
+  try { return JSON.parse(text) as unknown; } catch { return null; }
 }
 
-function hasJpegSignature(bytes: Buffer): boolean {
-  return bytes.length >= 3
-    && bytes[0] === 0xff
-    && bytes[1] === 0xd8
-    && bytes[2] === 0xff;
-}
-
-function prepareSupportImage(payload: FeedbackPayload): PreparedSupportImage | undefined {
-  if (!payload.image_base64) return undefined;
-
-  const declaredMimeType = payload.image_mime_type ?? '';
-  if (!isSupportImageMimeType(declaredMimeType)) {
-    throw new Error(SUPPORT_FEEDBACK_ERRORS.invalidImage);
-  }
-
-  const dataUrlMatch = payload.image_base64.match(/^data:([^;]+);base64,([\s\S]+)$/i);
-  if (dataUrlMatch && dataUrlMatch[1].toLowerCase() !== declaredMimeType) {
-    throw new Error(SUPPORT_FEEDBACK_ERRORS.invalidImage);
-  }
-
-  const compactBase64 = (dataUrlMatch?.[2] ?? payload.image_base64).replace(/\s/g, '');
-  if (
-    !compactBase64
-    || compactBase64.length % 4 !== 0
-    || !/^[a-z0-9+/]+={0,2}$/i.test(compactBase64)
-  ) {
-    throw new Error(SUPPORT_FEEDBACK_ERRORS.invalidImage);
-  }
-
-  const bytes = Buffer.from(compactBase64, 'base64');
-  const metadataError = validateSupportImageFile({ type: declaredMimeType, size: bytes.length });
-  if (metadataError) throw new Error(metadataError);
-
-  const signatureIsValid = declaredMimeType === 'image/png'
-    ? hasPngSignature(bytes)
-    : hasJpegSignature(bytes);
-  if (!signatureIsValid) throw new Error(SUPPORT_FEEDBACK_ERRORS.invalidImage);
-
-  return {
-    image_base64: compactBase64,
-    image_mime_type: declaredMimeType
-  };
-}
-
-function errorForStatus(status: number): string {
-  if (status === 400 || status === 401 || status === 403 || status === 422) {
-    return SUPPORT_FEEDBACK_ERRORS.invalidRequest;
-  }
-  if (status === 413) return SUPPORT_FEEDBACK_ERRORS.imageTooLarge;
-  if (status === 429) return SUPPORT_FEEDBACK_ERRORS.rateLimited;
-  if (status >= 500) return SUPPORT_FEEDBACK_ERRORS.unavailable;
-  return SUPPORT_FEEDBACK_ERRORS.generic;
-}
-
-function safeErrorMessage(caught: unknown): string {
-  if (caught instanceof Error && Object.values(SUPPORT_FEEDBACK_ERRORS).includes(
-    caught.message as (typeof SUPPORT_FEEDBACK_ERRORS)[keyof typeof SUPPORT_FEEDBACK_ERRORS]
-  )) {
-    return caught.message;
-  }
-  return SUPPORT_FEEDBACK_ERRORS.network;
-}
-
+/** Actual IPC entry. No configuration, credentials or transport can enable it. */
 export async function sendFeedbackToExamenQa(
   payload: FeedbackPayload,
-  fetchImpl: SupportFetch = (url, init) => fetch(url, init)
-): Promise<{ success: boolean; error?: string }> {
-  const message = payload.message.trim();
-  if (!message) {
-    return { success: false, error: SUPPORT_FEEDBACK_ERRORS.invalidRequest };
-  }
+  _unusedTransport?: SupportFetch
+): Promise<SupportFeedbackResult> {
+  const prepared = normalizeSupportFeedbackPayload(payload);
+  if (!prepared.success) return prepared.result;
+  return supportFailure('unavailable');
+}
 
+/** Isolated protocol fixture seam; never called by the production IPC entry. */
+export async function sendFeedbackUsingInjectedTransport(
+  payload: FeedbackPayload,
+  transport: SupportFetch,
+  options: { timeoutMs?: number } = {}
+): Promise<SupportFeedbackResult> {
+  const prepared = normalizeSupportFeedbackPayload(payload);
+  if (!prepared.success) return prepared.result;
+  const controller = new AbortController();
+  const timeoutMs = typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)
+    ? Math.min(20_000, Math.max(1, options.timeoutMs)) : 20_000;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<SupportFeedbackResult>((resolve) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      resolve(supportFailure('delivery_unknown', 'unknown'));
+    }, timeoutMs);
+  });
   try {
-    const image = prepareSupportImage(payload);
-    const abortController = new AbortController();
-    const timeout = setTimeout(() => abortController.abort(), 20_000);
-    let response: SupportFetchResponse;
-    try {
-      response = await fetchImpl(EXAMEN_QA_SUPPORT_ENDPOINT, {
+    const attempt = async (): Promise<SupportFeedbackResult> => {
+      const response = await transport(EXAMEN_QA_SUPPORT_ENDPOINT, {
         method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          type: payload.type === 'Feature' ? 'Feature' : 'Bug',
-          message,
-          user_email: payload.user_email?.trim() || undefined,
-          ...image
-        }),
-        signal: abortController.signal
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        redirect: 'error',
+        body: prepared.body,
+        signal: controller.signal
       });
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    if (!response.ok) {
-      return { success: false, error: errorForStatus(response.status) };
-    }
-
-    if (response.json) {
-      const body = await response.json().catch(() => null) as { success?: boolean } | null;
-      if (body?.success === false) {
-        return { success: false, error: SUPPORT_FEEDBACK_ERRORS.unavailable };
-      }
-    }
-
-    return { success: true };
-  } catch (caught) {
-    return { success: false, error: safeErrorMessage(caught) };
+      // Regional WAF rejection can have platform-formatted non-JSON content.
+      if (response.status === 429) return supportFailure('rate_limited');
+      const body = await readSupportReply(response, controller.signal);
+      const result = safeSupportFeedbackResult(body);
+      if (response.status === 200 && result.success) return result;
+      if (response.status >= 200 && response.status < 300) return supportFailure('delivery_unknown', 'unknown');
+      if (!result.success) return result;
+      return supportFailure('delivery_unknown', 'unknown');
+    };
+    return await Promise.race([attempt(), deadline]);
+  } catch {
+    // Once transport was invoked, a timeout or lost response cannot prove that
+    // the recipient did not receive it. Never repeat the request automatically.
+    return supportFailure('delivery_unknown', 'unknown');
+  } finally {
+    clearTimeout(timeout);
   }
 }
