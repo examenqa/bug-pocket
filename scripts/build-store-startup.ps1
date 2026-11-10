@@ -51,9 +51,67 @@ function Get-RegularPath([string] $Path, [bool] $Directory = $false) {
         if ($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) {
             throw "Linked/reparse build inputs require review: $resolvedPath"
         }
-        $cursor = if ($cursor.PSIsContainer) { $cursor.Parent } else { $cursor.Directory }
+        $cursor = if ($cursor -is [IO.DirectoryInfo]) { $cursor.Parent } else { $cursor.Directory }
     }
     return $resolvedPath
+}
+
+function ConvertTo-NativeArgument([AllowEmptyString()] [string] $Argument) {
+    # Windows CRT quoting: preserve spaces, embedded quotes and trailing slashes.
+    $quoted = [Text.StringBuilder]::new()
+    [void]$quoted.Append('"')
+    $slashes = 0
+    foreach ($character in $Argument.ToCharArray()) {
+        if ($character -eq '\') { $slashes++; continue }
+        if ($character -eq '"') {
+            [void]$quoted.Append(('\' * (2 * $slashes + 1)))
+            [void]$quoted.Append('"')
+        } else {
+            [void]$quoted.Append(('\' * $slashes))
+            [void]$quoted.Append($character)
+        }
+        $slashes = 0
+    }
+    [void]$quoted.Append(('\' * (2 * $slashes)))
+    [void]$quoted.Append('"')
+    return $quoted.ToString()
+}
+
+function Invoke-NativeBuildProcess([string] $FilePath, [string[]] $Arguments, [string] $WorkingDirectory) {
+    # ProcessStartInfo.Arguments is available in Windows PowerShell 5.1.
+    $commandLine = (@($Arguments | ForEach-Object { ConvertTo-NativeArgument $_ }) -join ' ')
+    Write-Output "Native command: `"$FilePath`" $commandLine"
+    Write-Output "Native working directory: $WorkingDirectory"
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $FilePath
+    $startInfo.Arguments = $commandLine
+    $startInfo.WorkingDirectory = $WorkingDirectory
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { throw "Native process did not start: $FilePath" }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $process.WaitForExit()
+        $stdout = $stdoutTask.GetAwaiter().GetResult()
+        $stderr = $stderrTask.GetAwaiter().GetResult()
+        [Console]::Out.Write($stdout)
+        [Console]::Error.Write($stderr)
+        if (-not $process.HasExited) { throw "Native process exit status unavailable: $FilePath" }
+        $exitCode = $process.ExitCode
+        if ($null -eq $exitCode -or $exitCode -isnot [int]) {
+            throw "Native process exit status unavailable: $FilePath"
+        }
+        Write-Output "Native process exit code: $exitCode"
+        if ($exitCode -ne 0) { throw "Native process failed ($exitCode): $FilePath. Partial output is preserved." }
+    }
+    finally {
+        $process.Dispose()
+    }
 }
 
 $electronInclude = Get-RegularPath $ElectronIncludeDirectory $true
@@ -122,15 +180,13 @@ try {
     $objects = @()
     foreach ($source in $sourceFiles) {
         $object = Join-Path $outputRoot ([IO.Path]::GetFileNameWithoutExtension($source) + '.obj')
-        & $compiler @compileArguments "/Fo$object" $source
-        if ($LASTEXITCODE -ne 0) { throw "MSVC compilation failed ($LASTEXITCODE). Partial output is preserved." }
+        Invoke-NativeBuildProcess $compiler ($compileArguments + @("/Fo$object", $source)) $projectRoot
         $objects += $object
     }
     $linkArguments = @('/NOLOGO', '/DLL', '/MACHINE:X64', '/INCREMENTAL:NO', '/DYNAMICBASE', '/NXCOMPAT', '/GUARD:CF',
         '/DELAYLOAD:node.exe', "/OUT:$outputFile")
     foreach ($directory in $libraryDirectories) { $linkArguments += "/LIBPATH:$directory" }
-    & $linker @linkArguments @objects $nodeLibrary 'delayimp.lib' 'WindowsApp.lib' 'RuntimeObject.lib' 'kernel32.lib'
-    if ($LASTEXITCODE -ne 0) { throw "MSVC linking failed ($LASTEXITCODE). Partial output is preserved." }
+    Invoke-NativeBuildProcess $linker ($linkArguments + $objects + @($nodeLibrary, 'delayimp.lib', 'WindowsApp.lib', 'RuntimeObject.lib', 'kernel32.lib')) $projectRoot
     if (-not (Test-Path -LiteralPath $outputFile -PathType Leaf)) { throw 'The linker did not produce the expected fixed addon.' }
     Write-Output "Compiled $outputFile. Addon loading, identity, startup APIs and installed acceptance have NOT been checked."
 }

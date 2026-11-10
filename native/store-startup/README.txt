@@ -1,4 +1,4 @@
-Bug Pocket fixed Store startup bridge — source preparation, NOT BUILT/LOADED/TESTED
+Bug Pocket fixed Store startup bridge — built 10 November 2026; NOT LOADED/ACCEPTED
 
 Mechanism
 Plain Node-API C interface (NAPI_VERSION=8), C++17 and installed Windows SDK
@@ -54,13 +54,14 @@ rolled back by teardown. There is no forced unload/timeout that frees running
 native work; shutdown can wait on Windows. Graceful draining and forced-exit
 behavior require later native acceptance. No private libuv/V8 APIs are used.
 
-Acceptance still required — ALL NOT RUN
-Compile/link with actual approved SDK/MSVC/Electron inputs; PE imports/delay-load
-resolution and x64 loading; installed PFN/AUMID/task lookup; first-run opt-in,
-opt-out and actual states; early startup activation classification; login/tray/
-global shortcut behavior; manual/single-instance regression; queued/running work
-shutdown and failures. Source preparation does not establish build readiness or
-native/installed acceptance. Existing EXA-66 holds remain controlling.
+Acceptance still required — loading/runtime checks NOT RUN
+Compile/link and static PE inspection completed 10 November 2026; see
+docs/store-appx-packaging.txt. Delay-load resolution and x64 loading; installed
+PFN/AUMID/task lookup; first-run opt-in, opt-out and actual states; early startup
+activation classification; login/tray/global shortcut behavior; manual/single-instance
+regression; queued/running work shutdown and failures remain unperformed.
+Compile/link and static inspection do not establish native/installed acceptance.
+Existing EXA-66 holds remain controlling.
 
 Primary references
 https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask.getasync?view=winrt-26100
