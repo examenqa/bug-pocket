@@ -2,20 +2,19 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import {
-  MAX_SUPPORT_BODY_BYTES,
   MAX_SUPPORT_EMAIL_LENGTH,
-  MAX_SUPPORT_MESSAGE_BYTES,
-  normalizeSupportFeedbackPayload,
-  SUPPORT_FORWARDING_ENABLED,
-  utf8ByteLength
+  SUPPORT_EMAIL_RECIPIENT
 } from '../../../../shared/supportFeedback';
-import { submitSupportFeedback } from '../../utils/supportFeedback';
 import {
   appendSupportText,
+  copySupportReport,
   getSupportDraftController,
+  requestSupportEmail,
   selectedSupportText,
-  supportPayloadForDraft,
+  supportCategoryLabels,
+  supportReportText,
   type SupportDraftMode,
+  type SupportHandoffResult,
   type SupportTextSelection
 } from '../../utils/supportDraft';
 
@@ -40,14 +39,21 @@ export function SupportModal({ mode, open, onClose, textSelections = noTextSelec
   const draft = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectionNotice, setSelectionNotice] = useState('');
+  const [handoff, setHandoff] = useState<SupportHandoffResult | null>(null);
+  const [handoffBusy, setHandoffBusy] = useState<'copy' | 'email' | null>(null);
+  const handoffInFlight = useRef(false);
+  const handoffVersion = useRef(0);
   const dialogRef = useRef<HTMLElement | null>(null);
   const messageRef = useRef<HTMLTextAreaElement | null>(null);
+  const reportRef = useRef<HTMLTextAreaElement | null>(null);
   const closeRef = useRef(onClose);
   const formId = useId();
 
   const closeAndKeepDraft = (): void => {
     setSelectedIds([]);
     setSelectionNotice('');
+    handoffVersion.current += 1;
+    setHandoff(null);
     onClose();
   };
 
@@ -55,6 +61,8 @@ export function SupportModal({ mode, open, onClose, textSelections = noTextSelec
     closeRef.current = () => {
       setSelectedIds([]);
       setSelectionNotice('');
+      handoffVersion.current += 1;
+      setHandoff(null);
       onClose();
     };
   }, [onClose]);
@@ -63,7 +71,11 @@ export function SupportModal({ mode, open, onClose, textSelections = noTextSelec
     // Reopening never overwrites an existing message/email; uninserted choices reset.
     setSelectedIds([]);
     setSelectionNotice('');
+    handoffVersion.current += 1;
+    setHandoff(null);
   }, [mode, open, draft.category]);
+
+  useEffect(() => { setHandoff(null); }, [draft.message, draft.email]);
 
   useEffect(() => {
     if (!open) return;
@@ -101,22 +113,36 @@ export function SupportModal({ mode, open, onClose, textSelections = noTextSelec
 
   if (!open) return null;
 
-  const payload = supportPayloadForDraft(draft);
-  const validation = normalizeSupportFeedbackPayload(payload);
-  const messageBytes = utf8ByteLength(draft.message.trim());
-  const bodyBytes = validation.success ? utf8ByteLength(validation.body) : utf8ByteLength(JSON.stringify(payload));
   const preview = selectedSupportText(textSelections, selectedIds);
-  const unknown = draft.result?.delivery_status === 'unknown';
-  const accepted = draft.result?.success === true && draft.result.delivery_status === 'accepted_by_recipient';
-  const inputDisabled = draft.isSubmitting;
+  const report = supportReportText(draft);
+  const canCopy = Boolean(draft.message.trim());
+  const inputDisabled = draft.isSubmitting || handoffBusy !== null;
 
-  const submit = (): void => {
-    if (!SUPPORT_FORWARDING_ENABLED || draft.isSubmitting || !validation.success) return;
-    void controller.submit((value) => submitSupportFeedback(window.bugPocket.sendFeedback, value));
+  const handoffReport = async (action: 'copy' | 'email'): Promise<void> => {
+    if (handoffInFlight.current || draft.isSubmitting) return;
+    if (action === 'copy' && !canCopy) return;
+    handoffInFlight.current = true;
+    const version = handoffVersion.current;
+    setHandoffBusy(action);
+    setHandoff(null);
+    try {
+      const result = action === 'copy'
+        ? await copySupportReport(draft, (text) => window.bugPocket.copyText(text))
+        : await requestSupportEmail(() => window.bugPocket.openSupportEmail());
+      if (version !== handoffVersion.current) return;
+      setHandoff(result);
+      if (action === 'copy' && !result.success) {
+        reportRef.current?.focus();
+        reportRef.current?.select();
+      }
+    } finally {
+      handoffInFlight.current = false;
+      setHandoffBusy(null);
+    }
   };
 
   const insertSelectedText = (): void => {
-    if (!preview || draft.isSubmitting) return;
+    if (!preview || inputDisabled) return;
     controller.update({ message: appendSupportText(draft.message, preview) });
     setSelectedIds([]);
     setSelectionNotice('Selected current text added. You can edit or remove it in the message.');
@@ -146,16 +172,16 @@ export function SupportModal({ mode, open, onClose, textSelections = noTextSelec
           <button className="icon-button" type="button" aria-label="Close and keep support draft" onClick={closeAndKeepDraft}><X size={18} /></button>
         </header>
 
-        <p id={`${formId}-availability`} role="status">Support submission is unavailable in this version. You can prepare a draft here; nothing will be sent.</p>
+        <p id={`${formId}-availability`}>Copy your reviewed report, then open your email app and paste it. You send the email yourself. The email-app request includes only the recipient and subject, with no body or attachment.</p>
         <p>Your draft stays in this app window's memory when you close this dialog. Use Discard draft to remove it.</p>
         {(draft.message || draft.email) && <p>A draft is already in progress. Review it before inserting any more text from this page.</p>}
 
         <label>
           <span>Category</span>
           <select value={draft.category} disabled={inputDisabled} onChange={(event) => controller.update({ category: event.target.value as SupportModalMode })}>
-            <option value="bug">Bug feedback</option>
-            <option value="feature">Feature feedback</option>
-            <option value="ai_output">Inappropriate AI output</option>
+            <option value="bug">{supportCategoryLabels.bug}</option>
+            <option value="feature">{supportCategoryLabels.feature}</option>
+            <option value="ai_output">{supportCategoryLabels.ai_output}</option>
           </select>
         </label>
 
@@ -201,19 +227,25 @@ export function SupportModal({ mode, open, onClose, textSelections = noTextSelec
           <span>Email <em>optional</em></span>
           <input type="email" value={draft.email} maxLength={MAX_SUPPORT_EMAIL_LENGTH} onChange={(event) => controller.update({ email: event.target.value })} placeholder="you@example.com" disabled={inputDisabled} />
         </label>
-        <p id={`${formId}-limits`}>{messageBytes.toLocaleString()} / {MAX_SUPPORT_MESSAGE_BYTES.toLocaleString()} message bytes; {bodyBytes.toLocaleString()} / {MAX_SUPPORT_BODY_BYTES.toLocaleString()} JSON bytes. Review the final text and remove confidential information.</p>
-        {draft.message.trim() && !validation.success && <p className="support-modal-error" role="alert">{validation.result.error}</p>}
-        {draft.result && !draft.result.success && <p className="support-modal-error" role="alert">{draft.result.error}</p>}
-        {unknown && <p role="alert">We could not confirm whether support received this report. It may have arrived. Retrying may send a duplicate. Your draft has been kept.</p>}
-        {accepted && <p className="support-modal-success" role="status">Accepted by the recipient service. This does not mean it has been reviewed.</p>}
-        {draft.isSubmitting && <p role="status">Waiting for an acknowledgement. Closing this dialog does not retract a request already sent.</p>}
+        <p id={`${formId}-limits`}>Review the final text and remove confidential information before copying it.</p>
+
+        <label>
+          <span>Official report recipient</span>
+          <input type="text" value={SUPPORT_EMAIL_RECIPIENT} readOnly onFocus={(event) => event.currentTarget.select()} />
+        </label>
+        <label>
+          <span>Exact report preview</span>
+          <textarea ref={reportRef} value={report} readOnly aria-describedby={`${formId}-copy-help`} />
+        </label>
+        <p id={`${formId}-copy-help`}>Copy report copies exactly this preview. If clipboard access fails, select and copy this text manually, then email the official recipient.</p>
+        {handoff && <p className={handoff.success ? 'support-modal-success' : 'support-modal-error'} role={handoff.success ? 'status' : 'alert'}>{handoff.message}</p>}
+        {handoffBusy && <p role="status">{handoffBusy === 'copy' ? 'Copying report…' : 'Requesting email app…'}</p>}
 
         <footer>
-          <button type="button" disabled={draft.isSubmitting} onClick={discard}>Discard draft</button>
+          <button type="button" disabled={inputDisabled} onClick={discard}>Discard draft</button>
           <button type="button" onClick={closeAndKeepDraft}>Close and keep draft</button>
-          <button className="primary" type="button" disabled={!SUPPORT_FORWARDING_ENABLED || draft.isSubmitting || !validation.success} onClick={submit}>
-            {draft.isSubmitting ? 'Sending...' : unknown ? 'Retry (may duplicate)' : 'Send unavailable'}
-          </button>
+          <button className="primary" type="button" disabled={inputDisabled || !canCopy} onClick={() => void handoffReport('copy')}>Copy report</button>
+          <button type="button" disabled={inputDisabled} onClick={() => void handoffReport('email')}>Open email app</button>
         </footer>
       </section>
     </div>,

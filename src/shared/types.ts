@@ -436,6 +436,11 @@ export interface AiIssueProcessResult {
   provider?: AiProvider;
   error?: string;
 }
+/** A composer request is never evidence that an email was sent or delivered. */
+export type SupportEmailResult =
+  | { requested: true }
+  | { requested: false; error: string };
+
 export interface FeedbackPayload {
   type: 'Bug' | 'Feature';
   message: string;

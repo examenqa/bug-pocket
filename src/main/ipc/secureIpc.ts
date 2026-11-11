@@ -369,6 +369,7 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   validators['clipboard:copy'] = args(stringValue(maxTextLength));
   validators['shell:openExternal'] = args(webUrl);
   validators['support:sendFeedback'] = args(feedbackPayload);
+  validators['support:openEmail'] = args();
   validators['details:flushComplete'] = args(nonEmptyString(128), booleanValue);
   for (const channel of ['capture:listPending','capture:discardPending','window:hideQuickCapture','quickScreenshot:getPending','quickScreenshot:discardPending']) {
     validators[channel] = args(nullable(captureContext));

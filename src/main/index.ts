@@ -15,6 +15,7 @@ import { triageBugWithOllama } from './ai/ollamaTriage';
 import { getByokAiConfig, processIssueWithByokAi, saveByokAiConfig, triageBugWithByokAi } from './ai/byokIssueProcessor';
 import { registerGetByokAiConfigIpc } from './ipc/byokAiConfigIpc';
 import { registerBugDeletionIpc } from './ipc/bugDeletionIpc';
+import { registerSupportEmailIpc } from './ipc/supportEmailIpc';
 import { createIpcArgumentValidators, createSecureIpcRegistrar } from './ipc/secureIpc';
 import { assertWorkspaceAdminAccess, assertWorkspaceWriteAccess } from './ipc/workspaceWriteAccess';
 import { resolveVerifiedTriageAttachmentPath } from './ai/triageAttachment';
@@ -1134,6 +1135,7 @@ function registerIpc(): void {
     return shell.openExternal(parsed.toString());
   });
   secureIpc.handle('support:sendFeedback', (_event, payload: FeedbackPayload) => operationBarrier.acquire(() => sendFeedbackToExamenQa(payload)));
+  registerSupportEmailIpc(secureIpc, (uri) => shell.openExternal(uri));
 
   secureIpc.handle('details:setDirty', (event, dirty: boolean) => {
     if (event.sender === mainWindow?.webContents) rendererHasDirtyDetails = dirty;

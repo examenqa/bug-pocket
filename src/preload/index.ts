@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugStatusCounts, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction, SyncAccountSetup, SyncRuntimeStatus, TaxonomyId, TeamInvitePayload } from '../shared/types';
+import type { AiByokConfig, AiConfigSaveInput, AiIssueProcessPayload, AiProvider, BugFilters, BugStatusCounts, BugUpdateInput, CapturePresetInput, FeedbackPayload, QuickBugInput, ReferenceTable, ShortcutAction, SupportEmailResult, SyncAccountSetup, SyncRuntimeStatus, TaxonomyId, TeamInvitePayload } from '../shared/types';
 
 let captureContext: import('../shared/types').CaptureContext | null = null;
 const api = {
@@ -90,6 +90,7 @@ const api = {
   copyText: (text: string) => ipcRenderer.invoke('clipboard:copy', text),
   openExternalUrl: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
   sendFeedback: (payload: FeedbackPayload) => ipcRenderer.invoke('support:sendFeedback', payload),
+  openSupportEmail: (): Promise<SupportEmailResult> => ipcRenderer.invoke('support:openEmail'),
   setDetailsDirty: (dirty: boolean) => ipcRenderer.invoke('details:setDirty', dirty),
   detailsFlushComplete: (requestId: string, success: boolean) => ipcRenderer.invoke('details:flushComplete', requestId, success),
   startScreenshotCapture: (bugId?: number) => ipcRenderer.invoke('screenshot:start', bugId, captureContext),

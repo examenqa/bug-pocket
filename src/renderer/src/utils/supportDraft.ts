@@ -1,11 +1,18 @@
 import type { FeedbackPayload } from '../../../shared/types';
 import {
   safeSupportFeedbackResult,
+  SUPPORT_EMAIL_RECIPIENT,
   supportFailure,
   type SupportFeedbackResult
 } from '../../../shared/supportFeedback';
 
 export type SupportDraftMode = 'bug' | 'feature' | 'ai_output';
+
+export const supportCategoryLabels: Record<SupportDraftMode, string> = {
+  bug: 'Bug feedback',
+  feature: 'Feature feedback',
+  ai_output: 'Inappropriate AI output'
+};
 
 export interface SupportTextSelection {
   id: string;
@@ -22,6 +29,50 @@ export interface SupportDraftSnapshot {
 }
 
 type DraftSubmitter = (payload: FeedbackPayload) => Promise<unknown>;
+
+export interface SupportHandoffResult {
+  success: boolean;
+  message: string;
+}
+
+/** Exactly the visible category, edited message and optional contact; never report metadata. */
+export function supportReportText(draft: Pick<SupportDraftSnapshot, 'category' | 'message' | 'email'>): string {
+  return `Category: ${supportCategoryLabels[draft.category]}\n\nMessage:\n${draft.message}`
+    + (draft.email.trim() ? `\n\nContact email: ${draft.email}` : '');
+}
+
+export async function copySupportReport(
+  draft: Pick<SupportDraftSnapshot, 'category' | 'message' | 'email'>,
+  copyText: (text: string) => Promise<unknown>
+): Promise<SupportHandoffResult> {
+  try {
+    await copyText(supportReportText(draft));
+    return { success: true, message: 'Report copied. Paste it into your email app and send it yourself.' };
+  } catch {
+    return {
+      success: false,
+      message: 'Could not copy the report. Select the report preview and copy it manually. Your draft has been kept.'
+    };
+  }
+}
+
+export async function requestSupportEmail(requestComposer: () => Promise<unknown>): Promise<SupportHandoffResult> {
+  try {
+    const result = await requestComposer();
+    if (result && typeof result === 'object' && 'requested' in result && result.requested === true) {
+      return {
+        success: true,
+        message: 'Email-app request made. If a composer appears, paste the copied report and send it yourself. Sending, delivery and review are not confirmed.'
+      };
+    }
+  } catch {
+    // A missing mail app or IPC failure leaves the editable draft untouched.
+  }
+  return {
+    success: false,
+    message: `Could not request an email composer. Copy the report or select its preview and email ${SUPPORT_EMAIL_RECIPIENT} manually. Your draft has been kept.`
+  };
+}
 
 export function supportPayloadForDraft(draft: Pick<SupportDraftSnapshot, 'category' | 'message' | 'email'>): FeedbackPayload {
   return {

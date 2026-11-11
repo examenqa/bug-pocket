@@ -5398,6 +5398,10 @@ button.danger-soft {
   font-size: 18px;
 }
 
+.support-modal footer {
+  flex-wrap: wrap;
+}
+
 .support-modal p {
   margin: 0;
   color: var(--muted);

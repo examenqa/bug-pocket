@@ -2,6 +2,7 @@ import type { FeedbackPayload } from './types';
 
 // Deliberate source gate. Configuration or credentials cannot enable submission.
 export const SUPPORT_FORWARDING_ENABLED = false;
+export const SUPPORT_EMAIL_RECIPIENT = 'valisheik@examenqa.com';
 export const MAX_SUPPORT_MESSAGE_BYTES = 10_000;
 export const MAX_SUPPORT_BODY_BYTES = 16 * 1024;
 export const MAX_SUPPORT_EMAIL_LENGTH = 254;

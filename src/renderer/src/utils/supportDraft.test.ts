@@ -3,10 +3,111 @@ import test from 'node:test';
 import {
   appendSupportText,
   createSupportDraftController,
+  copySupportReport,
   getSupportDraftController,
+  requestSupportEmail,
   selectedSupportText,
-  supportPayloadForDraft
+  supportPayloadForDraft,
+  supportReportText
 } from './supportDraft';
+
+test('email report preview includes only the visible category, exact edited message and optional contact', () => {
+  const reviewed = {
+    category: 'ai_output' as const,
+    message: '  Reviewed text\nwith my edits.  ',
+    email: 'qa@example.invalid',
+    bug_id: 'hidden bug',
+    workspace_id: 'hidden workspace',
+    attachments: ['hidden screenshot'],
+    original_ai_output: 'unselected output'
+  };
+  assert.equal(supportReportText(reviewed),
+    'Category: Inappropriate AI output\n\nMessage:\n  Reviewed text\nwith my edits.  \n\nContact email: qa@example.invalid');
+  assert.equal(supportReportText({ ...reviewed, category: 'bug', email: '' }),
+    'Category: Bug feedback\n\nMessage:\n  Reviewed text\nwith my edits.  ');
+  assert.equal(supportReportText({ category: 'feature', message: 'Idea', email: '   ' }),
+    'Category: Feature feedback\n\nMessage:\nIdea');
+});
+
+test('copy uses exactly the selectable preview through an injected clipboard without clearing a draft', async () => {
+  const controller = createSupportDraftController('bug');
+  controller.update({ message: 'Explicit report', email: 'qa@example.invalid' });
+  const before = controller.getSnapshot();
+  const copied: string[] = [];
+  const result = await copySupportReport(before, async (text) => { copied.push(text); });
+  assert.deepEqual(copied, [supportReportText(before)]);
+  assert.equal(result.success, true);
+  assert.match(result.message, /Report copied/);
+  assert.equal(controller.getSnapshot(), before);
+  controller.update({ message: '"'.repeat(9000), email: '' });
+  let longCopy = '';
+  const longResult = await copySupportReport(controller.getSnapshot(), async (text) => { longCopy = text; });
+  assert.equal(longResult.success, true);
+  assert.equal(longCopy, supportReportText(controller.getSnapshot()), 'plaintext copy has no JSON transport body');
+});
+
+test('clipboard failure keeps the exact preview and edited draft available for manual copying', async () => {
+  const controller = createSupportDraftController('ai_output');
+  controller.update({ message: 'Explicitly inserted and reviewed text' });
+  const before = controller.getSnapshot();
+  let attempted = '';
+  const result = await copySupportReport(before, async (text) => {
+    attempted = text;
+    throw new Error('private clipboard diagnostic');
+  });
+  assert.equal(result.success, false);
+  assert.match(result.message, /Select the report preview and copy it manually/);
+  assert.doesNotMatch(result.message, /private clipboard diagnostic/);
+  assert.equal(attempted, supportReportText(controller.getSnapshot()));
+  const stop = controller.subscribe(() => {});
+  stop(); // Close/reopen removes listeners, not the draft.
+  assert.equal(controller.getSnapshot(), before);
+  controller.update({ message: 'Still editable' });
+  assert.equal(controller.getSnapshot().message, 'Still editable');
+  assert.equal(controller.discard(), true);
+  assert.equal(controller.getSnapshot().message, '');
+});
+
+test('composer fake receives no report data and success describes only a request', async () => {
+  const controller = createSupportDraftController('feature');
+  controller.update({ message: 'Keep private until pasted', email: 'qa@example.invalid' });
+  const before = controller.getSnapshot();
+  const calls: unknown[][] = [];
+  const result = await requestSupportEmail(async (...args: unknown[]) => {
+    calls.push(args);
+    return { requested: true };
+  });
+  assert.deepEqual(calls, [[]]);
+  assert.equal(result.success, true);
+  assert.match(result.message, /Email-app request made/);
+  assert.match(result.message, /If a composer appears/);
+  assert.match(result.message, /Sending, delivery and review are not confirmed/);
+  assert.equal(controller.getSnapshot(), before);
+});
+
+test('failed or malformed composer responses use the manual fallback without claiming a request succeeded', async () => {
+  for (const reply of [undefined, null, {}, { success: true }, { requested: 'true' }, { requested: false, error: 'private error' }]) {
+    const result = await requestSupportEmail(async () => reply);
+    assert.equal(result.success, false);
+    assert.match(result.message, /valisheik@examenqa.com manually/);
+    assert.match(result.message, /draft has been kept/);
+    assert.doesNotMatch(result.message, /private error|sent successfully|Email-app request made/);
+  }
+  const result = await requestSupportEmail(async () => { throw new Error('private failure'); });
+  assert.equal(result.success, false);
+  assert.doesNotMatch(result.message, /private failure/);
+});
+
+test('composer completion cannot replace edits made while a fake request is pending', async () => {
+  const controller = createSupportDraftController('ai_output');
+  let complete!: (value: unknown) => void;
+  const pending = requestSupportEmail(() => new Promise((resolve) => { complete = resolve; }));
+  controller.update({ category: 'bug', message: 'New reviewed text', email: 'qa@example.invalid' });
+  const edited = controller.getSnapshot();
+  complete({ requested: true });
+  await pending;
+  assert.equal(controller.getSnapshot(), edited);
+});
 
 test('opening an AI draft selects no report content and payload contains only explicit fields', () => {
   const controller = createSupportDraftController('ai_output');
