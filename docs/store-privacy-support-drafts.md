@@ -4,7 +4,17 @@
 
 Prepared against `examenqa/bug-pocket`, branch `codex/exa-66-electron-45-2-1`, HEAD `30180af4754526a3c5a72412beaf881659a8133f`. This document proposes replacement sections for the existing privacy/support pages and short in-app instructions. Source tags and editorial notes are review aids, not customer copy. No website, service or Partner Center change is included.
 
+## Confirmed owner launch choices — 11 November 2026
+
+Bug Pocket is approved as free to use and open source under the existing [MIT licence](../LICENSE), with [source code in examenqa/bug-pocket](https://github.com/examenqa/bug-pocket). Retain licensing files unchanged. Launch in all markets available for this product; English is the confirmed language for the app, website and Store listing. The confirmed primary category is **Developer tools**, with subcategory **Utilities**. Optional AI/cloud-provider accounts and usage may incur separate charges; these are separate from the free application's price. [O5]
+
+These are confirmed owner choices, not a record of settings entered or verified in Partner Center. Partner Center entry and verification, final wording acceptance, age ratings, screenshots, operator/manual acceptance and release gates remain pending. These decisions do not authorize publication.
+
 ## Proposed replacement privacy sections
+
+### Free and open source
+
+Bug Pocket is free to use and open source under the MIT licence. [Source repository](https://github.com/examenqa/bug-pocket). Optional AI and cloud services may require accounts and incur separate provider charges under their own terms. Those charges are separate from Bug Pocket's application price. [O5, S2, S4]
 
 ### Local capture, files and backups
 
@@ -56,6 +66,8 @@ We cannot promise removal of clipboard history, recipient/user copies, exported 
 
 ## Proposed support-page replacement
 
+Bug Pocket is free to use and open source under the MIT licence ([source repository](https://github.com/examenqa/bug-pocket)). Optional AI/cloud-provider charges are separate from the application's price. [O5]
+
 For Bug Pocket support, feature feedback, privacy/deletion requests or concerns about generated output, email **valisheik@examenqa.com**.
 
 From **Help & Support**, choose **Report a Bug** or **Request a Feature**. To report generated output, choose **Report inappropriate AI output** from the report preview. Review the category and final text, optionally add contact email, and check **Exact report preview**. Choose **Copy report**, then **Open email app**. The requested subject is **Bug Pocket report**; paste the copied text, review it and send it yourself. No attachment or body is inserted automatically. If either action fails, select/copy the preview and create the email manually. Copying or requesting a composer does not confirm sending, delivery or review. [S5]
@@ -79,6 +91,7 @@ Closing the dialog keeps the draft in this app window's memory. **Discard draft*
 ## Owner decisions, manual checks and publication prerequisites
 
 - [ ] Vali accepts final privacy/support wording and the proposed destinations, including official contact and an accurate separate website-form description. Publish only through a separately authorized change; reconcile privacy, support/help, relevant marketing/terms, in-app links and Store fields.
+- [ ] Verify final English app/website/Store wording and later Partner Center entries against the confirmed free/open-source, market and category choices above. Publication requires separate authorization. [O5]
 - [ ] Confirm practical monitoring, assessment/developer action and handling for manual AI-output emails. Apply D3 only to identified privacy requests; finalize email-service/access/copy limitations from existing evidence. Do not reopen D1–D3 or transfer the Slack terms to email.
 - [ ] Later authorized manual acceptance: real preview/clipboard fallback and composer/no-mail-app behavior, user-sent email/receipt, draft retention/discard, keyboard/focus/Narrator and operator handling. No such acceptance occurred here.
 - [ ] Match the frozen candidate's provider/image controls, BYOC/background/sign-out/reset/backup behavior and current provider-account disclosures. Keep unavailable provider details qualified.
@@ -100,6 +113,7 @@ All repository line references below refer to HEAD `30180af4754526a3c5a72412beaf
 - **O2 — Official contact correction:** [8 November accepted addendum](C:/MyApps/BugPocket-compliance-evidence/EXA-51/20261108-contact-correction-01a1a741/00-ADDENDUM.txt). `examenmail.com` is a test catcher, not an operational support/privacy/deletion contact; changing copy does not establish changed forwarding.
 - **O3 — Accepted D1–D3, without scope expansion:** [6 November A4 owner choices](C:/MyApps/BugPocket-compliance-evidence/EXA-51/20261106-slack-handling-01a1a741/13-D1-D3-OWNER-CHOICES.txt), plus O2's mailbox correction. D3 remains a qualified manual target, not evidence of cleanup.
 - **O4 — Existing disabled/paused operational boundary:** [7 November enablement gates](C:/MyApps/BugPocket-compliance-evidence/EXA-51/20261107-settings-acceptance-01a1a741/02-ENABLEMENT-GATES.txt), O2's later corrections, and the current owner's 11 November instruction. Reused only; no settings or security investigation reopened.
+- **O5 — Confirmed launch choices:** Vali's 11 November 2026 instruction in this chat, “EXA-51 / EXA-53 — record approved launch choices”: free to use/open source; existing MIT retained; all markets available for this product; English app/website/Store; Developer tools / Utilities. [Existing licence](../LICENSE) and [source repository](https://github.com/examenqa/bug-pocket). Owner approval does not establish Partner Center entry or publication approval.
 - **W1 — Existing public copy, read 11 November:** [privacy](https://bugpocket.app/privacy), [home](https://bugpocket.app/), [help](https://bugpocket.app/help). Published claims are evidence of wording, not proof of current service behavior.
 - **M1 — Official current policy:** [Microsoft Store Policies](https://learn.microsoft.com/en-us/windows/apps/publish/store-policies#105-personal-information), §10.5 and [§11.16 live generative AI](https://learn.microsoft.com/en-us/windows/apps/publish/store-policies#1116-live-generative-ai-content), v7.20, effective 22 October 2026.
 - **M2 — Official fields:** [Privacy policy and support info](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/support-info), checked 11 November 2026.

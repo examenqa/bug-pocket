@@ -4,6 +4,21 @@
 
 Source baseline: `examenqa/bug-pocket` / `codex/exa-66-electron-45-2-1` / `30180af4754526a3c5a72412beaf881659a8133f`. Customer copy below describes the intended first Store release and must match the accepted final candidate before use. Source references and pending items are editorial, not storefront copy.
 
+## Confirmed owner launch choices — 11 November 2026
+
+| Item | Confirmed owner choice |
+| --- | --- |
+| Application price | Free to use |
+| Source and licence | Open source under the existing MIT licence; retain licensing files unchanged |
+| Launch markets | All markets available for this product |
+| Language | English for the app, website and Store listing |
+| Primary category | Developer tools |
+| Subcategory | Utilities |
+
+Source code: [examenqa/bug-pocket](https://github.com/examenqa/bug-pocket). Licence: [existing MIT licence](../LICENSE). Optional AI/cloud-provider accounts and usage may incur separate charges; these are not the application's price. [R8]
+
+These are confirmed owner choices, not a record of settings entered or verified in Partner Center. Partner Center entry and verification remain pending. Final wording, operational/manual acceptance and release gates remain pending; these decisions do not authorize publication.
+
 ## Scope to preserve
 
 First public Store launch, native x64 first, with Windows 10 included in the intended audience and older/current Windows 11 in the validation matrix. Windows 10 22H2/build 19045 is the first trial target. The separate AppX config declares provisional `10.0.19045.0` minimum/tested values; these are not measured compatibility or a proven lowest supported Windows build. ARM64/emulation support is not accepted for this initial scope. [R1, R2]
@@ -20,28 +35,29 @@ Bug Pocket
 
 ### Short description
 
-Capture bugs without breaking your testing flow. Save notes and screenshots locally, annotate evidence, format reports, and choose optional AI assistance or your own cloud sync.
+Free and open source bug capture for QA. Save notes and screenshots locally, annotate evidence, format reports, and choose optional AI assistance or your own cloud sync.
 
 ### Full description
 
-Bug Pocket helps QA testers capture an issue quickly and finish the report when they are ready.
+Bug Pocket is free to use and open source under the MIT licence. It helps QA testers capture an issue quickly and finish the report when they are ready.
 
 Save a short bug note and screenshot while you work. Add annotations, organize the details, and format a report using editable templates. Copy report text, save screenshot evidence, or open a report in Linear or your configured Jira site.
 
 Local capture works without a cloud account or internet connection. Create and restore backup archives containing local data, the active workspace and their referenced attachments. Inactive workspace databases are excluded.
 
-Optional AI assistance can help draft report fields from text and, when included, a screenshot. Bring your own provider key and compatible endpoint, or use your own local Ollama server and model. AI suggestions need your review. Provider access, account requirements and any charges depend on the service you choose.
+Optional AI assistance can help draft report fields from text and, when included, a screenshot. Bring your own provider key and compatible endpoint, or use your own local Ollama server and model. AI suggestions need your review. Provider access and account requirements depend on the service you choose.
 
-For optional Cloud Sync, connect your own Supabase project. Configured authentication, workspace sync, attachment transfers and keep-alive requests can run in the background. AI requests to remote providers and configured cloud features transmit relevant data; local capture does not mean every feature stays on the device.
+For optional Cloud Sync, connect your own Supabase project. Configured authentication, workspace sync, attachment transfers and keep-alive requests can run in the background. AI requests to remote providers and configured cloud features transmit relevant data; local capture does not mean every feature stays on the device. Optional AI/cloud-provider charges are separate from Bug Pocket's free application price.
 
 To report a problem or inappropriate AI output, prepare and edit a text-only report in the app. Copy its exact preview, request your email app, then paste, review and send it yourself. The app does not confirm sending, delivery or review.
 
-Editorial factual basis: [R3–R6]. Do not paste this basis line into the Store description.
+Editorial factual basis: [R3–R6, R8]. Do not paste this basis line into the Store description.
 
 ### Product features
 
 Each line is a proposed separate feature field:
 
+- Free and open source under the MIT licence
 - Quick bug notes and screenshot capture with local storage
 - Screenshot annotations: arrows, freehand, text, masks and undo
 - Editable bug details, taxonomy, filters and report templates
@@ -52,11 +68,11 @@ Each line is a proposed separate feature field:
 - Global shortcuts and tray access
 - Text-only support and AI-output reports through a manual email handoff
 
-Editorial basis: [R3–R6]. Every feature line is under 200 characters. Startup controls remain in the first-release scope; add customer-facing startup wording only after installed behavior is accepted. Do not drop that requirement to finalize the listing. No working-installed-startup claim is made here. [R2]
+Editorial basis: [R3–R6, R8]. Every feature line is under 200 characters. Startup controls remain in the first-release scope; add customer-facing startup wording only after installed behavior is accepted. Do not drop that requirement to finalize the listing. No working-installed-startup claim is made here. [R2]
 
 ### AI-use disclosure
 
-Bug Pocket includes optional live generative AI for drafting bug-report fields. You choose a configured BYOK provider/compatible endpoint or native local Ollama. Requests can include report text/context, prompts and an optional screenshot. Remote providers receive that data; their account terms and charges apply. Review generated text before use. Report inappropriate output from the report preview using the manual email handoff. [R4, R6]
+Bug Pocket includes optional live generative AI for drafting bug-report fields. You choose a configured BYOK provider/compatible endpoint or native local Ollama. Requests can include report text/context, prompts and an optional screenshot. Remote providers receive that data; their account terms and any charges apply separately from Bug Pocket's free application price. Review generated text before use. Report inappropriate output from the report preview using the manual email handoff. [R4, R6, R8]
 
 This is metadata copy only. The corresponding Partner Center live-AI declaration, reporting/operator handling and final controls remain acceptance items. Current policy is **§11.16**, not §10.2.9. [M1]
 
@@ -94,7 +110,8 @@ These are future reviewer steps, not a completed test record. The reporting chec
 ## Finalisation checklist
 
 - [ ] **Vali acceptance:** final description/features, live-AI disclosure, manual reporting/handling and privacy/support destinations; EXA-51/53 acceptance is still pending.
-- [ ] **Submission decisions:** category/subcategory (Productivity is a proposal), age-rating questionnaire, pricing, markets, discoverability, release date/publishing hold, languages, search terms, publisher/legal details and any other unconfirmed fields. No “free,” age rating or launch date is assumed.
+- [ ] **Enter and verify approved choices:** Free application price, all markets available for this product, English, and Developer tools / Utilities. Owner decisions are confirmed; Partner Center entry and final English app/website/Store consistency remain to be verified. [R8]
+- [ ] **Remaining submission decisions:** age-rating questionnaire, discoverability, release date/publishing hold, search terms, publisher/legal details and any other unconfirmed fields. No age rating or launch date is assumed.
 - [ ] **Assets:** final-candidate screenshots, captions and any promotional material. Prepared package logos do not satisfy screenshot or accessibility acceptance. For this first submission, leave “What's new” blank. [M2]
 - [ ] **Candidate match:** actual architecture/Windows declarations, installed startup/shortcuts/tray, accessibility, capabilities, native/codec/notices, provider/cloud and final candidate acceptance; then WACK, certification and delivered-install/update gates. Preserve the x64-first Windows 10-inclusive first-public-launch scope.
 - [ ] **Operational/publication:** accept manual mailbox monitoring and appropriate AI-report action; keep D3 cleanup limited to privacy requests. Publish aligned privacy/support/public copy and check live links only through separately authorized work. Do not reopen paused Slack/BPR1 provisioning or assume its conditional retention terms apply to email.
@@ -111,6 +128,7 @@ Repository references are to HEAD `30180af4754526a3c5a72412beaf881659a8133f`; cu
 - **R5 — Backups/BYOC:** [database.ts](../src/main/database.ts), lines 267–325; [backupService.ts](../src/main/sync/backupService.ts), lines 109–138; [syncService.ts](../src/main/sync/syncService.ts), lines 134–180, 358–400, 660–701, 1043–1083; [keepAlive.ts](../src/main/sync/keepAlive.ts), lines 1–48; [index.ts](../src/main/index.ts), lines 84–88, 667–699.
 - **R6 — Exact manual flow and validation limits:** [supportDraft.ts](../src/renderer/src/utils/supportDraft.ts), lines 38–74, 99–160; [SupportModal.tsx](../src/renderer/src/components/shared/SupportModal.tsx), lines 167–254; [supportEmailIpc.ts](../src/main/ipc/supportEmailIpc.ts), lines 12–24; [App.tsx](../src/renderer/src/App.tsx), lines 137–140, 249–274; [checkpoint commit and validation record](https://github.com/examenqa/bug-pocket/commit/30180af4754526a3c5a72412beaf881659a8133f); [disabled actual main entry](../src/main/support/feedbackService.ts), lines 62–77; [source gate](../src/shared/supportFeedback.ts), lines 3–5.
 - **R7 — Privacy/owner/public-copy reconciliation:** [companion draft and full source register](store-privacy-support-drafts.md); [8 November official-contact correction](C:/MyApps/BugPocket-compliance-evidence/EXA-51/20261108-contact-correction-01a1a741/00-ADDENDUM.txt); [accepted D1–D3 scope](C:/MyApps/BugPocket-compliance-evidence/EXA-51/20261106-slack-handling-01a1a741/13-D1-D3-OWNER-CHOICES.txt); [privacy](https://bugpocket.app/privacy), [home](https://bugpocket.app/), [help](https://bugpocket.app/help), read 11 November, plus this task's owner instruction.
+- **R8 — Confirmed launch choices:** Vali's 11 November 2026 instruction in this chat, “EXA-51 / EXA-53 — record approved launch choices”: free to use/open source; existing MIT retained; all markets available for this product; English app/website/Store; Developer tools / Utilities. [Existing licence](../LICENSE) and [source repository](https://github.com/examenqa/bug-pocket). Owner approval does not establish Partner Center entry or publication approval.
 - **M1 — Current official AI/accuracy rules:** [Store Policies §11.16](https://learn.microsoft.com/en-us/windows/apps/publish/store-policies#1116-live-generative-ai-content) and §10.1; v7.20, effective 22 October 2026, checked 11 November. Metadata/declaration, compliant content, reporting and appropriate developer action are separate requirements.
 - **M2 — Official listing guidance:** [MSIX Store listing fields](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/add-and-edit-store-listing-info), checked 11 November: plain-text description ≤10,000 characters; features ≤200 characters each, at most 20; at least one screenshot; first-submission “What's new” blank.
 - **M3 — Official privacy/support fields:** [Privacy policy and support info](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/support-info).
