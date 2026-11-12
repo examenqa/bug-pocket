@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { collectNotices, writeOutputs } = require('./generate-third-party-notices.cjs');
+const { collectNotices, collectProductionNotices, writeOutputs } = require('./generate-third-party-notices.cjs');
 
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const json = (value) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
@@ -461,4 +461,155 @@ test('correction: independently requires each of the seven pending dispositions'
       });
     });
   }
+});
+
+const production = (f) => collectProductionNotices({ root: f.root, manifestPath: f.manifestPath });
+
+test('production notices records current and reviewed root hashes without refreshing historical evidence', (t) => {
+  const f = fixture(t);
+  const reviewed = fs.readFileSync(f.manifestPath);
+  const app = JSON.parse(fs.readFileSync(path.join(f.root, 'package.json'), 'utf8'));
+  app.devDependencies = { electron: '99.1.2' };
+  const lock = JSON.parse(fs.readFileSync(path.join(f.root, 'package-lock.json'), 'utf8'));
+  lock.packages[''].devDependencies = app.devDependencies;
+  lock.packages['node_modules/electron'] = { version: '99.1.2', dev: true };
+  write(f.root, 'package.json', json(app));
+  write(f.root, 'package-lock.json', json(lock));
+  const result = production(f);
+  assert.equal(result.inventory.collectionMode, 'production-notices');
+  assert.deepEqual(result.inventory.rootMetadata, [
+    { path: 'package.json', reviewedSha256: f.manifest.packageJsonSha256,
+      actualSha256: hash(json(app)), differsFromReviewed: true },
+    { path: 'package-lock.json', reviewedSha256: f.manifest.packageLockSha256,
+      actualSha256: hash(json(lock)), differsFromReviewed: true }
+  ]);
+  assert.deepEqual(fs.readFileSync(f.manifestPath), reviewed);
+  assert.throws(() => run(f), { code: 'CHANGED_INPUT' }, 'forensic collection retains its strict root pins');
+});
+
+test('production notices requires original notice text for every production package', (t) => {
+  const f = fixture(t);
+  fs.unlinkSync(path.join(f.root, 'node_modules/alpha/LICENSE'));
+  f.manifest.inputs = [];
+  f.save();
+  assert.throws(() => production(f), (error) => error.code === 'MISSING_INPUT' &&
+    error.message.includes('node_modules/alpha'));
+});
+
+test('production notices associates nested versions in text and inventory using the longest package root', (t) => {
+  const f = fixture(t, {
+    packages: [
+      { path: 'node_modules/alpha', name: 'alpha', version: '1.0.0', dependencies: { shared: '2.0.0' } },
+      { path: 'node_modules/shared', name: 'shared', version: '1.0.0' },
+      { path: 'node_modules/alpha/node_modules/shared', name: 'shared', version: '2.0.0' }
+    ],
+    dependencies: { alpha: '1.0.0', shared: '1.0.0' }
+  });
+  const result = production(f);
+  for (const record of f.manifest.packages) {
+    const input = result.inventory.inputs.find(entry => entry.packagePath === record.path);
+    assert.deepEqual(input.packages, [{ name: record.name, path: record.path, version: record.version }]);
+    assert.ok(result.notices.includes(Buffer.from(`${record.name}@${record.version} [${record.path}]`)));
+  }
+  assert.equal(result.inventory.packages.length, 3);
+});
+
+test('production notices rejects locked or installed version changes despite allowing root metadata drift', (t) => {
+  const locked = fixture(t);
+  const lock = JSON.parse(fs.readFileSync(path.join(locked.root, 'package-lock.json'), 'utf8'));
+  lock.packages['node_modules/alpha'].version = '2.0.0';
+  write(locked.root, 'package-lock.json', json(lock));
+  assert.throws(() => production(locked), { code: 'CHANGED_INPUT' });
+  const installed = fixture(t);
+  write(installed.root, 'node_modules/alpha/package.json', json({ name: 'alpha', version: '2.0.0', license: 'MIT' }));
+  assert.throws(() => production(installed), { code: 'CHANGED_INPUT' });
+});
+
+test('production notices excludes only the historical Electron npm wrapper and preserves other supplements', (t) => {
+  const f = fixture(t);
+  f.manifest.inputs.push({ id: 'supplemental:electron-npm-wrapper', kind: 'supplemental',
+    sources: [{ path: 'node_modules/electron/LICENSE', sha256: hash(license), startByte: 0, endByte: license.length }],
+    textSha256: hash(license) });
+  const supplement = Buffer.from('Original supplemental source notice.\r\n');
+  write(f.root, 'compliance/notice-sources/original-NOTICE.txt', supplement);
+  f.manifest.inputs.push({ id: 'supplemental:original', kind: 'supplemental',
+    sources: [{ path: 'compliance/notice-sources/original-NOTICE.txt', sha256: hash(supplement), startByte: 0, endByte: supplement.length }],
+    textSha256: hash(supplement) });
+  f.save();
+  const result = production(f);
+  assert.deepEqual(result.inventory.inputs.map(entry => entry.id), [f.manifest.inputs[0].id, 'supplemental:original']);
+  assert.ok(result.notices.includes(supplement));
+  assert.ok(!result.notices.includes(Buffer.from('supplemental:electron-npm-wrapper')));
+  assert.deepEqual(result.inventory.excludedInputs.map(entry => entry.id), ['supplemental:electron-npm-wrapper']);
+  assert.throws(() => run(f), { code: 'MISSING_INPUT' });
+});
+
+test('production notices returns deduplicated whole original files without changing bytes or copying surrounding source', (t) => {
+  const f = fixture(t);
+  const excerpt = Buffer.from('/*! Copyright (c) Synthetic bundled authors. MIT. */');
+  const source = Buffer.concat([excerpt, Buffer.from('\r\nthrow new Error("SOURCE MUST NOT EXECUTE");\r\n')]);
+  write(f.root, 'node_modules/alpha/bundled.js', source);
+  f.manifest.inputs.push({ id: 'bundled-copyright', kind: 'copyright-excerpt',
+    sources: [{ path: 'node_modules/alpha/bundled.js', sha256: hash(source), startByte: 0, endByte: excerpt.length }],
+    textSha256: hash(excerpt) });
+  f.manifest.inputs.push({ ...f.manifest.inputs[0], id: 'supplemental:same-original', kind: 'supplemental' });
+  f.save();
+  const result = production(f);
+  assert.deepEqual(result.originals, [{ path: 'node_modules/alpha/LICENSE', bytes: license }]);
+  assert.deepEqual(result.inventory.originals, [{ path: 'node_modules/alpha/LICENSE', bytes: license.length, sha256: hash(license) }]);
+  assert.ok(result.notices.includes(excerpt));
+  assert.ok(!result.notices.includes(Buffer.from('throw new Error')));
+  assert.deepEqual(fs.readFileSync(path.join(f.root, 'node_modules/alpha/bundled.js')), source);
+});
+
+test('production notices preserves a reviewed README license section without shipping the surrounding README', (t) => {
+  const f = fixture(t);
+  fs.unlinkSync(path.join(f.root, 'node_modules/alpha/LICENSE'));
+  const prefix = Buffer.from('# Fixture usage\r\n\r\n');
+  const readme = Buffer.concat([prefix, license]);
+  write(f.root, 'node_modules/alpha/README.md', readme);
+  f.manifest.inputs[0].sources = [{ path: 'node_modules/alpha/README.md', sha256: hash(readme), startByte: prefix.length, endByte: readme.length }];
+  f.save();
+  const result = production(f);
+  assert.ok(result.notices.includes(license));
+  assert.ok(!result.notices.includes(prefix));
+  assert.deepEqual(result.originals, []);
+});
+
+test('production notices does not require or hash native payloads and keeps provenance pending', (t) => {
+  const f = fixture(t);
+  const relative = 'node_modules/alpha/prebuilds/win32-x64/alpha.node';
+  const old = Buffer.from([1, 2, 3]);
+  f.manifest.nativeFiles.push({ path: relative, sha256: hash(old), bytes: old.length });
+  f.save();
+  const missing = production(f);
+  assert.deepEqual(missing.inventory.nativeFiles, []);
+  assert.equal(missing.inventory.pending.find(entry => entry.id === 'native-sqlite').status, 'pending');
+  assert.match(missing.inventory.nativePayloadVerification, /not-performed/);
+  assert.throws(() => run(f), { code: 'MISSING_INPUT' });
+  write(f.root, relative, Buffer.from([9, 8, 7, 6]));
+  assert.deepEqual(production(f).notices, missing.notices);
+  assert.throws(() => run(f), { code: 'CHANGED_INPUT' });
+});
+
+test('production notices fails clearly when an original required file is missing', (t) => {
+  const f = fixture(t);
+  fs.unlinkSync(path.join(f.root, 'node_modules/alpha/LICENSE'));
+  assert.throws(() => production(f), (error) => error.code === 'MISSING_INPUT' &&
+    error.message.includes('node_modules/alpha/LICENSE'));
+});
+
+test('production notices rejects production closure drift and unreviewed original notice text', (t) => {
+  const changed = fixture(t);
+  const app = JSON.parse(fs.readFileSync(path.join(changed.root, 'package.json'), 'utf8'));
+  const lock = JSON.parse(fs.readFileSync(path.join(changed.root, 'package-lock.json'), 'utf8'));
+  app.dependencies.beta = '1.0.0';
+  lock.packages['node_modules/beta'] = { name: 'beta', version: '1.0.0' };
+  write(changed.root, 'package.json', json(app));
+  write(changed.root, 'package-lock.json', json(lock));
+  write(changed.root, 'node_modules/beta/package.json', json({ name: 'beta', version: '1.0.0' }));
+  assert.throws(() => production(changed), { code: 'UNEXPECTED_INPUT' });
+  const unexpected = fixture(t);
+  write(unexpected.root, 'node_modules/alpha/NOTICE', 'Unreviewed original attribution.\n');
+  assert.throws(() => production(unexpected), { code: 'UNEXPECTED_INPUT' });
 });

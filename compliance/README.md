@@ -1,6 +1,6 @@
 # Provisional notice collector
 
-This host-Node groundwork preserves reviewed source inputs. Collection success is **not release compliance approval**. Runtime/FFmpeg, native/Bare provenance, artwork and actual Store artifact acceptance stay pending. Packaging configuration and hooks do not invoke this collector.
+This host-Node groundwork preserves reviewed source inputs. Collection success is **not release compliance approval**. Runtime/FFmpeg, native/Bare provenance, artwork and actual Store artifact acceptance stay pending. The historical strict CLI below remains available; the Store-only packaging adapter is described in the 12 November addendum.
 
 Use Node 24.22.1 and the repository's existing installed dependencies. The collector uses only Node built-ins, reads JSON and bytes, and never imports application or dependency code. No installation, network call, build or runtime execution is part of collection.
 
@@ -40,5 +40,17 @@ Run only the synthetic regressions:
 
 Tests use unique external temporary fixtures. `NOTICE_TEST_TMPDIR` can select an external evidence parent. No installed package code is used.
 
-Later work must reconcile real bundle/native/package manifests, exact EXA-66-cleared runtime and alternate FFmpeg source/build/notices, artwork rights, corresponding-source/relinking/Store terms, packaging inclusion and installed notice accessibility. All proposed FFmpeg/runtime hooks and application UI integration remain deferred.
+Later work must reconcile real bundle/native/package manifests, exact EXA-66-cleared runtime and alternate FFmpeg source/build/notices, artwork rights, corresponding-source/relinking/Store terms, packaging inclusion and installed notice accessibility. Application UI integration remains deferred. Store-only source preparation below does not settle those pending dispositions.
+
+## 12 November 2026 — bounded Store notice preparation
+
+`collectProductionNotices()` reuses the reviewed inputs in `notices-inputs.json`; no new dependency or licence-auditing framework was added. The historical manifest is unchanged. Its whole-file root package/lock hashes predate the current runtime/source checkpoint. The Store adapter records both reviewed and actual root hashes instead of relabelling that evidence. It still requires the exact reviewed physical production package set, locked/installed versions, metadata hashes and original notice/source hashes. Missing original text for any package, changed versions, new packages or unreviewed notice/header inputs fail explicitly. It never substitutes an SPDX identifier or guessed licence text.
+
+The combined text and inventory associate each original input with its package name, exact version and physical path, including nested versions. Full standalone notice files retain every byte; reviewed README licence sections and copyright excerpts retain their exact selected bytes. Whole-file selections are also returned for packaging under `originals/`. Surrounding source code and README prose are not copied merely because they contain a selected excerpt. Ordering is deterministic and no machine paths or run timestamps are generated.
+
+This mode collects notices only: it does not hash or qualify native binaries. The strict historical `collectNotices()`/CLI behavior is preserved, including its original root/native-byte checks. All seven pending dispositions remain in the Store output. The sole excluded historical supplement is the Electron npm-wrapper licence; it cannot establish the future candidate's runtime notices.
+
+The future Store `afterPack` adapter in `scripts/prepare-store-notices.cjs` requires the actual candidate's nonempty regular `LICENSE.electron.txt` and `LICENSES.chromium.html`. Builder 26.18.1 retains these from the selected Electron distribution, renaming its root `LICENSE`. The adapter copies their original bytes into `resources/notices/electron/` and leaves the candidate originals in place. It has no fallback to an installed Electron directory. It stages the combined provisional text, inventory and complete original production notice files under `resources/notices/`, outside ASAR. Prior output is never overwritten; missing inputs fail before the notice directory is created. A write failure fails packaging; partial output must not be reused as accepted evidence.
+
+Only temporary synthetic fixtures were collected in this task. No production notice output or final candidate notices were generated, and no Electron/native/builder code was imported. The focused Node 24.22.1 run passed **70 tests, 0 failures, 0 skipped**, across the two notice test files. See `docs/store-appx-packaging.txt` for the exact command and remaining artifact-dependent acceptance. Source configuration and collection success establish no patent/licensing clearance.
 

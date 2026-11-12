@@ -242,14 +242,16 @@ function walkPackage(context, packagePath, callback) {
   }
   walk(directory, packagePath);
 }
-function collectNotices({ root, manifestPath }) {
+function collectReviewedNotices({ root, manifestPath }, productionNotices = false) {
   const context = readContext(root);
   const manifestFile = path.resolve(root, manifestPath);
   const manifestId = path.relative(context.root, manifestFile).split(path.sep).join('/');
   const manifest = context.json(manifestId);
   validateManifest(manifest);
-  const packageJson = context.json('package.json', manifest.packageJsonSha256);
-  const lock = context.json('package-lock.json', manifest.packageLockSha256);
+  // Store preparation reuses the reviewed production inputs while recording
+  // current root metadata separately. It never rewrites the historical manifest.
+  const packageJson = context.json('package.json', productionNotices ? undefined : manifest.packageJsonSha256);
+  const lock = context.json('package-lock.json', productionNotices ? undefined : manifest.packageLockSha256);
   const closure = closureFor(packageJson, lock, context);
   const packages = [...manifest.packages].sort((a, b) => compare(a.path, b.path));
   if (JSON.stringify(packages.map(entry => entry.path)) !== JSON.stringify(closure.paths)) {
@@ -264,11 +266,36 @@ function collectNotices({ root, manifestPath }) {
     return { ...entry, manifestLicense: metadata.license ?? null,
       parents: closure.edges.filter(edge => edge.to === entry.path).map(edge => ({ from: edge.from, name: edge.name })) };
   });
-  const inputs = [...manifest.inputs].sort((a, b) => compare(a.id, b.id)).map(entry => ({
+  const inputs = manifest.inputs.filter(entry => !productionNotices || entry.id !== 'supplemental:electron-npm-wrapper')
+    .sort((a, b) => compare(a.id, b.id)).map(entry => ({
     ...entry, sources: [...entry.sources].sort((a, b) =>
       compare(a.path, b.path) || a.startByte - b.startByte || a.endByte - b.endByte)
   }));
+  const packageRoots = [...packages].sort((a, b) => b.path.length - a.path.length || compare(a.path, b.path));
+  const associations = new Map();
+  if (productionNotices) {
+    for (const entry of inputs) {
+      const owners = new Map();
+      for (const source of entry.sources) {
+        const owner = packageRoots.find(candidate => source.path.startsWith(candidate.path + '/'));
+        if (owner) owners.set(owner.path, { path: owner.path, name: owner.name, version: owner.version });
+      }
+      const associated = [...owners.values()].sort((a, b) => compare(a.path, b.path));
+      if (entry.packagePath !== undefined && !owners.has(entry.packagePath)) {
+        fail('INVALID_MANIFEST', 'Notice package association disagrees with original source: ' + entry.id);
+      }
+      entry.packages = associated;
+      associations.set(entry.id, associated);
+    }
+    for (const entry of packages) {
+      if (!inputs.some(input => input.kind === 'notice' &&
+          associations.get(input.id).some(owner => owner.path === entry.path))) {
+        fail('MISSING_INPUT', 'Missing original license/notice text for production package: ' + entry.path);
+      }
+    }
+  }
   const selections = new Map();
+  const originals = new Map();
   const knownNotices = new Set();
   const knownHeaders = new Set();
   for (const entry of inputs) {
@@ -284,6 +311,11 @@ function collectNotices({ root, manifestPath }) {
       const selected = bytes.subarray(source.startByte, source.endByte);
       if (sha256(selected) !== entry.textSha256) fail('CHANGED_INPUT', 'Changed reviewed text: ' + entry.id);
       if (first && !first.equals(selected)) fail('CHANGED_INPUT', 'Conflicting reviewed text: ' + entry.id);
+      // Originals contains only whole-file selections, never surrounding bundled
+      // code or README prose from which a reviewed copyright/license range came.
+      if (productionNotices && source.startByte === 0 && source.endByte === bytes.length) {
+        originals.set(source.path, bytes);
+      }
       first = selected;
       if (entry.kind === 'notice' && noticeName.test(path.posix.basename(source.path)) &&
           !/\.(?:[cm]?js|map|ts)$/i.test(source.path)) knownNotices.add(source.path);
@@ -294,7 +326,9 @@ function collectNotices({ root, manifestPath }) {
     catch { fail('INVALID_INPUT', 'Notice input is not UTF-8: ' + entry.id); }
     selections.set(entry.id, first);
   }
-  const nativeFiles = [...manifest.nativeFiles].sort((a, b) => compare(a.path, b.path));
+  // Notice collection neither opens nor hashes native payloads. Their provenance
+  // stays pending, independently of preserved source notices and declarations.
+  const nativeFiles = productionNotices ? [] : [...manifest.nativeFiles].sort((a, b) => compare(a.path, b.path));
   const expectedNative = new Map(nativeFiles.map(entry => [entry.path, entry]));
   const observedNotices = new Set();
   const observedHeaders = new Set();
@@ -312,7 +346,7 @@ function collectNotices({ root, manifestPath }) {
           if (!knownHeaders.has(key)) fail('UNEXPECTED_INPUT', 'Unreviewed source copyright input: ' + id);
         }
       }
-      if (nativeName.test(basename)) {
+      if (!productionNotices && nativeName.test(basename)) {
         observedNative.add(id);
         const expected = expectedNative.get(id);
         if (!expected) fail('UNEXPECTED_INPUT', 'Unreviewed native payload: ' + id);
@@ -350,6 +384,19 @@ function collectNotices({ root, manifestPath }) {
     schemaVersion: 1, status: 'provisional', releaseComplianceApproved: false,
     scope: 'Reviewed source inputs and prospective package closure; no packaged runtime or legal acceptance.',
     packageJsonSha256: manifest.packageJsonSha256, packageLockSha256: manifest.packageLockSha256,
+    ...(productionNotices ? {
+      collectionMode: 'production-notices',
+      rootMetadata: ['package.json', 'package-lock.json'].map((id, index) => {
+        const reviewedSha256 = index === 0 ? manifest.packageJsonSha256 : manifest.packageLockSha256;
+        const actualSha256 = sha256(context.read(id));
+        return { path: id, reviewedSha256, actualSha256, differsFromReviewed: actualSha256 !== reviewedSha256 };
+      }),
+      excludedInputs: manifest.inputs.filter(entry => entry.id === 'supplemental:electron-npm-wrapper')
+        .map(entry => ({ id: entry.id, reason: 'Electron/Chromium notices must come from the actual future candidate.' })),
+      nativePayloadVerification: 'not-performed; original source notices do not establish native provenance',
+      originals: [...originals].sort(([a], [b]) => compare(a, b))
+        .map(([id, bytes]) => ({ path: id, bytes: bytes.length, sha256: sha256(bytes) }))
+    } : {}),
     counts, diagnosisCounts: manifest.diagnosisCounts || null,
     reconciliation: { differences, supplementalReason: manifest.reconciliation?.supplementalReason || null },
     discovery: { sourceHeaderScanBytes: 12000, note: 'Bounded source-header discovery is not full artifact/bundle license analysis.' },
@@ -364,6 +411,8 @@ function collectNotices({ root, manifestPath }) {
   for (const entry of inputs) {
     const first = entry.sources[0];
     chunks.push(Buffer.from('\n' + '='.repeat(78) + '\n' + entry.id + '\nKind: ' + entry.kind +
+      (productionNotices ? '\nPackages: ' + (entry.packages.map(owner =>
+        owner.name + '@' + owner.version + ' [' + owner.path + ']').join('; ') || 'supplemental source input') : '') +
       '\nSource: ' + first.path + '\nSource SHA-256: ' + first.sha256 +
       '\nReviewed text SHA-256: ' + entry.textSha256 +
       '\nAll source occurrences/ranges/hashes: third-party-inventory.provisional.json (' +
@@ -371,7 +420,15 @@ function collectNotices({ root, manifestPath }) {
     chunks.push(selections.get(entry.id));
     chunks.push(Buffer.from('\n'));
   }
-  return { notices: Buffer.concat(chunks), inventory };
+  return { notices: Buffer.concat(chunks), inventory,
+    ...(productionNotices ? { originals: [...originals].sort(([a], [b]) => compare(a, b))
+      .map(([id, bytes]) => ({ path: id, bytes })) } : {}) };
+}
+function collectNotices(options) {
+  return collectReviewedNotices(options);
+}
+function collectProductionNotices(options) {
+  return collectReviewedNotices(options, true);
 }
 function writeOutputs(outputDirectory, result, root) {
   const destination = path.resolve(outputDirectory);
@@ -406,7 +463,7 @@ function main(argv) {
     noticesSha256: sha256(result.notices),
     inventorySha256: sha256(Buffer.from(JSON.stringify(result.inventory, null, 2) + '\n')) }, null, 2));
 }
-module.exports = { collectNotices, writeOutputs };
+module.exports = { collectNotices, collectProductionNotices, writeOutputs };
 if (require.main === module) {
   try { main(process.argv.slice(2)); }
   catch (error) { console.error((error.code || 'COLLECTION_FAILED') + ': ' + error.message); process.exitCode = 1; }

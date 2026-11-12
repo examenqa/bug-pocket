@@ -2,8 +2,9 @@
 // Do not load this file or run the builder in the regular account.
 // package.json's default NSIS configuration and version remain unchanged.
 const { closeSync, existsSync, openSync, readSync, statSync } = require('node:fs');
-const { join } = require('node:path');
-const base = require('./package.json').build;
+const { join, resolve } = require('node:path');
+const metadata = require('./package.json');
+const base = metadata.build;
 
 // Explicit provisional declarations for the first Windows 10 22H2/x64 trial.
 // These are not measured compatibility results or the lowest supported OS.
@@ -73,6 +74,14 @@ requireStoreInputs();
 
 module.exports = {
   ...base,
+  // Store-only. Builder 26.18.1 passes this version and the target platform/arch
+  // to its alternate-FFmpeg injector before signing. No binary is acquired here.
+  electronVersion: metadata.devDependencies.electron,
+  downloadAlternateFFmpeg: true,
+  async afterPack(context) {
+    await require(resolve(__dirname, base.afterPack))(context);
+    await require('./scripts/prepare-store-notices.cjs')(context);
+  },
   extraMetadata: {
     ...base.extraMetadata,
     version: '1.1.0'
