@@ -320,35 +320,42 @@ async function createApplicationSession(options) {
   }
 }
 
-function assertOwnedStartupProfile(directory, owner, io = {}) {
-  const stat = io.lstat || lstatSync;
+function assertStartupProfileDirectory(directory, owner, io = {}) {
+  const stat = io.lstat || (path => lstatSync(path, { bigint: true }));
   const realpath = io.realpath || realpathSync;
-  const read = io.read || readFileSync;
   const candidate = resolve(directory);
   assert.equal(candidate, owner.directory, 'Refusing cleanup outside this startup profile');
   const rel = relative(owner.base, candidate);
   assert.ok(rel && !rel.startsWith('..') && !rel.includes(sep) && basename(rel).startsWith('bug-pocket-exa70-startup-'),
     'Refusing cleanup outside owned startup root');
+  let directoryStat;
   for (let current = candidate; ; current = dirname(current)) {
-    assert.equal(stat(current).isSymbolicLink(), false, `Refusing linked startup cleanup path: ${current}`);
+    const entry = stat(current);
+    assert.equal(entry.isSymbolicLink(), false, `Refusing linked startup cleanup path: ${current}`);
+    if (current === candidate) directoryStat = entry;
     const parent = dirname(current);
     if (parent === current) break;
   }
   const normalize = value => process.platform === 'win32' ? resolve(value).toLowerCase() : resolve(value);
   assert.equal(normalize(realpath(candidate)), normalize(candidate), 'Startup cleanup real path changed');
+  return directoryStat;
+}
+
+function assertOwnedStartupProfile(directory, owner, io = {}) {
+  assertStartupProfileDirectory(directory, owner, io);
+  const stat = io.lstat || lstatSync;
+  const read = io.read || readFileSync;
+  const candidate = resolve(directory);
   const marker = join(candidate, '.startup-profile-owner');
   assert.equal(stat(marker).isSymbolicLink(), false, 'Startup ownership marker became a link');
   assert.equal(read(marker, 'utf8'), owner.token, 'Startup ownership marker changed');
 }
 
-async function runMode(mode) {
-  const temporary = mkdtempSync(join(tmpdir(), 'bug-pocket-exa70-startup-'));
-  const profile = join(temporary, 'profile');
-  mkdirSync(profile);
-  const expectedUserData = mode === 'packaged' ? profile : `${profile}-dev`;
-  mkdirSync(expectedUserData, { recursive: true });
-  const owner = { directory: resolve(temporary), base: resolve(tmpdir()), token: randomUUID() };
-  writeFileSync(join(temporary, '.startup-profile-owner'), owner.token, { flag: 'wx' });
+async function runMode(mode, { temporaryBase = tmpdir(), makeTemporary = mkdtempSync,
+  mkdir = mkdirSync, write = writeFileSync, startSession = createApplicationSession, cleanupOptions = {} } = {}) {
+  let temporary;
+  let owner;
+  let ownershipInitialized = false;
   let session;
   let result;
   let firstError;
@@ -360,7 +367,17 @@ async function runMode(mode) {
   const cssPath = join(root, 'src/renderer/src/styles.css');
   const componentPath = join(root, 'src/renderer/src/components/shared/BrandMark.tsx');
   try {
-    session = await createApplicationSession({ mode, profile });
+    temporary = makeTemporary(join(temporaryBase, 'bug-pocket-exa70-startup-'));
+    owner = { directory: resolve(temporary), base: resolve(temporaryBase) };
+    owner.identity = lstatSync(temporary, { bigint: true });
+    owner.token = randomUUID();
+    write(join(temporary, '.startup-profile-owner'), owner.token, { flag: 'wx' });
+    ownershipInitialized = true;
+    const profile = join(temporary, 'profile');
+    mkdir(profile);
+    const expectedUserData = mode === 'packaged' ? profile : `${profile}-dev`;
+    mkdir(expectedUserData, { recursive: true });
+    session = await startSession({ mode, profile });
     const inspected = { cdp: session.main, isolation: session.isolation };
     main = inspected.cdp;
     assert.equal(inspected.isolation.isPackaged, mode === 'packaged');
@@ -472,8 +489,16 @@ async function runMode(mode) {
     receipt = session ? await session.finish(firstError)
       : firstError?.sessionResult || { error: firstError, terminationConfirmed: true, processes: [], diagnostics: [] };
     for (const error of fixtureFailures) appendFailure(receipt, error, 'Restore startup fixture/renderer');
-    receipt = await cleanupAfterClose(receipt, {
-      profile: temporary, assertOwned: path => assertOwnedStartupProfile(path, owner)
+    if (temporary) receipt = await cleanupAfterClose(receipt, {
+      ...cleanupOptions, profile: temporary, assertOwned: path => {
+        if (ownershipInitialized) return assertOwnedStartupProfile(path, owner);
+        // Before the marker is complete no application can have launched. Only
+        // the exact directory created by this run may use this fallback proof.
+        const current = assertStartupProfileDirectory(path, owner);
+        assert.ok(owner.identity, 'Startup profile creation identity unavailable');
+        assert.equal(current.dev, owner.identity.dev, 'Startup profile device changed during setup');
+        assert.equal(current.ino, owner.identity.ino, 'Startup profile identity changed during setup');
+      }
     });
   }
   const streams = { stdout: session?.stdout() || firstError?.sessionOutput?.stdout || '',

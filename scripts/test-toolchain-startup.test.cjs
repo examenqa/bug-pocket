@@ -2,11 +2,13 @@
 // Synthetic host-only regression fixtures. No child application or network is used.
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { join, resolve } = require('node:path');
+const { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { basename, dirname, join, resolve } = require('node:path');
 const test = require('node:test');
 const {
   Cdp, inspectBeforeStartup, buildModeCommand, createApplicationSession,
-  assertOwnedStartupProfile, parseStartupCli
+  assertOwnedStartupProfile, parseStartupCli, runMode
 } = require('./test-toolchain-startup.cjs');
 
 function deferred() {
@@ -260,6 +262,149 @@ test('startup cleanup rejects changed real paths and linked ancestor/ownership m
     lstat: path => ({ isSymbolicLink: () => path === owner.base }) }), /linked startup cleanup/);
   assert.throws(() => assertOwnedStartupProfile(directory, owner, { ...io,
     lstat: path => ({ isSymbolicLink: () => path.endsWith('.startup-profile-owner') }) }), /marker became a link/);
+});
+
+function startupSetupFixture(t) {
+  const base = mkdtempSync(join(realpathSync(tmpdir()), 'bug-pocket-exa71-tests-'));
+  const sentinel = join(base, 'unrelated.txt');
+  writeFileSync(sentinel, 'keep');
+  t.after(() => {
+    assert.equal(dirname(resolve(base)), realpathSync(tmpdir()));
+    assert.ok(basename(base).startsWith('bug-pocket-exa71-tests-'));
+    rmSync(base, { recursive: true, force: true });
+  });
+  let directory;
+  let sessionCalls = 0;
+  const options = {
+    temporaryBase: base,
+    makeTemporary(prefix) { directory = mkdtempSync(prefix); return directory; },
+    startSession() { sessionCalls++; throw new Error('Application session is mocked'); },
+    cleanupOptions: { wait: async () => {} }
+  };
+  return { base, options, directory: () => directory,
+    rejectSession(error) {
+      options.startSession = async () => { sessionCalls++; throw error; };
+    },
+    async fails(original, overrides, { retained = false, expectedSessions = 0 } = {}) {
+      await assert.rejects(runMode('start', { ...options, ...overrides }), error => {
+        assert.equal(error, original, 'The setup failure must remain the primary error');
+        assert.equal(error.validationResult.lifecycle.error, original);
+        assert.equal(error.validationResult.lifecycle.retainedProfile, retained ? directory : undefined);
+        return true;
+      });
+      assert.equal(sessionCalls, expectedSessions);
+      assert.equal(readFileSync(sentinel, 'utf8'), 'keep');
+      if (directory) assert.equal(existsSync(directory), retained);
+    }
+  };
+}
+
+test('runMode skips removal when temporary allocation fails', async t => {
+  const fixture = startupSetupFixture(t);
+  const original = new Error('temporary allocation failed');
+  let removals = 0;
+  await fixture.fails(original, {
+    makeTemporary() { throw original; },
+    cleanupOptions: { remove() { removals++; } }
+  });
+  assert.equal(removals, 0);
+});
+
+for (const phase of ['before', 'partial', 'complete']) {
+  test(`runMode cleans its directory when marker writing fails (${phase})`, async t => {
+    const fixture = startupSetupFixture(t);
+    const original = new Error(`marker write failed: ${phase}`);
+    await fixture.fails(original, {
+      write(marker, token, options) {
+        if (phase !== 'before') writeFileSync(marker, phase === 'partial' ? token.slice(0, 4) : token, options);
+        throw original;
+      }
+    });
+  });
+}
+
+for (const failingCall of [1, 2]) {
+  test(`runMode cleans initialized ownership when profile mkdir ${failingCall} fails`, async t => {
+    const fixture = startupSetupFixture(t);
+    const original = new Error('profile directory setup failed');
+    let calls = 0;
+    await fixture.fails(original, {
+      mkdir(directory, options) {
+        assert.ok(existsSync(join(fixture.directory(), '.startup-profile-owner')));
+        if (++calls === failingCall) throw original;
+        mkdirSync(directory, options);
+      }
+    });
+    assert.equal(calls, failingCall);
+  });
+}
+
+for (const initialized of [false, true]) {
+  test(`runMode preserves setup failure and cleanup diagnostics (marker initialized: ${initialized})`, async t => {
+    const fixture = startupSetupFixture(t);
+    const original = new Error('original setup failure');
+    let removals = 0;
+    await fixture.fails(original, {
+      ...(initialized ? { mkdir() { throw original; } } : { write() { throw original; } }),
+      cleanupOptions: { cleanupRetries: 0, remove(directory) {
+        assert.equal(directory, fixture.directory());
+        removals++;
+        throw new Error('synthetic cleanup failure');
+      } }
+    }, { retained: true });
+    assert.equal(removals, 1);
+    assert.equal(original.retainedProfile, fixture.directory());
+    assert.ok(original.diagnostics.includes('Profile cleanup: synthetic cleanup failure'));
+    assert.ok(original.diagnostics.includes(`Profile retained: ${fixture.directory()}`));
+  });
+}
+
+test('runMode refuses pre-marker cleanup of a replacement directory', async t => {
+  const fixture = startupSetupFixture(t);
+  const original = new Error('marker setup interrupted');
+  const held = join(fixture.base, 'held-original');
+  let replacementSentinel;
+  await fixture.fails(original, {
+    write() {
+      renameSync(fixture.directory(), held);
+      mkdirSync(fixture.directory());
+      replacementSentinel = join(fixture.directory(), 'replacement.txt');
+      writeFileSync(replacementSentinel, 'preserve replacement');
+      throw original;
+    }
+  }, { retained: true });
+  assert.ok(existsSync(held));
+  assert.equal(readFileSync(replacementSentinel, 'utf8'), 'preserve replacement');
+  assert.match(original.diagnostics.join('\n'), /identity changed during setup/);
+});
+
+test('runMode still requires the completed ownership marker after setup initialization', async t => {
+  const fixture = startupSetupFixture(t);
+  const original = new Error('directory setup interrupted');
+  await fixture.fails(original, {
+    mkdir() {
+      writeFileSync(join(fixture.directory(), '.startup-profile-owner'), 'changed');
+      throw original;
+    }
+  }, { retained: true });
+  assert.match(original.diagnostics.join('\n'), /marker changed/);
+});
+
+test('runMode cleans initialized setup after a mocked session rejection', async t => {
+  const fixture = startupSetupFixture(t);
+  const original = new Error('mock session setup failed before launch');
+  fixture.rejectSession(original);
+  await fixture.fails(original, undefined, { expectedSessions: 1 });
+});
+
+test('runMode retains initialized setup when mocked session closure is unconfirmed', async t => {
+  const fixture = startupSetupFixture(t);
+  const original = new Error('mock session closure unconfirmed');
+  original.sessionResult = { error: original, terminationConfirmed: false, processes: [], diagnostics: [] };
+  fixture.rejectSession(original);
+  await fixture.fails(original, undefined, { retained: true, expectedSessions: 1 });
+  assert.equal(original.terminationConfirmed, false);
+  assert.match(original.diagnostics.join('\n'), /process closure is unconfirmed/);
 });
 
 test('CDP socket closure rejects pending commands immediately and rejects later sends', async () => {
