@@ -1,9 +1,10 @@
-Bug Pocket fixed Store startup bridge — built 10 November 2026; NOT LOADED/ACCEPTED
+Bug Pocket fixed Store startup bridge — 45.2.1 loading passed; 45.3.3 acceptance pending
 
 Mechanism
 Plain Node-API C interface (NAPI_VERSION=8), C++17 and installed Windows SDK
 C++/WinRT projection. No npm, NodeRT, node-addon-api or Windows App SDK runtime
-dependency. Build with approved Electron 45.2.1 headers and x64 node.lib, not host
+dependency. Future builds require approved Electron 45.3.3 headers and x64
+node.lib, not host
 Node headers/library. See the bounded build script and docs/store-appx-packaging.txt.
 No tool/header/dependency acquisition is implicit.
 
@@ -54,14 +55,18 @@ rolled back by teardown. There is no forced unload/timeout that frees running
 native work; shutdown can wait on Windows. Graceful draining and forced-exit
 behavior require later native acceptance. No private libuv/V8 APIs are used.
 
-Acceptance still required — loading/runtime checks NOT RUN
-Compile/link and static PE inspection completed 10 November 2026; see
-docs/store-appx-packaging.txt. Delay-load resolution and x64 loading; installed
-PFN/AUMID/task lookup; first-run opt-in, opt-out and actual states; early startup
-activation classification; login/tray/global shortcut behavior; manual/single-instance
-regression; queued/running work shutdown and failures remain unperformed.
-Compile/link and static inspection do not establish native/installed acceptance.
-Existing EXA-66 holds remain controlling.
+Accepted loading and remaining acceptance
+Compile/link and static PE inspection completed 10 November 2026 with 45.2.1
+headers/library. The corrected 17 November trial passed once on Electron 45.2.1:
+exports, delayed imports and activation()/read() unpackaged identity rejection,
+normal exit and held-handle closure before cleanup. Reuse
+C:\Users\BugPocketQA\BugPocket-native-retry-20261117-9f41e2a8\RESULT.txt.
+This does not establish loading on the prepared 45.3.3 candidate or installed
+startup. The existing binary was not rebuilt or substituted; new loading
+authority is required. Installed PFN/AUMID/task lookup; first-run opt-in/out and
+actual states; activation; login/tray/shortcut behavior; manual/single-instance
+regression; and queued/running work shutdown remain pending.
+Existing EXA-66 runtime/build/package/install/release holds remain controlling.
 
 Primary references
 https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask.getasync?view=winrt-26100

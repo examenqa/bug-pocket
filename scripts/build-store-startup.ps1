@@ -33,7 +33,7 @@ if ($projectRoot -ine 'C:\MyApps\BugPocket-exa66-45-2-1') {
     throw 'Use the existing reviewed worktree; no alternate source/output root is accepted.'
 }
 $package = Get-Content -LiteralPath (Join-Path $projectRoot 'package.json') -Raw | ConvertFrom-Json
-if ($package.devDependencies.electron -cne '45.2.1') {
+if ($package.devDependencies.electron -cne '45.3.3') {
     throw 'The reviewed Electron pin changed. Review native inputs before compiling.'
 }
 if ([Version]$WindowsSdkVersion -lt [Version]'10.0.19041.0') {
@@ -117,14 +117,14 @@ function Invoke-NativeBuildProcess([string] $FilePath, [string[]] $Arguments, [s
 $electronInclude = Get-RegularPath $ElectronIncludeDirectory $true
 $nodeLibrary = Get-RegularPath $ElectronNodeLibrary
 if ([IO.Path]::GetFileName($nodeLibrary) -ine 'node.lib') {
-    throw 'Supply the separately approved Electron 45.2.1 Windows x64 node.lib, not a Node.js import library.'
+    throw 'Supply the separately approved Electron 45.3.3 Windows x64 node.lib, not a Node.js import library.'
 }
 foreach ($header in @('node_api.h', 'node_api_types.h', 'js_native_api.h', 'js_native_api_types.h')) {
     [void](Get-RegularPath (Join-Path $electronInclude $header))
 }
 # Input existence and paths do not prove release provenance/integrity. The QA
 # handoff must establish that these headers and node.lib belong to Electron
-# 45.2.1/x64 before this script is authorised. No hashes are invented here.
+# 45.3.3/x64 before this script is authorised. No hashes are invented here.
 $msvc = Get-RegularPath $MsvcToolsDirectory $true
 $sdk = Get-RegularPath $WindowsSdkDirectory $true
 $compilerDirectory = Get-RegularPath (Join-Path $msvc 'bin\Hostx64\x64') $true

@@ -26,7 +26,7 @@ function fixture(t) {
   });
   const root = path.join(envelope, 'source');
   const appOutDir = path.join(envelope, 'candidate');
-  const application = { name: 'synthetic-store-notices', dependencies: { alpha: '1.2.3' }, devDependencies: { electron: '45.2.1' } };
+  const application = { name: 'synthetic-store-notices', dependencies: { alpha: '1.2.3' }, devDependencies: { electron: '45.3.3' } };
   const metadata = json({ name: 'alpha', version: '1.2.3', license: 'SEE LICENSE IN LICENSE.txt', main: 'index.js' });
   const license = Buffer.from('Original synthetic licence — α\r\nCopyright Fixture Authors\r\nALL ORIGINAL TERMS\r\n');
   const electron = Buffer.from('Original candidate Electron licence\r\nCopyright Candidate Authors\r\n');
@@ -61,7 +61,7 @@ function fixture(t) {
   };
   for (const [id, bytes] of Object.entries(existing)) write(appOutDir, id, bytes);
   return { root, appOutDir, license, electron, chromium, existing, manifest,
-    options: { root, appOutDir, electronVersion: '45.2.1', platform: 'win32', architecture: 'x64' } };
+    options: { root, appOutDir, electronVersion: '45.3.3', platform: 'win32', architecture: 'x64' } };
 }
 function output(f, id) { return path.join(f.appOutDir, 'resources/notices', id); }
 
@@ -73,8 +73,8 @@ test('stages original notices with exact candidate bytes and version association
   assert.deepEqual(fs.readFileSync(output(f, 'originals/node_modules/alpha/LICENSE.txt')), f.license);
   assert.ok(fs.readFileSync(output(f, 'THIRD_PARTY_NOTICES.provisional.txt')).includes(f.license));
   assert.equal(inventory.packages[0].version, '1.2.3');
-  assert.equal(inventory.runtime.selectedElectronVersion, '45.2.1');
-  assert.equal(inventory.runtime.expectedAlternateFFmpegAsset, 'ffmpeg-v45.2.1-win32-x64.zip');
+  assert.equal(inventory.runtime.selectedElectronVersion, '45.3.3');
+  assert.equal(inventory.runtime.expectedAlternateFFmpegAsset, 'ffmpeg-v45.3.3-win32-x64.zip');
   assert.equal(inventory.runtime.artifactVerification, 'pending');
   assert.equal(inventory.releaseComplianceApproved, false);
   assert.deepEqual(inventory.runtime.notices.map(row => row.sha256), [hash(f.electron), hash(f.chromium)]);

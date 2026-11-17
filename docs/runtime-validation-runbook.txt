@@ -1,22 +1,27 @@
-EXA-66 — implemented harness runbook
-3 November 2026, Asia/Calcutta
+EXA-66 — Electron 45.3.3 source preparation
+17 November 2026, Asia/Calcutta
 
-Current authorization
-Only isolated source changes and deterministic host-Node tests are authorized. Runtime/header downloads, installations, Electron/native/SQLite execution, real application children, network requests, npm test, builds/packages, commits/pushes, PR/Linear posts and vendor contact remain outside this authorization.
-Source implementation and the focused host checks are complete. Every runtime stage below is NOT RUN and requires separate authorization.
+Current decision and authorization
+Bounded source qualification supports preparing Electron 45.3.3; this is not whole-runtime or release clearance. See the 17 November addendum in docs/store-appx-packaging.txt for primary references, exact scope and remaining gates.
+Only source edits and the inspected, relevant host-only syntax/fixture checks are authorized now. No runtime/header/executable acquisition, dependency installation/lifecycle, Electron/addon/application execution, native compilation, build/package/sign/install, startup mutation, commit/push/PR/Linear change or external message is authorized. Both direct-send paths remain disabled and Slack paused.
 
-Source identity
-Baseline: C:\MyApps\BugPocket
-Commit: 4591ea3bad306bc520c6ea07fa892f69ddfb9bd2
-Source aggregate: 8470c78069ce20550cbabf902d7e4db82c3c15811c340fdc293eff4a28413574
-Tracked files: 243
-
-Successor: C:\MyApps\BugPocket-exa66-45-2-1
+Current source identity
+Account/profile: AMIGO\BugPocketQA / C:\Users\BugPocketQA.
+Worktree: C:\MyApps\BugPocket-exa66-45-2-1
+Origin: https://github.com/examenqa/bug-pocket.git
 Branch: codex/exa-66-electron-45-2-1
-The successor has the same HEAD. Changes remain unstaged and uncommitted. Do not recreate or reset this existing branch/worktree.
-Electron is pinned to 45.2.1. Only its package.json declaration and the corresponding root/Electron lock records change. All other dependency and toolchain pins are preserved. No dependencies are installed in the successor.
+Starting HEAD: 2e08cd0ca653ff04202c0281f0ef5336a4fb0dfb
+Prepared pin: 45.3.3. All other dependency pins and root application version 0.9.9 remain unchanged. No install occurred; changes remain unstaged and uncommitted. Do not recreate, rename or reset this worktree.
 
-Authorized host checks — PASSED
+Accepted 45.2.1 native milestone — historical, not candidate acceptance
+C:\Users\BugPocketQA\BugPocket-native-retry-20261117-9f41e2a8\RESULT.txt records PASS: one Electron launch, one addon load, one activation() and one read(), expected unpackaged package_identity_unavailable responses, normal exits and held-handle closure before trial-profile cleanup. The measured tuple was 45.2.1 / Chromium 156.0.8078.75 / Node 24.22.1 / V8 15.6.75.25-electron.0 / ABI 150 / win32 / x64. That loading allowance is consumed. It establishes neither 45.3.3 loading nor installed startup acceptance.
+
+Historical harness implementation identity — 3 November 2026
+Baseline C:\MyApps\BugPocket at 4591ea3bad306bc520c6ea07fa892f69ddfb9bd2.
+Source aggregate 8470c78069ce20550cbabf902d7e4db82c3c15811c340fdc293eff4a28413574; 243 tracked files.
+The earlier host results below keep their original source/date scope. Every candidate 45.3.3 runtime stage below remains NOT RUN and needs separate bounded authority.
+
+Historical 3 November host checks — PASSED
 These checks used the existing portable Node 24.22.1 on Windows x64:
 $node='C:\MyApps\BugPocket-tooling\node-v24.22.1-win-x64\node.exe'
 $work='C:\MyApps\BugPocket-exa66-45-2-1'
@@ -55,7 +60,18 @@ $node='C:\MyApps\BugPocket-tooling\node-v24.22.1-win-x64\node.exe'
 $npm='C:\MyApps\BugPocket-tooling\node-v24.22.1-win-x64\npm.cmd'
 $work='C:\MyApps\BugPocket-exa66-45-2-1'
 $packet='C:\MyApps\BugPocket-compliance-evidence\EXA-66\20261103-runtime-decision-packet'
-$execution='C:\MyApps\BugPocket-compliance-evidence\EXA-66\runtime-execution-45.2.1-'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')
+# The immutable packet probes assert 45.2.1. During separately authorized trial
+# preparation, make reviewed candidate copies outside the packet; update only
+# their runtime tuple and native-probe manifest pin to the current EXPECTED_VERSIONS.
+# Set candidateVersionProbe/candidateNativeProbe to those absolute reviewed paths.
+# They are prerequisites, not prepared or authorized executable inputs in this pass.
+foreach ($probe in @($candidateVersionProbe,$candidateNativeProbe)) {
+ if (-not $probe -or -not [IO.Path]::IsPathFullyQualified($probe) -or -not (Test-Path -LiteralPath $probe -PathType Leaf)) {
+  throw 'Missing reviewed 45.3.3 probe source; stop before any runtime launch.'
+ }
+}
+# Do not edit historical packet sources or bypass their old assertions.
+$execution='C:\MyApps\BugPocket-compliance-evidence\EXA-66\runtime-execution-45.3.3-'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')
 # Create this unique external root explicitly; precreate profiles/evidenceparents.
 New-Item -ItemType Directory -Path $execution | Out-Null
 foreach($name in @('profiles','scratch','logs','downloads','npm-cache','electron-cache','builder-cache')){
@@ -77,17 +93,17 @@ function RunChecked([string]$program,[string[]]$commandArgs,[string]$logName){
 }
 
 1. Official acquisition and byte verification — NOT RUN
-Use the original immutable decision packet's exact tag, release, asset and checksum commands before any application/native execution.
-Required annotated tag: 1d087f0d4cf5eff6cf198d639fa1a1cd02d1fd75
-Required commit: f81ca3d4f09f57667238120adacb01239d5ecd89
+Reuse the immutable decision packet's verification method, with the candidate identities below. Its 45.2.1 identities and probe assertions remain historical and must not be executed as 45.3.3 assertions.
+Required annotated tag: e9a1ea57de59022e94ffb8f786f54d1054383822
+Required commit: 6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4
 Official runtime ZIP:
-https://github.com/electron/electron/releases/download/v45.2.1/electron-v45.2.1-win32-x64.zip
-Asset ID: 693536760
-Size: 158187314 bytes
-SHA256: 7c342aee45d5b4ccafe5dfe9037028796b082735a576e21e2b4e2d8422ebb727
+https://github.com/electron/electron/releases/download/v45.3.3/electron-v45.3.3-win32-x64.zip
+Asset ID: 748614127
+Size: 158325836 bytes
+SHA256: 49dd2d3875944f08de03d34595cd30093c588b9edcabb41a0ac481028a3a5a8a
 Official SHASUMS256.txt:
-https://github.com/electron/electron/releases/download/v45.2.1/SHASUMS256.txt
-SHA256: 7ffbf4a406ba5df5bd97e8a549ed1042af209456f98cf041c4dfababdc2f9abb
+https://github.com/electron/electron/releases/download/v45.3.3/SHASUMS256.txt
+SHA256: b30d65bd556586f36d799dc4d04ea9d69065f94730896f36d2a8a87f6512afb6
 Verify current publisher metadata, exact downloaded byte counts/SHA256 and the runtime checksum line. Stop on any changed tag, artifact or digest. Do not substitute another runtime version.
 
 2. Stage dependencies, verified distribution and measured versions — NOT RUN
@@ -95,7 +111,7 @@ Set-Location -LiteralPath $work
 RunChecked $npm @('ci','--ignore-scripts','--no-audit','--no-fund') 'npm-ci-staged.log'
 # Do not require('electron')/runpostinstall/builder before the verified distribution exists:
 # the npm wrapper can automatically download if missing.
-$zip=Join-Path $execution 'downloads\electron-v45.2.1-win32-x64.zip'
+$zip=Join-Path $execution 'downloads\electron-v45.3.3-win32-x64.zip'
 $checksums=Join-Path $execution 'downloads\SHASUMS256.txt'
 $dist=Join-Path $work 'node_modules\electron\dist'
 # Require $dist absent; if it exists, inspect rather than delete/overwrite.
@@ -106,9 +122,9 @@ $verification=Join-Path $execution 'runtime-verification.json'
 # After all official byte checks, write the exact implemented schema:
 $verified=[ordered]@{
  schemaVersion=1
- runtime=@{electron='45.2.1';platform='win32';arch='x64';commit='f81ca3d4f09f57667238120adacb01239d5ecd89'}
- archive=@{path=$zip;sha256='7c342aee45d5b4ccafe5dfe9037028796b082735a576e21e2b4e2d8422ebb727';size=158187314;assetId=693536760;url='https://github.com/electron/electron/releases/download/v45.2.1/electron-v45.2.1-win32-x64.zip'}
- checksums=@{path=$checksums;sha256='7ffbf4a406ba5df5bd97e8a549ed1042af209456f98cf041c4dfababdc2f9abb'}
+ runtime=@{electron='45.3.3';platform='win32';arch='x64';commit='6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4'}
+ archive=@{path=$zip;sha256='49dd2d3875944f08de03d34595cd30093c588b9edcabb41a0ac481028a3a5a8a';size=158325836;assetId=748614127;url='https://github.com/electron/electron/releases/download/v45.3.3/electron-v45.3.3-win32-x64.zip'}
+ checksums=@{path=$checksums;sha256='b30d65bd556586f36d799dc4d04ea9d69065f94730896f36d2a8a87f6512afb6'}
  executable=@{path=$electron;sha256=(Get-FileHash -LiteralPath $electron -Algorithm SHA256).Hash.ToLowerInvariant();size=(Get-Item -LiteralPath $electron).Length}
 }
 $verified|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $verification
@@ -117,20 +133,20 @@ $verified|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $verification
 # only and rejects split/encrypted/ZIP64/unsupported/malformed inputs. Actual artifact
 # reading is NOT RUN now; unsupported format stops for review, never bypass verification.
 $env:ELECTRON_RUN_AS_NODE='1'
-try {RunChecked $electron @((Join-Path $packet 'future\runtime-version-probe.cjs'),('--output='+$execution+'\versions.json')) 'versions.log'}
+try {RunChecked $electron @($candidateVersionProbe,('--output='+$execution+'\versions.json')) 'versions.log'}
 finally {Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue}
-# Require measured45.2.1/Chromium156.0.8078.75/Node24.22.1/V815.6.75.25-electron.0/ABI150/win32/x64 BEFORE rebuild.
+# Require measured45.3.3/Chromium156.0.8078.100/Node24.22.3/V815.6.75.57-electron.0/ABI150/win32/x64 BEFORE rebuild.
 RunChecked $npm @('rebuild','esbuild','electron-winstaller','--foreground-scripts','--no-audit','--no-fund') 'dependency-lifecycles.log'
 RunChecked $npm @('run','postinstall') 'native-postinstall.log'
 
 The implemented verifier checks actual archive, checksum-text and executable bytes. It compares electron.exe with its entry in the verified official ZIP; a hash asserted only in JSON is insufficient. It supplies no additional signature assurance.
 The reader supports ZIP32 only. Split, encrypted, ZIP64, unsupported or malformed input stops verification for review. Do not bypass verification to handle an unsupported format. The real official archive has not been downloaded or parsed in this implementation pass.
-Before rebuilding native dependencies, require measured Electron 45.2.1, Chromium 156.0.8078.75, Node 24.22.1, V8 15.6.75.25-electron.0, ABI 150, win32 and x64.
+Before rebuilding native dependencies, require measured Electron 45.3.3, Chromium 156.0.8078.100, Node 24.22.3, V8 15.6.75.57-electron.0, ABI 150, win32 and x64.
 
 3. Native rebuild/loading — NOT RUN
-RunChecked (Join-Path $work 'node_modules\.bin\electron-rebuild.cmd') @('--version','45.2.1','--arch','x64','--force','--only','better-sqlite3','--build-from-source') 'sqlite-rebuild.log'
+RunChecked (Join-Path $work 'node_modules\.bin\electron-rebuild.cmd') @('--version','45.3.3','--arch','x64','--force','--only','better-sqlite3','--build-from-source') 'sqlite-rebuild.log'
 $env:ELECTRON_RUN_AS_NODE='1'
-try {RunChecked $electron @((Join-Path $packet 'future\runtime-native-probe.cjs'),$work,('--output='+$execution+'\native.json')) 'native.log'}
+try {RunChecked $electron @($candidateNativeProbe,$work,('--output='+$execution+'\native.json')) 'native.log'}
 finally {Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue}
 Require real native loading, SQL, integrity_check and the measured SQLite library version. Never load the Electron ABI 150 binding in host Node. Do not force an ABI, copy old bindings, change SQLite/toolchain pins or silently use another Electron version.
 

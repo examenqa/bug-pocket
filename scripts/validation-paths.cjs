@@ -9,8 +9,8 @@ const { createHash, randomUUID } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const { inflateRawSync } = require('node:zlib');
 
-const EXPECTED_VERSIONS = Object.freeze({ electron: '45.2.1', chrome: '156.0.8078.75', node: '24.22.1', v8: '15.6.75.25-electron.0', modules: '150' });
-const OFFICIAL_RUNTIME = Object.freeze({ electron: '45.2.1', platform: 'win32', arch: 'x64', commit: 'f81ca3d4f09f57667238120adacb01239d5ecd89', assetId: 693536760, size: 158187314, sha256: '7c342aee45d5b4ccafe5dfe9037028796b082735a576e21e2b4e2d8422ebb727', checksumSha256: '7ffbf4a406ba5df5bd97e8a549ed1042af209456f98cf041c4dfababdc2f9abb', url: 'https://github.com/electron/electron/releases/download/v45.2.1/electron-v45.2.1-win32-x64.zip' });
+const EXPECTED_VERSIONS = Object.freeze({ electron: '45.3.3', chrome: '156.0.8078.100', node: '24.22.3', v8: '15.6.75.57-electron.0', modules: '150' });
+const OFFICIAL_RUNTIME = Object.freeze({ electron: '45.3.3', platform: 'win32', arch: 'x64', commit: '6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4', assetId: 748614127, size: 158325836, sha256: '49dd2d3875944f08de03d34595cd30093c588b9edcabb41a0ac481028a3a5a8a', checksumSha256: 'b30d65bd556586f36d799dc4d04ea9d69065f94730896f36d2a8a87f6512afb6', url: 'https://github.com/electron/electron/releases/download/v45.3.3/electron-v45.3.3-win32-x64.zip' });
 const OWNER_FILE = '.bug-pocket-validation-owner.json';
 const hashBytes = bytes => createHash('sha256').update(bytes).digest('hex');
 const hashFile = file => hashBytes(fs.readFileSync(file));
@@ -228,10 +228,10 @@ function createRuntimeVerifier({ official = OFFICIAL_RUNTIME, guardFactory = cre
     assert.equal(hashBytes(archiveBytes), official.sha256, 'Downloaded archive SHA256 differs');
     assert.equal(hashFile(checksums), official.checksumSha256, 'Official checksum text bytes differ');
     const checksumLines = fs.readFileSync(checksums, 'utf8').split(/\r?\n/);
-    assert.ok(checksumLines.some(line => line.trim() === `${official.sha256}  electron-v45.2.1-win32-x64.zip` || line.trim() === `${official.sha256} *electron-v45.2.1-win32-x64.zip`), 'Official runtime checksum line differs');
+    assert.ok(checksumLines.some(line => line.trim() === `${official.sha256}  electron-v45.3.3-win32-x64.zip` || line.trim() === `${official.sha256} *electron-v45.3.3-win32-x64.zip`), 'Official runtime checksum line differs');
     const packageFile = guard.check(path.join(repositoryRoot, 'node_modules', 'electron', 'package.json'), { external: false, mustExist: true, file: true });
-    assert.equal(JSON.parse(fs.readFileSync(packageFile, 'utf8')).version, '45.2.1', 'Wrong Electron npm wrapper');
-    assert.equal(JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8')).devDependencies.electron, '45.2.1', 'Electron must be pinned exactly');
+    assert.equal(JSON.parse(fs.readFileSync(packageFile, 'utf8')).version, '45.3.3', 'Wrong Electron npm wrapper');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8')).devDependencies.electron, '45.3.3', 'Electron must be pinned exactly');
     const pathFile = guard.check(path.join(repositoryRoot, 'node_modules', 'electron', 'path.txt'), { external: false, mustExist: true, file: true });
     assert.equal(fs.readFileSync(pathFile, 'utf8').trim(), 'electron.exe', 'Unsafe/unexpected Electron wrapper path');
     const target = guard.check(executable, { external: false, mustExist: true, file: true });

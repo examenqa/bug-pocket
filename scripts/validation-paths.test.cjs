@@ -36,10 +36,10 @@ function verifiedFixture(t) {
   const f = fixture(t); const bytes = Buffer.from('Synthetic executable bytes; never executable code');
   const wrapper = path.join(f.repo, 'node_modules', 'electron'); fs.mkdirSync(path.join(wrapper, 'dist'), { recursive: true });
   const executable = path.join(wrapper, 'dist', 'electron.exe'); fs.writeFileSync(executable, bytes);
-  fs.writeFileSync(path.join(wrapper, 'package.json'), JSON.stringify({ version: '45.2.1' })); fs.writeFileSync(path.join(wrapper, 'path.txt'), 'electron.exe'); fs.writeFileSync(path.join(f.repo, 'package.json'), JSON.stringify({ devDependencies: { electron: '45.2.1' } }));
+  fs.writeFileSync(path.join(wrapper, 'package.json'), JSON.stringify({ version: '45.3.3' })); fs.writeFileSync(path.join(wrapper, 'path.txt'), 'electron.exe'); fs.writeFileSync(path.join(f.repo, 'package.json'), JSON.stringify({ devDependencies: { electron: '45.3.3' } }));
   const archive = path.join(f.base, 'synthetic.zip'); const zip = makeZip([['electron.exe', bytes]], 8); fs.writeFileSync(archive, zip);
-  const checksums = path.join(f.base, 'SHASUMS256.txt'); const sums = Buffer.from(`${sha(zip)}  electron-v45.2.1-win32-x64.zip\n`); fs.writeFileSync(checksums, sums);
-  const official = { electron: '45.2.1', platform: 'win32', arch: 'x64', commit: 'synthetic-source-identity', assetId: 123, size: zip.length, sha256: sha(zip), checksumSha256: sha(sums), url: 'https://example.invalid/synthetic.zip' };
+  const checksums = path.join(f.base, 'SHASUMS256.txt'); const sums = Buffer.from(`${sha(zip)}  electron-v45.3.3-win32-x64.zip\n`); fs.writeFileSync(checksums, sums);
+  const official = { electron: '45.3.3', platform: 'win32', arch: 'x64', commit: 'synthetic-source-identity', assetId: 123, size: zip.length, sha256: sha(zip), checksumSha256: sha(sums), url: 'https://example.invalid/synthetic.zip' };
   const verification = path.join(f.base, 'verification.json');
   const metadata = { schemaVersion: 1, runtime: { electron: official.electron, platform: official.platform, arch: official.arch, commit: official.commit }, archive: { path: archive, sha256: official.sha256, size: official.size, assetId: official.assetId, url: official.url }, checksums: { path: checksums, sha256: official.checksumSha256 }, executable: { path: executable, sha256: sha(bytes), size: bytes.length } };
   const save = () => fs.writeFileSync(verification, JSON.stringify(metadata)); save();
