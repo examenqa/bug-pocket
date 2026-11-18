@@ -23,7 +23,7 @@ function inside(parent, child) { const rel = path.relative(parent, child); retur
 function inspectWindowsAttributes(paths) {
   assert.equal(process.platform, 'win32', 'Validation path attributes require Windows');
   const executable = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  const script = `[Console]::InputEncoding=[Text.UTF8Encoding]::new($false);[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$ErrorActionPreference='Stop';$paths=ConvertFrom-Json ([Console]::In.ReadToEnd());$rows=@(foreach($p in $paths){$i=Get-Item -LiteralPath $p -Force;[pscustomobject]@{path=$p;attributes=[long]$i.Attributes}});ConvertTo-Json -InputObject $rows -Compress`;
+  const script = `[Console]::InputEncoding=[Text.UTF8Encoding]::new($false);[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';$paths=ConvertFrom-Json ([Console]::In.ReadToEnd());$rows=@(foreach($p in $paths){$i=Get-Item -LiteralPath $p -Force;[pscustomobject]@{path=$p;attributes=[long]$i.Attributes}});ConvertTo-Json -InputObject $rows -Compress`;
   const output = execFileSync(executable, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { input: JSON.stringify(paths), encoding: 'utf8', windowsHide: true, timeout: 15_000, maxBuffer: 16 * 1024 * 1024 });
   const rows = JSON.parse(output.replace(/^\uFEFF/, '').trim());
   assert.ok(Array.isArray(rows) && rows.length === paths.length, 'Incomplete Windows path-attribute response');
@@ -32,7 +32,8 @@ function inspectWindowsAttributes(paths) {
 function defaultForbiddenRoots() {
   return [...Object.entries(process.env).filter(([key, value]) => /^OneDrive/i.test(key) && value).map(([, value]) => value), os.tmpdir(), process.env.TEMP, process.env.TMP, path.join(os.homedir(), 'AppData', 'Local', 'Temp'), path.join(process.env.SystemRoot || 'C:\\Windows', 'Temp')].filter(Boolean);
 }
-function createPathGuard({ repositoryRoot, forbiddenRoots = defaultForbiddenRoots(), inspectAttributes = inspectWindowsAttributes, fsApi = fs } = {}) {
+function createPathGuard({ repositoryRoot, forbiddenRoots = defaultForbiddenRoots(), platform = process.platform,
+  inspectAttributes = platform === 'win32' ? inspectWindowsAttributes : null, fsApi = fs } = {}) {
   assert.ok(repositoryRoot && path.isAbsolute(repositoryRoot), 'Pass an absolute repository root');
   const exclusions = [repositoryRoot, ...forbiddenRoots].map(value => path.resolve(value));
   function absolute(value) {
@@ -45,7 +46,7 @@ function createPathGuard({ repositoryRoot, forbiddenRoots = defaultForbiddenRoot
     return path.resolve(value);
   }
   function inspect(paths) {
-    if (!paths.length) return;
+    if (!paths.length || inspectAttributes === null) return;
     const rows = inspectAttributes(paths);
     assert.ok(Array.isArray(rows) && rows.length === paths.length, 'Incomplete reparse inspection');
     for (let i = 0; i < paths.length; i++) {
@@ -247,11 +248,45 @@ function createRuntimeVerifier({ official = OFFICIAL_RUNTIME, guardFactory = cre
   };
 }
 const resolveVerifiedElectron = createRuntimeVerifier();
-function readNativeIdentity(repositoryRoot, { guard = createPathGuard({ repositoryRoot }) } = {}) {
-  const packageFile = guard.check(path.join(repositoryRoot, 'node_modules', 'better-sqlite3', 'package.json'), { external: false, mustExist: true, file: true });
-  const packageVersion = JSON.parse(fs.readFileSync(packageFile, 'utf8')).version;
-  assert.equal(packageVersion, '12.11.1', 'Wrong native SQLite package');
-  const binding = guard.check(path.join(repositoryRoot, 'node_modules', 'better-sqlite3', 'build', 'Release', 'better_sqlite3.node'), { external: false, mustExist: true, file: true });
-  return { binding, sha256: hashFile(binding), size: fs.statSync(binding).size, packageVersion, expectedAbi: '150', scope: 'File identity only; successful loading and SQLite version require the separately authorized Electron child.' };
+function usesLinuxMusl(readMaps, report) {
+  // Match the pinned better-sqlite3 loader. Prefer the mapped dynamic loader.
+  let maps;
+  try { maps = readMaps(); } catch { /* The runtime report is the fallback. */ }
+  if (/\/ld-musl-[^/\s]*\.so/.test(maps)) return true;
+  if (/\/(?:ld-linux[^/\s]*|libc)\.so\.\d/.test(maps)) return false;
+  const previousExcludeNetwork = report.excludeNetwork;
+  report.excludeNetwork = true;
+  try { return !report.getReport().header.glibcVersionRuntime; }
+  finally { report.excludeNetwork = previousExcludeNetwork; }
 }
+
+function readNativeIdentity(repositoryRoot, {
+  platform = process.platform, arch = process.arch,
+  guard = createPathGuard({ repositoryRoot, platform }),
+  packageRoot = path.join(repositoryRoot, 'node_modules', 'better-sqlite3'),
+  readLinuxMaps = () => fs.readFileSync('/proc/self/maps', 'latin1'), report = process.report,
+  expectedLoaderSha256 = 'dc9f4300a2d31f9dacf41932f9693a6754429f98ea8d8e9fe1e711de3da37454'
+} = {}) {
+  // expectedLoaderSha256 is a host-fixture seam; ordinary CLIs pin publisher bytes.
+  const checked = (relative, mustExist = true) => guard.check(path.join(packageRoot, relative), { external: false, mustExist, file: true });
+  const packageVersion = JSON.parse(fs.readFileSync(checked('package.json'), 'utf8')).version;
+  assert.equal(packageVersion, '13.2.0', 'Wrong native SQLite package');
+  const loaderSha256 = hashFile(checked('lib/binding.js'));
+  assert.equal(loaderSha256, expectedLoaderSha256, 'SQLite default loader differs from reviewed package input');
+  const localPaths = ['build/Debug/better_sqlite3.node', 'build/Release/better_sqlite3.node'];
+  let relativeBinding = localPaths.find(relative => fs.existsSync(checked(relative, false)));
+  const local = relativeBinding !== undefined;
+  if (!local && ['win32', 'darwin', 'linux'].includes(platform) && ['x64', 'arm64'].includes(arch)) {
+    const target = platform === 'linux' && usesLinuxMusl(readLinuxMaps, report) ? 'linuxmusl' : platform;
+    const bundled = 'prebuilds/' + target + '-' + arch + '.node';
+    if (fs.existsSync(checked(bundled, false))) relativeBinding = bundled;
+  }
+  assert.ok(relativeBinding, 'No default-selected SQLite native binding exists for ' + platform + '/' + arch);
+  const binding = checked(relativeBinding);
+  return { binding, relativeBinding, sha256: hashFile(binding), size: fs.statSync(binding).size,
+    packageVersion, loaderSha256, selection: local ? 'locally-compiled' : 'bundled-prebuild',
+    nodeApiVersion: '10', runtimeAbi: '150',
+    scope: 'Default v13 loader selection and file identity; actual loading and SQLite version require the verified Electron child.' };
+}
+
 module.exports = { EXPECTED_VERSIONS, OFFICIAL_RUNTIME, createPathGuard, prepareValidationPaths, assertOwnedProfile, assertMeasuredVersions, hashFile, readNativeIdentity, resolveVerifiedElectron, createRuntimeVerifier, zipEntryDigest };

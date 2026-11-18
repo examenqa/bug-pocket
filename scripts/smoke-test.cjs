@@ -5,6 +5,8 @@ const { tmpdir } = require('node:os');
 const { basename, dirname, join, resolve } = require('node:path');
 const { createProcessLifecycle, cleanupAfterClose } = require('./validation-process-lifecycle.cjs');
 
+const { readNativeIdentity } = require('./validation-paths.cjs');
+
 const startupMarker = '[packaged-smoke] database-ready';
 const nativeIntegrationMarker = '[packaged-smoke] native-integrations-ready';
 const preloadMarker = '[packaged-smoke] preload-ready';
@@ -27,13 +29,15 @@ function findExecutable() {
   return executable;
 }
 
-function assertNativeBindingIsUnpacked(executable) {
-  const resourcesPath = process.platform === 'darwin'
+function assertNativeBindingIsUnpacked(executable, { platform = process.platform, ...nativeOptions } = {}) {
+  const resourcesPath = platform === 'darwin'
     ? resolve(dirname(executable), '..', 'Resources') : join(dirname(executable), 'resources');
-  const bindingPath = join(resourcesPath, 'app.asar.unpacked', 'node_modules', 'better-sqlite3', 'build', 'Release', 'better_sqlite3.node');
-  assert.ok(existsSync(bindingPath), `Packaged better-sqlite3 binding is missing from the ASAR-unpacked directory: ${bindingPath}`);
+  const repositoryRoot = resolve(__dirname, '..');
+  const native = readNativeIdentity(repositoryRoot, { ...nativeOptions, platform,
+    packageRoot: join(resourcesPath, 'app.asar.unpacked', 'node_modules', 'better-sqlite3') });
   const iconPath = join(resourcesPath, 'assets', 'icon.ico');
   assert.ok(existsSync(iconPath), `Packaged Tray icon is missing from the resources directory: ${iconPath}`);
+  return native;
 }
 
 function allocateSmokeProfile() {

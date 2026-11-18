@@ -28,6 +28,7 @@ function appendFailure(receipt, error, context) {
 // program is launched only by a separately authorized Windows runtime check.
 const ownedProcessObserver = String.raw`
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $ownedProcess = $null
 $commandReader = $null

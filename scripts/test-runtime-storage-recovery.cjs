@@ -61,7 +61,35 @@ function installStartupInjection(options) {
   const Module = require('node:module');
   const state = { phase: options.phase, dialogs: [], sqliteOpenAttempts: 0, encryptAttempts: 0, decryptAttempts: 0 };
   globalThis.__exa66StorageRecovery = state;
+  // Capture the paused CJS scope for validation operations; Runtime.evaluate
+  // has no ambient require. This exists only in the owned main-process hook.
+  globalThis.__exa66StorageRequire = require;
   const originalLoad = Module._load;
+  if (options.nativeSelection) {
+    const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto'), assert = require('node:assert/strict');
+    const canonical = file => path.toNamespacedPath(fs.realpathSync.native(file)).toLowerCase();
+    const expected = options.nativeSelection, allowed = [expected, options.sourceNative].filter(Boolean);
+    const originalDlopen = process.dlopen;
+    state.nativeLoads = [];
+    process.dlopen = function (module, filename, ...args) {
+      if (!/[\\/]node_modules[\\/]better-sqlite3[\\/].*\.node$/i.test(filename)) return originalDlopen.call(this, module, filename, ...args);
+      const target = canonical(filename), match = allowed.find(item => canonical(item.binding) === target);
+      assert.ok(match, 'SQLite default loader selected an unrecorded binary');
+      if (!state.nativeLoads.length) assert.equal(target, canonical(expected.binding), 'First app SQLite load differs from selected binary');
+      const bytes = fs.readFileSync(filename), sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+      assert.equal(sha256, match.sha256, 'Loaded SQLite bytes differ from recorded identity');
+      const actualStat = fs.statSync(filename), expectedStat = fs.statSync(match.binding);
+      assert.equal(actualStat.dev, expectedStat.dev); assert.equal(actualStat.ino, expectedStat.ino);
+      const result = originalDlopen.call(this, module, filename, ...args);
+      const record = { path: fs.realpathSync.native(filename), sha256, size: bytes.length, dev: actualStat.dev, ino: actualStat.ino };
+      state.nativeLoads.push(record);
+      process.stdout.write('[storage-recovery-native] ' + JSON.stringify(record) + '\n');
+      return result;
+    };
+    electron.app.once('will-quit', () => { process.dlopen = originalDlopen; });
+  }
+
+
   if (options.phase === 'unavailable') {
     electron.safeStorage.isEncryptionAvailable = () => false;
     electron.safeStorage.encryptString = () => { state.encryptAttempts++; throw new Error('Encryption attempted during injected storage unavailability'); };
@@ -115,14 +143,15 @@ function assertExpectedStartupError(output) {
 // itself starts normally (including packaged startup); this adapter fixture uses
 // the successor's pinned tsx/source, explicitly not private bundled-module hacks.
 function persistenceOperation(options) {
-  const assert = require('node:assert/strict');
-  const fs = require('node:fs');
-  const path = require('node:path');
-  const crypto = require('node:crypto');
-  const electron = require('electron');
+  const requireForValidation = globalThis.__exa66StorageRequire || require;
+  const assert = requireForValidation('node:assert/strict');
+  const fs = requireForValidation('node:fs');
+  const path = requireForValidation('node:path');
+  const crypto = requireForValidation('node:crypto');
+  const electron = requireForValidation('electron');
   assert.equal(electron.app.getPath('userData'), options.userData);
   assert.equal(electron.safeStorage.isEncryptionAvailable(), true, 'Real secure storage must be available');
-  const sourceRequire = require('node:module').createRequire(path.join(options.sourceRoot, 'package.json'));
+  const sourceRequire = requireForValidation('node:module').createRequire(path.join(options.sourceRoot, 'package.json'));
   sourceRequire('tsx/cjs');
   const { BugPocketDatabase } = sourceRequire(path.join(options.sourceRoot, 'src/main/database.ts'));
   const { SafeStorageAdapter } = sourceRequire(path.join(options.sourceRoot, 'src/main/sync/SafeStorageAdapter.ts'));
@@ -223,16 +252,15 @@ function captureBinaryIdentity({ mode, identity, native, sourceRoot = ROOT }, de
   const guard = dependencies.guard || createPathGuard({ repositoryRoot: sourceRoot });
   const actualNative = (dependencies.nativeIdentity || readNativeIdentity)(sourceRoot);
   assert.equal(actualNative.sha256, native.sha256, 'Source native binding changed between phases');
-  assert.equal(actualNative.packageVersion, '12.11.1');
+  assert.equal(actualNative.packageVersion, '13.2.0');
   const sourceExecutable = guard.check(identity.executable, { external: false, mustExist: true, file: true });
   assert.equal(hash(sourceExecutable), identity.sha256, 'Verified Electron executable changed between phases');
   const executable = guard.check(mode === 'packaged' ? path.join(sourceRoot, 'release-build/win-unpacked/Bug Pocket.exe') : sourceExecutable,
     { external: false, mustExist: true, file: true });
   let packagedNative;
   if (mode === 'packaged') {
-    const binding = guard.check(path.join(sourceRoot, 'release-build/win-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node'),
-      { external: false, mustExist: true, file: true });
-    packagedNative = { binding, sha256: hash(binding), size: stat(binding).size };
+    packagedNative = (dependencies.packagedNativeIdentity || readNativeIdentity)(sourceRoot, { guard,
+      packageRoot: path.join(sourceRoot, 'release-build/win-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3') });
     assert.equal(packagedNative.sha256, actualNative.sha256, 'Packaged/source native bindings differ; inspect the rebuild before validation');
   }
   const sourceFiles = {};
@@ -263,7 +291,8 @@ async function runRecoveryPhase({ mode, phase, profile, userData, identity, nati
         const expected = mode === 'packaged' ? path.join(sourceRoot, 'release-build/win-unpacked/Bug Pocket.exe') : identity.executable;
         assert.ok(samePath(isolation.executable, expected), 'Normal startup launched an unexpected Electron executable');
         await assertOwned();
-        return evaluate(callExpression(installStartupInjection, { phase, expectedError: STARTUP_ERROR, marker: DIALOG_MARKER }));
+        return evaluate(callExpression(installStartupInjection, { phase, expectedError: STARTUP_ERROR, marker: DIALOG_MARKER,
+          nativeSelection: phaseBinary.packagedNative || phaseBinary.sourceNative, sourceNative: phaseBinary.sourceNative }));
       } });
     if (phase === 'unavailable') {
       await waitUntil(() => parseDialogs(session.stdout()).length > 0, 'captured secure-storage startup error', 35_000);
@@ -273,7 +302,7 @@ async function runRecoveryPhase({ mode, phase, profile, userData, identity, nati
       await waitUntil(async () => {
         const dialogs = parseDialogs(session.stdout());
         assert.equal(dialogs.length, 0, 'Unexpected dialog in normal startup: ' + JSON.stringify(dialogs));
-        return session.main.evaluate('(function(){const e=require("electron");return e.app.isReady() && e.BrowserWindow.getAllWindows().some(w=>w.webContents.getURL().includes("#/dashboard"));})()');
+        return session.main.evaluate('(function(){const e=globalThis.__exa70Electron;return e.app.isReady() && e.BrowserWindow.getAllWindows().some(w=>w.webContents.getURL().includes("#/dashboard"));})()');
       }, 'normal dashboard after real secure-storage availability', 40_000);
       await assertOwned();
       result = unwrapOperationResult(await session.main.evaluate(reportedOperationExpression(persistenceOperation, {

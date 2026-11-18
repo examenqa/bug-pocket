@@ -49,7 +49,7 @@ function assertUnique(rows, key, label) {
 function readContext(root) {
   const realRoot = fs.realpathSync(root);
   const cache = new Map();
-  function contained(id, directory = false) {
+  function contained(id, directory = false, allowAbsent = false) {
     relativeId(id);
     let current = realRoot;
     for (const part of id.split('/')) {
@@ -57,10 +57,15 @@ function readContext(root) {
       let stat;
       try { stat = fs.lstatSync(current); }
       catch (error) {
+        if (allowAbsent && error.code === 'ENOENT') return undefined;
+        if (allowAbsent && error.code === 'ENOTDIR') fail('INVALID_PATH', 'Non-directory input ancestor: ' + id);
         if (error.code === 'ENOENT' || error.code === 'ENOTDIR') fail('MISSING_INPUT', 'Missing input: ' + id);
         throw error;
       }
       if (stat.isSymbolicLink()) fail('INVALID_PATH', 'Linked inputs are not accepted: ' + id);
+      if (allowAbsent && current !== path.join(realRoot, id) && !stat.isDirectory()) {
+        fail('INVALID_PATH', 'Non-directory input ancestor: ' + id);
+      }
     }
     const relative = path.relative(realRoot, fs.realpathSync(current));
     if (relative.startsWith('..' + path.sep) || relative === '..' || path.isAbsolute(relative)) {
@@ -71,8 +76,12 @@ function readContext(root) {
     }
     return current;
   }
-  function read(id) {
-    if (!cache.has(id)) cache.set(id, fs.readFileSync(contained(id)));
+  function read(id, allowAbsent = false) {
+    if (!cache.has(id)) {
+      const file = contained(id, false, allowAbsent);
+      if (file === undefined) return undefined;
+      cache.set(id, fs.readFileSync(file));
+    }
     return cache.get(id);
   }
   function directoryCandidate(id) {
@@ -92,10 +101,10 @@ function readContext(root) {
     }
     return true;
   }
-  function checked(id, expectedHash) {
+  function checked(id, expectedHash, allowAbsent = false) {
     hashValue(expectedHash);
-    const bytes = read(id);
-    if (sha256(bytes) !== expectedHash) fail('CHANGED_INPUT', 'Changed reviewed input: ' + id);
+    const bytes = read(id, allowAbsent);
+    if (bytes !== undefined && sha256(bytes) !== expectedHash) fail('CHANGED_INPUT', 'Changed reviewed input: ' + id);
     return bytes;
   }
   function json(id, expectedHash) {
@@ -129,6 +138,7 @@ function validateManifest(manifest) {
       typeof entry.version === 'string', 'Invalid reviewed package identity');
     hashValue(entry.metadataSha256);
   }
+  const packageRoots = [...manifest.packages].sort((a, b) => b.path.length - a.path.length);
   for (const entry of manifest.inputs) {
     ensure(['notice', 'copyright-excerpt', 'supplemental'].includes(entry.kind), 'Unknown input kind');
     ensure(Array.isArray(entry.sources) && entry.sources.length > 0, 'Input sources are required');
@@ -139,6 +149,19 @@ function validateManifest(manifest) {
       hashValue(source.sha256);
       ensure(Number.isSafeInteger(source.startByte) && Number.isSafeInteger(source.endByte) &&
         source.startByte >= 0 && source.endByte > source.startByte, 'Invalid reviewed byte range');
+      if (source.generatedDuplicateOf !== undefined) {
+        const canonicalPath = relativeId(source.generatedDuplicateOf);
+        const original = entry.sources.find(candidate =>
+          candidate.path === canonicalPath && candidate.generatedDuplicateOf === undefined);
+        const owner = packageRoots.find(candidate => source.path.startsWith(candidate.path + '/'));
+        const originalOwner = packageRoots.find(candidate => canonicalPath.startsWith(candidate.path + '/'));
+        ensure(entry.kind === 'copyright-excerpt' && source.path !== canonicalPath && original && owner && owner === originalOwner &&
+          source.path.startsWith(owner.path + '/build/') && !canonicalPath.startsWith(owner.path + '/build/') &&
+          sourceName.test(source.path) && sourceName.test(canonicalPath) &&
+          !noticeName.test(path.posix.basename(source.path)) && !noticeName.test(path.posix.basename(canonicalPath)) &&
+          original.sha256 === source.sha256 && original.startByte === source.startByte && original.endByte === source.endByte,
+        'Optional generated input must duplicate a mandatory source and range in the same package: ' + source.path);
+      }
     }
   }
   for (const entry of manifest.nativeFiles) {
@@ -298,10 +321,19 @@ function collectReviewedNotices({ root, manifestPath }, productionNotices = fals
   const originals = new Map();
   const knownNotices = new Set();
   const knownHeaders = new Set();
+  const generatedDuplicates = [];
   for (const entry of inputs) {
     let first;
+    const verifiedSources = [];
     for (const source of entry.sources) {
-      const bytes = context.checked(source.path, source.sha256);
+      const optional = source.generatedDuplicateOf !== undefined;
+      const bytes = context.checked(source.path, source.sha256, optional);
+      if (optional) {
+        generatedDuplicates.push({ inputId: entry.id, path: source.path, duplicateOf: source.generatedDuplicateOf,
+          status: bytes === undefined ? 'absent' : 'verified' });
+      }
+      if (bytes === undefined) continue;
+      verifiedSources.push(source);
       if (source.endByte > bytes.length) fail('CHANGED_INPUT', 'Reviewed range exceeds input: ' + source.path);
       const standaloneNotice = noticeName.test(path.posix.basename(source.path)) &&
         !/\.(?:[cm]?js|map|ts)$/i.test(source.path);
@@ -321,6 +353,7 @@ function collectReviewedNotices({ root, manifestPath }, productionNotices = fals
           !/\.(?:[cm]?js|map|ts)$/i.test(source.path)) knownNotices.add(source.path);
       if (entry.kind === 'copyright-excerpt') knownHeaders.add(source.path + ':' + entry.textSha256);
     }
+    entry.sources = verifiedSources;
     // Reject invalid UTF-8 instead of replacing bytes in a license document.
     try { new TextDecoder('utf-8', { fatal: true }).decode(first); }
     catch { fail('INVALID_INPUT', 'Notice input is not UTF-8: ' + entry.id); }
@@ -397,6 +430,7 @@ function collectReviewedNotices({ root, manifestPath }, productionNotices = fals
       originals: [...originals].sort(([a], [b]) => compare(a, b))
         .map(([id, bytes]) => ({ path: id, bytes: bytes.length, sha256: sha256(bytes) }))
     } : {}),
+    ...(generatedDuplicates.length ? { generatedDuplicates } : {}),
     counts, diagnosisCounts: manifest.diagnosisCounts || null,
     reconciliation: { differences, supplementalReason: manifest.reconciliation?.supplementalReason || null },
     discovery: { sourceHeaderScanBytes: 12000, note: 'Bounded source-header discovery is not full artifact/bundle license analysis.' },
@@ -409,7 +443,7 @@ function collectReviewedNotices({ root, manifestPath }, productionNotices = fals
     'Actual bundled/native/runtime/FFmpeg/artwork and Store acceptance remain pending.\n\n' +
     pending.map(entry => 'PENDING ' + entry.id + ': ' + entry.reason).join('\n') + '\n')];
   for (const entry of inputs) {
-    const first = entry.sources[0];
+    const first = entry.sources.find(source => source.generatedDuplicateOf === undefined);
     chunks.push(Buffer.from('\n' + '='.repeat(78) + '\n' + entry.id + '\nKind: ' + entry.kind +
       (productionNotices ? '\nPackages: ' + (entry.packages.map(owner =>
         owner.name + '@' + owner.version + ' [' + owner.path + ']').join('; ') || 'supplemental source input') : '') +

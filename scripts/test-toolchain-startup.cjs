@@ -250,6 +250,8 @@ async function createApplicationSession(options) {
   let stdout = '';
   let stderr = '';
   let finishPromise;
+  let inspectorClosed = false;
+  function closeInspector() { if (!inspectorClosed) { inspectorClosed = true; main?.close(); } }
   const session = {
     child: null, lifecycle, main: null, isolation: null, command: [command.executable, ...command.args],
     mainPort, rendererPort, devPort, devConfig,
@@ -263,12 +265,19 @@ async function createApplicationSession(options) {
         let gracefulRequest;
         const receipt = await lifecycle.finish({ error, requestGraceful: main ? () => {
           gracefulRequest = (async () => {
-            try { await main.evaluate('globalThis.__exa70Electron.app.quit()'); }
-            catch (quitError) { gracefulError = quitError; }
+            let detachTimer;
+            try {
+              // Node waits for its inspector to disconnect during normal exit.
+              // Dispatch the real app.quit, then detach within a bound; held-handle
+              // closure proof remains mandatory and independent of this request.
+              await Promise.race([main.evaluate('globalThis.__exa70Electron.app.quit()'),
+                new Promise(resolveDetach => { detachTimer = schedule(resolveDetach, gracefulResponseTimeoutMs); })]);
+            } catch (quitError) { gracefulError = quitError; }
+            finally { cancel(detachTimer); closeInspector(); }
           })();
           return gracefulRequest;
         } : undefined });
-        try { main?.close(); } catch (closeError) { appendFailure(receipt, closeError, 'Close main inspector'); }
+        try { closeInspector(); } catch (closeError) { appendFailure(receipt, closeError, 'Close main inspector'); }
         if (gracefulRequest) {
           // CDP close rejects its pending command, which can cross several async
           // continuations. Await that exact request within a separate bound;

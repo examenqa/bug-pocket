@@ -39,7 +39,7 @@ function prepareStoreNotices({ root, appOutDir, electronVersion, platform, archi
   const runtimeFiles = ['LICENSE.electron.txt', 'LICENSES.chromium.html'].map(name => ({
     name, bytes: candidateFile(appOutDir, name)
   }));
-  const result = collectProductionNotices({ root, manifestPath: 'compliance/notices-inputs.json' });
+  const result = collectProductionNotices({ root, manifestPath: 'compliance/notices-inputs-sqlite13.json' });
   const resources = path.join(appOutDir, 'resources');
   const stat = fs.lstatSync(resources);
   if (stat.isSymbolicLink() || !stat.isDirectory()) fail('INVALID_PATH', 'Candidate resources must be a regular directory');

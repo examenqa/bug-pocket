@@ -54,3 +54,22 @@ The future Store `afterPack` adapter in `scripts/prepare-store-notices.cjs` requ
 
 Only temporary synthetic fixtures were collected in this task. No production notice output or final candidate notices were generated, and no Electron/native/builder code was imported. The focused Node 24.22.1 run passed **70 tests, 0 failures, 0 skipped**, across the two notice test files. See `docs/store-appx-packaging.txt` for the exact command and remaining artifact-dependent acceptance. Source configuration and collection success establish no patent/licensing clearance.
 
+
+## 17 November 2026 — SQLite 13 source reconciliation
+
+`notices-inputs-sqlite13.json` is the current versioned production input review. The original `notices-inputs.json`, its 98-package diagnosis and source snapshots remain byte-for-byte unchanged. The new manifest is derived from the exact locked better-sqlite3 13.2.0 / node-addon-api 8.9.2 closure: 67 packages, 70 complete notice inputs, 51 distinct copyright excerpts across 1,861 source occurrences, eight separate supplements and 49 inert native-file identities. The changed counts are recorded against the historical diagnosis rather than forced to match it.
+
+Only better-sqlite3 metadata changes and node-addon-api metadata is added among retained/new production packages. Thirty-two historical physical packages leave production closure. Existing supplied notice texts and SQLite dedication are retained by exact selected-byte hashes; the newly supplied complete Node.js API collaborators MIT license is reviewed in full. Discovery also retains any generated identical SQLite source-header occurrences. No collector checks or discovery exclusions changed.
+
+The Store preparation adapter now selects the versioned manifest. Use the existing collector with `manifestPath: 'compliance/notices-inputs-sqlite13.json'` for this candidate. Production-notices mode still excludes the Electron npm-wrapper supplement (seven collected supplements) and performs no native-byte qualification. The historical strict CLI remains available with an explicit historical manifest; current strict collection requires the reviewed current native bytes.
+
+All seven pending dispositions and `releaseComplianceApproved: false` remain. This is provisional source collection, not final packaged notices, Store FFmpeg or release acceptance. The native file inventory includes bundled cross-platform inputs and the explicitly built local binding; their presence does not claim they were loaded. Runtime binary selection and hash evidence is separate.
+
+Execution and collection evidence: `C:\Users\BugPocketQA\BugPocket-exa66-sqlite13-20261117-cd6d931a`. See the runtime runbook and packaging note for actual stage results and remaining gates.
+
+
+## 19 November 2026 — generated SQLite source copies
+
+The SQLite 13 manifest names five reviewed occurrences across three generated SQLite source files. Each occurrence points to a required canonical file and matching SHA-256 and byte range. A missing build copy is recorded as absent. A present copy must pass the full-file and selected-text checks and is recorded as verified. The collector still rejects unlisted source notices, invalid inputs and missing canonical sources or licence text.
+
+The clean package and the copied generated layout both produced deterministic provisional outputs with 67 production packages, 70 notice inputs and 51 copyright excerpts. The clean layout verified 1,856 source occurrences. The generated layout verified 1,861. These inventory counts exclude native payload verification. The historical manifests and all seven pending dispositions are preserved. Bundled binding qualification and the Store gates tracked in the packaging notes remain pending.

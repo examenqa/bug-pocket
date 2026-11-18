@@ -1,6 +1,6 @@
 # Bug Pocket Agent Handoff
 
-Last updated: October 28, 2026.
+Last updated: November 19, 2026.
 
 This file is the working source of truth for engineers and coding agents. Prefer the current code and tests when this document and an old chat transcript disagree.
 
@@ -19,10 +19,10 @@ Non-negotiable product rules:
 ## Current Runtime
 
 - App version: `0.9.9`
-- Electron: `^43.1.0`
+- Electron: `45.3.3`
 - React: `18.3`
 - TypeScript: `5.9`
-- SQLite: `better-sqlite3@12.11.1`
+- SQLite: `better-sqlite3@13.2.0` (Node-API10; candidate validation in docs/runtime-validation-runbook.txt)
 - Supabase JS: `2.106.2`
 - Packaging: `electron-builder` with NSIS
 - Target OS: Windows
@@ -38,7 +38,7 @@ npm run test:packaged-smoke:build
 npm run dist
 ```
 
-`npm install` runs `electron-builder install-app-deps`. This rebuilds native dependencies against the installed Electron ABI. Do not remove it.
+`npm install` runs `electron-builder install-app-deps`. Keep this native dependency preparation. better-sqlite3 13 uses Node-API10; controlled local builds require its supported force_build option and default-loader provenance checks in docs/runtime-validation-runbook.txt. Do not remove the postinstall.
 
 ## Process Architecture
 

@@ -613,3 +613,76 @@ test('production notices rejects production closure drift and unreviewed origina
   write(unexpected.root, 'node_modules/alpha/NOTICE', 'Unreviewed original attribution.\n');
   assert.throws(() => production(unexpected), { code: 'UNEXPECTED_INPUT' });
 });
+
+function generatedSourceFixture(t) {
+  const f = fixture(t);
+  const original = 'node_modules/alpha/deps/sqlite3.c';
+  const duplicate = 'node_modules/alpha/build/generated/sqlite3.c';
+  const header = Buffer.from('/* Copyright (c) Synthetic SQLite contributor */');
+  const bytes = Buffer.concat([header, Buffer.from('\nint synthetic;\n')]);
+  const source = { path: original, sha256: hash(bytes), startByte: 0, endByte: header.length };
+  f.manifest.inputs.push({ id: 'sqlite-header', kind: 'copyright-excerpt', textSha256: hash(header),
+    sources: [source, { ...source, path: duplicate, generatedDuplicateOf: original }] });
+  write(f.root, original, bytes);
+  f.save();
+  return { f, original, duplicate, bytes };
+}
+
+test('production notices records an absent generated copy without claiming it was verified', (t) => {
+  const { f, original, duplicate } = generatedSourceFixture(t);
+  const result = production(f);
+  assert.deepEqual(result.inventory.generatedDuplicates,
+    [{ inputId: 'sqlite-header', path: duplicate, duplicateOf: original, status: 'absent' }]);
+  assert.deepEqual(result.inventory.inputs.find(entry => entry.id === 'sqlite-header').sources.map(source => source.path),
+    [original]);
+  assert.equal(result.inventory.counts.copyrightSourceOccurrences, 1);
+  assert.ok(result.notices.includes(license));
+  assert.deepEqual(production(f), result);
+  delete f.manifest.inputs.at(-1).sources[1].generatedDuplicateOf;
+  f.save();
+  assert.throws(() => run(f), { code: 'MISSING_INPUT' }, 'historical declarations remain mandatory');
+});
+
+test('production notices verifies and reports a present generated copy', (t) => {
+  const { f, original, duplicate, bytes } = generatedSourceFixture(t);
+  write(f.root, duplicate, bytes);
+  const result = production(f);
+  assert.deepEqual(result.inventory.generatedDuplicates,
+    [{ inputId: 'sqlite-header', path: duplicate, duplicateOf: original, status: 'verified' }]);
+  assert.equal(result.inventory.counts.copyrightSourceOccurrences, 2);
+  assert.ok(result.notices.includes(Buffer.from('Source: ' + original)));
+  assert.deepEqual(production(f), result);
+  write(f.root, 'node_modules/alpha/build/unreviewed.c', bytes);
+  assert.throws(() => production(f), { code: 'UNEXPECTED_INPUT' });
+});
+
+test('production notices rejects drift in a generated copy outside the selected excerpt', (t) => {
+  const { f, duplicate, bytes } = generatedSourceFixture(t);
+  write(f.root, duplicate, Buffer.concat([bytes, Buffer.from('int changed;\n')]));
+  assert.throws(() => production(f), { code: 'CHANGED_INPUT' });
+});
+
+test('production notices still requires canonical source and complete licence bytes', (t) => {
+  const { f, original, duplicate, bytes } = generatedSourceFixture(t);
+  write(f.root, duplicate, bytes);
+  fs.unlinkSync(path.join(f.root, original));
+  assert.throws(() => production(f), { code: 'MISSING_INPUT' });
+  write(f.root, original, bytes);
+  fs.unlinkSync(path.join(f.root, 'node_modules/alpha/LICENSE'));
+  assert.throws(() => production(f), { code: 'MISSING_INPUT' });
+});
+
+test('production notices rejects non-directory ancestors, directory targets and linked generated copies', (t) => {
+  const { f, duplicate, bytes } = generatedSourceFixture(t);
+  const parent = path.dirname(path.join(f.root, duplicate));
+  write(f.root, 'node_modules/alpha/build', bytes);
+  assert.throws(() => production(f), { code: 'INVALID_PATH' });
+  fs.unlinkSync(path.join(f.root, 'node_modules/alpha/build'));
+  fs.mkdirSync(path.join(f.root, duplicate), { recursive: true });
+  assert.throws(() => production(f), { code: 'INVALID_PATH' });
+  fs.rmdirSync(path.join(f.root, duplicate));
+  fs.rmdirSync(parent);
+  const target = path.join(f.envelope, 'absent');
+  fs.symlinkSync(target, parent, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => production(f), { code: 'INVALID_PATH' });
+});

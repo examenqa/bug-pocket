@@ -16,7 +16,7 @@ const expectedRecord = extra => ({ title: 'Bug Pocket could not start', message:
   expected: true, sqliteOpenAttempts: 0, encryptAttempts: 0, decryptAttempts: 0, ...extra });
 const dialogLine = record => recovery.DIALOG_MARKER + JSON.stringify(record) + '\n';
 const identity = { executable: absolute('electron-fixture.txt'), sha256: 'a'.repeat(64) };
-const native = { binding: absolute('native-fixture.txt'), sha256: 'b'.repeat(64), packageVersion: '12.11.1' };
+const native = { binding: absolute('native-fixture.txt'), sha256: 'b'.repeat(64), packageVersion: '13.2.0' };
 const baselineBinary = { executable: { path: identity.executable, sha256: identity.sha256 }, sourceNative: native };
 
 function injectionFixture(phase) {
@@ -359,6 +359,7 @@ test('binary identity distinguishes packaged EXE and pins its unpacked native bi
   const dependencies = {
     guard: { check: file => file },
     nativeIdentity: () => fixtureNative,
+    packagedNativeIdentity: (_root, options) => { const binding = path.join(options.packageRoot, 'build/Release/better_sqlite3.node'); return { ...fixtureNative, binding, sha256: dependencies.hash(binding), size: 5 }; },
     stat: () => ({ size: 5 }),
     hash: file => hashes.get(file) || (file.endsWith('better_sqlite3.node') ? native.sha256 : 'packaged-or-source-' + file)
   };
@@ -378,4 +379,36 @@ test('in-flight phase with a returned false closure receipt stays uncertain', as
     assert.equal(error.terminationConfirmed, false);
     return true;
   });
+});
+test('native observation pins default-selected bytes and records only successful loads', () => {
+  const binding = absolute('node_modules/better-sqlite3/build/Release/better_sqlite3.node');
+  let bytes = Buffer.from('synthetic native bytes'), calls = 0, failLoad = false, output = '';
+  const expected = { binding, sha256: createHash('sha256').update(bytes).digest('hex'), size: bytes.length };
+  const app = new EventEmitter();
+  const originalDlopen = () => { calls++; if (failLoad) throw new Error('synthetic dlopen failure'); return 'loaded'; };
+  const fakeFs = { realpathSync: { native: file => path.resolve(file) },
+    readFileSync: () => bytes, statSync: () => ({ dev: 1, ino: 2 }) };
+  const globals = {};
+  const context = { globalThis: globals, process: { dlopen: originalDlopen, stdout: { write: text => { output += text; } } },
+    require: name => {
+      if (name === 'electron') return { app, dialog: {} };
+      if (name === 'node:module') return { _load: () => undefined };
+      if (name === 'node:fs') return fakeFs;
+      if (name === 'node:path') return path;
+      if (name === 'node:crypto') return { createHash };
+      if (name === 'node:assert/strict') return assert;
+      throw new Error('Unexpected fixture import ' + name);
+    } };
+  vm.runInNewContext(recovery.callExpression(recovery.installStartupInjection,
+    { phase: 'seed', nativeSelection: expected, sourceNative: expected }), context);
+  assert.equal(context.process.dlopen({}, binding), 'loaded');
+  assert.equal(calls, 1); assert.equal(globals.__exa66StorageRecovery.nativeLoads.length, 1);
+  assert.match(output, /\[storage-recovery-native\]/);
+  assert.throws(() => context.process.dlopen({}, binding.replace('Release', 'Debug')), /unrecorded binary/);
+  bytes = Buffer.from('changed native bytes');
+  assert.throws(() => context.process.dlopen({}, binding), /bytes differ/);
+  bytes = Buffer.from('synthetic native bytes'); failLoad = true;
+  assert.throws(() => context.process.dlopen({}, binding), /synthetic dlopen failure/);
+  assert.equal(globals.__exa66StorageRecovery.nativeLoads.length, 1);
+  app.emit('will-quit'); assert.equal(context.process.dlopen, originalDlopen);
 });

@@ -207,7 +207,7 @@ test('session expects a child before wrapper spawn and exports one first-error-p
   const receipt = await pending;
   assert.equal(receipt.error, original);
   assert.equal(receipt.terminationConfirmed, true);
-  assert.deepEqual(fixture.events.slice(-3), ['globalThis.__exa70Electron.app.quit()', 'finish', 'cdp-close']);
+  assert.deepEqual(fixture.events.slice(-3), ['globalThis.__exa70Electron.app.quit()', 'cdp-close', 'finish']);
 });
 
 test('inspector failure still tears down wrapper and returns uncertain closure without deleting profile', async () => {

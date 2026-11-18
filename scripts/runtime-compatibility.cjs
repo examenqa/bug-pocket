@@ -261,8 +261,13 @@ async function runElectron() {
   } catch (error) { fail(error); }
 }
 
-module.exports = { parseArguments, assertNoPlaintext, runRecordedChild, runDriver, inspectSqliteProbe };
-if (require.main === module) (process.versions.electron ? runElectron() : runDriver()).catch(error => {
+function isMainEntrypoint({ electron = process.versions.electron, argument = process.argv[1], filename = __filename, main = require.main, current = module } = {}) {
+  // Electron's default launcher remains require.main for an explicit CJS entry.
+  return main === current || Boolean(electron && argument && resolve(argument).toLowerCase() === resolve(filename).toLowerCase());
+}
+
+module.exports = { isMainEntrypoint, parseArguments, assertNoPlaintext, runRecordedChild, runDriver, inspectSqliteProbe };
+if (isMainEntrypoint()) (process.versions.electron ? runElectron() : runDriver()).catch(error => {
   console.error(error.stack || error);
   for (const diagnostic of error.diagnostics ?? []) console.error(diagnostic);
   if (error.output) console.error(error.output);

@@ -130,10 +130,32 @@ test('wrapper path traversal and alternate executable fail without requiring the
   const f = verifiedFixture(t); fs.writeFileSync(path.join(f.wrapper, 'path.txt'), '..\\other.exe'); assert.throws(() => f.verify(), /wrapper path/); fs.writeFileSync(path.join(f.wrapper, 'path.txt'), 'electron.exe');
   fs.writeFileSync(path.join(f.wrapper, 'package.json'), JSON.stringify({ version: '43.1.0' })); assert.throws(() => f.verify(), /npm wrapper/);
 });
-test('native identity hashes synthetic file bytes without loading them', t => {
-  const f = fixture(t); const nativeRoot = path.join(f.repo, 'node_modules', 'better-sqlite3'); fs.mkdirSync(path.join(nativeRoot, 'build', 'Release'), { recursive: true }); fs.writeFileSync(path.join(nativeRoot, 'package.json'), JSON.stringify({ version: '12.11.1' })); const binding = path.join(nativeRoot, 'build', 'Release', 'better_sqlite3.node'); fs.writeFileSync(binding, 'synthetic non-native fixture');
-  const result = readNativeIdentity(f.repo, { guard: f.guard }); assert.equal(result.sha256, sha(Buffer.from('synthetic non-native fixture'))); assert.equal(result.packageVersion, '12.11.1'); assert.equal(result.expectedAbi, '150');
+test('native identity follows v13 default precedence without loading synthetic bytes', t => {
+  const f = fixture(t), nativeRoot = path.join(f.repo, 'node_modules', 'better-sqlite3');
+  fs.mkdirSync(path.join(nativeRoot, 'lib'), { recursive: true });
+  const loader = Buffer.from('synthetic inert loader fixture');
+  fs.writeFileSync(path.join(nativeRoot, 'lib/binding.js'), loader);
+  fs.writeFileSync(path.join(nativeRoot, 'package.json'), JSON.stringify({ version: '13.2.0' }));
+  const options = { guard: f.guard, expectedLoaderSha256: sha(loader) };
+  const put = relative => { const file = path.join(nativeRoot, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, relative); return file; };
+  const prebuild = put('prebuilds/win32-x64.node');
+  assert.equal(readNativeIdentity(f.repo, options).binding, prebuild);
+  const release = put('build/Release/better_sqlite3.node');
+  assert.equal(readNativeIdentity(f.repo, options).binding, release);
+  const debug = put('build/Debug/better_sqlite3.node');
+  const result = readNativeIdentity(f.repo, options);
+  assert.equal(result.binding, debug); assert.equal(result.sha256, sha(Buffer.from('build/Debug/better_sqlite3.node')));
+  assert.equal(result.packageVersion, '13.2.0'); assert.equal(result.nodeApiVersion, '10'); assert.equal(result.runtimeAbi, '150');
+  assert.throws(() => readNativeIdentity(f.repo, { ...options, expectedLoaderSha256: '0'.repeat(64) }), /loader differs/);
+  fs.writeFileSync(path.join(nativeRoot, 'package.json'), JSON.stringify({ version: '12.11.1' }));
+  assert.throws(() => readNativeIdentity(f.repo, options), /Wrong native/);
+  fs.writeFileSync(path.join(nativeRoot, 'package.json'), JSON.stringify({ version: '13.2.0' }));
+  for (const file of [debug, release, prebuild]) fs.unlinkSync(file);
+  assert.throws(() => readNativeIdentity(f.repo, options), /No default-selected/);
 });
+
+
+
 test('CLI requires external destinations and explicit verified executable; old writer arguments fail', () => {
   const good = ['--profile-root=C:\\profiles', '--evidence=C:\\record.json', '--electron=C:\\electron.exe', '--verification=C:\\identity.json']; assert.equal(parseArguments(good).electron, 'C:\\electron.exe');
   for (const args of [good.slice(0, 3), [...good, '--writer=C:\\old.exe'], [...good, good[0]], [...good, '--unknown=value']]) assert.throws(() => parseArguments(args));
@@ -218,4 +240,86 @@ test('synthetic SQLite integrity failure survives probe close failure with diagn
     return true;
   });
   assert.equal(closes, 1);
+});
+test('compatibility recognizes only the exact Electron CJS entry and keeps imports inert', () => {
+  const { isMainEntrypoint } = require('./runtime-compatibility.cjs');
+  const main = {}, current = {}, filename = path.resolve('owned-component.cjs');
+  assert.equal(isMainEntrypoint({ main, current, electron: '45.3.3', argument: filename, filename }), true);
+  assert.equal(isMainEntrypoint({ main, current, electron: '45.3.3', argument: path.resolve('other.cjs'), filename }), false);
+  assert.equal(isMainEntrypoint({ main, current, electron: undefined, argument: filename, filename }), false);
+  assert.equal(isMainEntrypoint({ main: current, current, electron: undefined, filename }), true);
+});
+
+test('packaged smoke resolves Windows, macOS and Linux layouts without loading native code', t => {
+  const { assertNativeBindingIsUnpacked } = require('./smoke-test.cjs');
+  const f = fixture(t);
+  const loader = Buffer.from('synthetic pinned loader');
+  const write = (file, bytes) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, bytes);
+  };
+  const scenarios = [
+    { platform: 'win32', arch: 'x64', target: 'win32-x64', executable: 'win/Bug Pocket.exe', resources: 'win/resources' },
+    { platform: 'darwin', arch: 'arm64', target: 'darwin-arm64',
+      executable: 'mac/Bug Pocket.app/Contents/MacOS/Bug Pocket', resources: 'mac/Bug Pocket.app/Contents/Resources' },
+    { platform: 'linux', arch: 'x64', target: 'linux-x64', executable: 'linux/bug-pocket', resources: 'linux/resources',
+      maps: '/usr/lib/ld-linux-x86-64.so.2' },
+    { platform: 'linux', arch: 'arm64', target: 'linuxmusl-arm64', executable: 'alpine/bug-pocket', resources: 'alpine/resources',
+      maps: '/lib/ld-musl-aarch64.so.1\n/lib/libc.so.6' }
+  ];
+  for (const scenario of scenarios) {
+    const { platform, arch, target, executable, resources, maps } = scenario;
+    const packageRoot = path.join(f.repo, resources, 'app.asar.unpacked/node_modules/better-sqlite3');
+    write(path.join(packageRoot, 'package.json'), JSON.stringify({ version: '13.2.0' }));
+    write(path.join(packageRoot, 'lib/binding.js'), loader);
+    write(path.join(f.repo, resources, 'assets/icon.ico'), 'inert icon');
+    const relativeBinding = 'prebuilds/' + target + '.node';
+    write(path.join(packageRoot, relativeBinding), target);
+    const options = {
+      platform, arch, expectedLoaderSha256: sha(loader),
+      ...(platform === 'win32' ? { guard: f.guard } : {}),
+      readLinuxMaps() { assert.equal(platform, 'linux'); return maps; },
+      report: { getReport() { assert.fail('Expected no report fallback'); } }
+    };
+    const read = () => assertNativeBindingIsUnpacked(path.join(f.repo, executable), options);
+    const identity = read();
+    assert.equal(identity.relativeBinding, relativeBinding);
+    assert.equal(identity.binding, path.join(packageRoot, relativeBinding));
+    assert.equal(identity.selection, 'bundled-prebuild');
+    assert.equal(identity.sha256, sha(target));
+    write(path.join(packageRoot, 'build/Release/better_sqlite3.node'), 'local');
+    options.readLinuxMaps = () => assert.fail('Local binding selection must not consult libc');
+    assert.equal(read().selection, 'locally-compiled');
+    assert.equal(read().sha256, sha('local'));
+  }
+});
+
+test('Linux prebuild fallback restores process report settings after success and failure', t => {
+  const f = fixture(t);
+  const packageRoot = path.join(f.repo, 'node_modules/better-sqlite3');
+  fs.mkdirSync(path.join(packageRoot, 'lib'), { recursive: true });
+  fs.mkdirSync(path.join(packageRoot, 'prebuilds'));
+  const loader = 'inert loader';
+  fs.writeFileSync(path.join(packageRoot, 'lib/binding.js'), loader);
+  fs.writeFileSync(path.join(packageRoot, 'package.json'), JSON.stringify({ version: '13.2.0' }));
+  for (const name of ['linux-x64', 'linuxmusl-x64']) {
+    fs.writeFileSync(path.join(packageRoot, 'prebuilds', name + '.node'), name);
+  }
+  const report = {
+    excludeNetwork: false,
+    getReport() {
+      assert.equal(this.excludeNetwork, true);
+      return { header: { glibcVersionRuntime: '2.34' } };
+    }
+  };
+  const options = { platform: 'linux', arch: 'x64', readLinuxMaps: () => 'unknown loader', report, expectedLoaderSha256: sha(loader) };
+  assert.equal(readNativeIdentity(f.repo, options).relativeBinding, 'prebuilds/linux-x64.node');
+  assert.equal(report.excludeNetwork, false);
+  report.getReport = () => ({ header: {} });
+  assert.equal(readNativeIdentity(f.repo, options).relativeBinding, 'prebuilds/linuxmusl-x64.node');
+  assert.equal(report.excludeNetwork, false);
+  report.getReport = () => { throw new Error('report error'); };
+  assert.throws(() => readNativeIdentity(f.repo, options), /report error/);
+  assert.equal(report.excludeNetwork, false);
+  assert.throws(() => readNativeIdentity(f.repo, { ...options, arch: 'ia32' }), /No default-selected/);
 });

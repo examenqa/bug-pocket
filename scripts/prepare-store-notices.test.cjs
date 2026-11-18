@@ -48,7 +48,7 @@ function fixture(t) {
     pending: ['artwork', 'electron-chromium', 'ffmpeg', 'final-artifact', 'lucide-feather', 'native-bare', 'native-sqlite']
       .map(id => ({ id, status: 'pending', reason: 'Synthetic unresolved ' + id }))
   };
-  write(root, 'compliance/notices-inputs.json', json(manifest));
+  write(root, 'compliance/notices-inputs-sqlite13.json', json(manifest));
   write(appOutDir, 'LICENSE.electron.txt', electron);
   write(appOutDir, 'LICENSES.chromium.html', chromium);
   // Existing startup, SQLite, media and preload resources are inert sentinels.
