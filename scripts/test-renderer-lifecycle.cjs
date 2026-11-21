@@ -3,16 +3,45 @@ const { mkdtempSync, writeFileSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { spawnSync } = require('node:child_process');
+const dashboardKeyboard = process.argv.includes('--dashboard-keyboard');
+const entry = dashboardKeyboard
+  ? 'src/renderer/src/pages/dashboardKeyboard.renderer-test.tsx'
+  : 'src/renderer/src/hooks/draftLifecycle.renderer-test.tsx';
 const directory = mkdtempSync(join(tmpdir(), 'bug-pocket-renderer-lifecycle-'));
 try {
-  buildSync({ entryPoints: ['src/renderer/src/hooks/draftLifecycle.renderer-test.tsx'], bundle: true, outfile: join(directory, 'test.js'), platform: 'browser', define: { 'process.env.NODE_ENV': '"development"' } });
-  writeFileSync(join(directory, 'test.html'), '<!doctype html><html><body><script src="test.js"></script></body></html>');
+  buildSync({ entryPoints: [entry], bundle: true, outfile: join(directory, 'test.js'), platform: 'browser', define: { 'process.env.NODE_ENV': '"development"' } });
+  const style = dashboardKeyboard ? '<link rel="stylesheet" href="test.css">' : '';
+  writeFileSync(join(directory, 'test.html'), `<!doctype html><html><head>${style}</head><body><script src="test.js"></script></body></html>`);
   writeFileSync(join(directory, 'main.cjs'), `
     const { app, BrowserWindow } = require('electron');
     app.setPath('userData', require('node:path').join(__dirname, 'userData'));
     app.whenReady().then(async () => {
       const window = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
       await window.loadFile(require('node:path').join(__dirname, 'test.html'));
+      if (${dashboardKeyboard}) {
+        const contents = window.webContents;
+        contents.debugger.attach();
+        await contents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', { enabled: true });
+        const keyCodes = { Tab: 9, Enter: 13, Space: 32 };
+        for (;;) {
+          const { done, value } = await contents.executeJavaScript('window.dashboardKeyboardSteps.next()');
+          if (done) break;
+          if (typeof value !== 'string') {
+            const mouse = { ...value, button: 'left', clickCount: 1 };
+            await contents.debugger.sendCommand('Input.dispatchMouseEvent', { ...mouse, type: 'mousePressed' });
+            await contents.debugger.sendCommand('Input.dispatchMouseEvent', { ...mouse, type: 'mouseReleased' });
+            continue;
+          }
+          const code = value;
+          const key = code === 'Space' ? ' ' : code;
+          const text = { Enter: '\\r', Space: ' ', Tab: '' }[code];
+          const input = { code, key, windowsVirtualKeyCode: keyCodes[code] };
+          await contents.debugger.sendCommand('Input.dispatchKeyEvent', { ...input, type: 'keyDown', text });
+          await contents.debugger.sendCommand('Input.dispatchKeyEvent', { ...input, type: 'keyUp' });
+        }
+        console.log('PASS Dashboard keyboard activation, independent controls and pointer clicks');
+        app.exit(0); return;
+      }
       const deadline = Date.now() + 45000;
       while (Date.now() < deadline) {
         const result = await window.webContents.executeJavaScript('window.phase1Result');

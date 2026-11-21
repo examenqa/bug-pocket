@@ -37,7 +37,7 @@
     "test:security:destructive-backup-restore": "node scripts/run-electron-test.cjs src/main/sync/backupService.test.ts",
     "test:regression:taxonomy-uuid": "node --import tsx --test src/renderer/src/components/shared/OptionSelect.test.tsx",
     "test:security:phase1": "npm run test:security:attachment-paths && npm run test:security:byok-ipc-leak && npm run test:security:electron-boundaries && npm run test:security:developer-ipc && npm run test:security:triage-attachment",
-    "test:phase1": "node scripts/run-electron-test.cjs src/main/phase1.test.ts && node --import tsx --test src/main/detailsFlush.test.ts && node scripts/test-renderer-lifecycle.cjs",
+    "test:phase1": "node scripts/run-electron-test.cjs src/main/phase1.test.ts && node --import tsx --test src/main/detailsFlush.test.ts && node scripts/test-renderer-lifecycle.cjs && node scripts/test-renderer-lifecycle.cjs --dashboard-keyboard",
     "test:sync-protocol": "node scripts/run-electron-test.cjs src/main/sync/protocolLocal.test.ts && node --import tsx --test src/main/sync/protocolSql.test.ts",
     "test:ai-integrity": "node --import tsx --test src/main/ai/aiRequest.test.ts src/renderer/src/services/trackerActions.test.ts && npm run test:ai-readiness && node scripts/test-ai-renderer.cjs",
     "test:restore-integrity": "node scripts/run-electron-test.cjs src/main/sync/restoreIntegrity.test.ts",

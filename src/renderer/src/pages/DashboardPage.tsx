@@ -60,8 +60,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
     });
   };
 
-  const openAttachmentSpotlight = async (event: React.MouseEvent<HTMLButtonElement>, bug: Bug): Promise<void> => {
-    event.stopPropagation();
+  const openAttachmentSpotlight = async (bug: Bug): Promise<void> => {
     if (!bug.attachment_count) return;
     setSpotlight({ bugId: bug.id, bugTitle: bug.title, attachments: [], index: 0, previews: {}, lineage: [], lineagePreviews: {}, loading: true, error: '' });
     const details = await window.bugPocket.getBug(bug.id);
@@ -234,11 +233,26 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
           <tbody>
             {bugs.map((bug) => {
               const entryDisplay = getEntryDisplay(bug);
+              const issueKey = bug.issue_key || `BUG-${bug.id}`;
               const visibleSyncStatus = effectiveSyncStatus(bug.sync_status, cloudSyncActive);
               return (
-                <tr key={bug.id} onClick={() => onSelect(bug.id)}>
+                <tr
+                  key={bug.id}
+                  onClick={(event) => {
+                    if (event.target instanceof Element && !event.target.closest('button, [tabindex]')) {
+                      onSelect(bug.id);
+                    }
+                  }}
+                >
                   <td className="entry-cell">
-                    <span className="issue-key">{bug.issue_key || `BUG-${bug.id}`}</span>
+                    <button
+                      type="button"
+                      className="issue-key"
+                      aria-label={`Open report ${issueKey}: ${entryDisplay.title}`}
+                      onClick={() => onSelect(bug.id)}
+                    >
+                      Open report {issueKey}
+                    </button>
                     <div className="entry-heading">
                       <strong>{entryDisplay.title}</strong>
                       <Badge>{bug.entry_type || 'Bug'}</Badge>
@@ -268,7 +282,7 @@ export function Dashboard({ settings, onSelect }: { settings: SettingsData; onSe
                   </td>
                   <td className="attachment-cell">
                     {bug.attachment_count ? (
-                      <button className="attachment-count attachment-button" aria-label={`Preview ${bug.attachment_count} attachment${bug.attachment_count === 1 ? '' : 's'}`} onClick={(event) => void openAttachmentSpotlight(event, bug)}>
+                      <button type="button" className="attachment-count attachment-button" aria-label={`Preview ${bug.attachment_count} attachment${bug.attachment_count === 1 ? '' : 's'}`} onClick={() => void openAttachmentSpotlight(bug)}>
                         <Camera size={15} /> {bug.attachment_count}
                       </button>
                     ) : (
