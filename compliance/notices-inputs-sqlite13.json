@@ -13138,6 +13138,20 @@
       "disposition": "Exact previously reviewed Apache attribution header in libutf source; conditional association, not proof of .bare binary composition."
     },
     {
+      "id": "supplemental:feather-mit",
+      "kind": "supplemental",
+      "sources": [
+        {
+          "path": "compliance/notice-sources/feather-MIT-LICENSE.txt",
+          "sha256": "265e5e7218f3502707df75ee9b42b29c35368bde27894bf454040c449301f41c",
+          "startByte": 0,
+          "endByte": 1118
+        }
+      ],
+      "textSha256": "265e5e7218f3502707df75ee9b42b29c35368bde27894bf454040c449301f41c",
+      "disposition": "Complete authoritative Feather-derived MIT section from Lucide correction 867c0581af76d38ce1da2940fa5d5e182bf1883f, supplementary to the unchanged lucide-react 0.468.0 ISC notice. No dependency or third-party licensing change."
+    },
+    {
       "id": "supplemental:sqlite-source-dedication",
       "kind": "supplemental",
       "sources": [
@@ -13446,7 +13460,7 @@
     "noticeInputsObserved": 70,
     "copyrightExcerptsObserved": 51,
     "copyrightSourceOccurrences": 1861,
-    "supplementalInputs": 8,
+    "supplementalInputs": 9,
     "nativeFilesObserved": 49,
     "differences": [
       {
@@ -13465,13 +13479,25 @@
         "collected": 51
       }
     ],
-    "supplementalReason": "Historical supplements retained separately; SQLite dedication relocated only if exact selected bytes match. Native and Store acceptance stay pending."
+    "supplementalReason": "Historical supplements retained separately; SQLite dedication relocated only if exact selected bytes match. Complete Feather MIT added for unchanged lucide-react 0.468.0; existing ISC bytes retained. Native and Store acceptance stay pending."
   },
   "discovery": {
     "sourceHeaderScanBytes": 12000,
     "excludeSourcePaths": []
   },
   "sourceSnapshots": [
+    {
+      "path": "compliance/notice-sources/feather-MIT-LICENSE.txt",
+      "bytes": 1118,
+      "sha256": "265e5e7218f3502707df75ee9b42b29c35368bde27894bf454040c449301f41c",
+      "origin": {
+        "repository": "lucide-icons/lucide",
+        "revision": "867c0581af76d38ce1da2940fa5d5e182bf1883f",
+        "path": "LICENSE",
+        "scope": "Complete Feather-derived MIT section; original ISC section remains supplied by lucide-react 0.468.0 unchanged.",
+        "corroboration": "https://github.com/feathericons/feather/blob/v4.29.2/LICENSE"
+      }
+    },
     {
       "path": "compliance/notice-sources/libutf-LICENSE.txt",
       "bytes": 11357,

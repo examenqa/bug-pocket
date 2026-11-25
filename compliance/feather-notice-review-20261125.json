@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-25",
+  "scope": "Feather notice correction only; no dependency or runtime change; no final licensing clearance",
+  "source": {
+    "path": "compliance/notice-sources/feather-MIT-LICENSE.txt",
+    "bytes": 1118,
+    "sha256": "265e5e7218f3502707df75ee9b42b29c35368bde27894bf454040c449301f41c",
+    "upstream": {
+      "url": "https://github.com/lucide-icons/lucide/blob/867c0581af76d38ce1da2940fa5d5e182bf1883f/LICENSE",
+      "retrievedVia": "GitHub connected fetch, complete UTF-8 LICENSE content",
+      "fullFileBytes": 2004,
+      "fullFileSha256": "3c57143f22dac950efebf84002e360bba5458c7b90fe583b0667aaaef1a7256e",
+      "selectedStartByte": 886,
+      "selectedEndByte": 2004
+    },
+    "corroboration": {
+      "url": "https://github.com/feathericons/feather/blob/v4.29.2/LICENSE",
+      "fullFileBytes": 1082,
+      "fullFileSha256": "308028e93fcf84972523cdf6e616f73168546b4953895f516d01287f16fe7bee",
+      "comparison": "Exact copyright, permission, condition and warranty bytes after the initial title line; Lucide adds the Feather-derived scope to the title."
+    }
+  },
+  "pipeline": {
+    "manifest": "compliance/notices-inputs-sqlite13.json",
+    "inputId": "supplemental:feather-mit",
+    "beforeManifestSha256": "e5db201df7dae9541adc123f879bed7cf84e0d3a2432ec1203ee10137f87eb08",
+    "afterManifestSha256": "f5f0d6e7b2e73571711141bfd1c41c236faf1765dc0e1bd28dbe150fabc696e6",
+    "originalInputEntriesUnchanged": 129,
+    "originalLucideVersion": "0.468.0",
+    "originalIscBytes": 880,
+    "originalIscSha256": "1e7290b35280a048667bbf0ebabac1c7fd52a75300e8b2946ac165715997f2bc",
+    "stagedOriginalPath": "resources/notices/originals/compliance/notice-sources/feather-MIT-LICENSE.txt",
+    "stagedCombinedPath": "resources/notices/THIRD_PARTY_NOTICES.provisional.txt",
+    "collectorOrAdapterChanged": false,
+    "historicalManifestUnchanged": true,
+    "pendingDispositionsPreserved": 7,
+    "releaseComplianceApproved": false
+  },
+  "verification": {
+    "command": "C:\\MyApps\\BugPocket-tooling\\node-v24.22.1-win-x64\\node.exe --test scripts/generate-third-party-notices.test.cjs scripts/prepare-store-notices.test.cjs",
+    "node": "24.22.1",
+    "tests": 79,
+    "passed": 79,
+    "failed": 0,
+    "skipped": 0,
+    "initialSandboxRun": "72 passes; 7 failures from sandbox-denied temporary junction creation (EPERM/ENOENT). Reran same unchanged tests outside sandbox; all 79 passed.",
+    "coverage": "Active production manifest selects exact complete MIT; Store adapter includes identical full bytes in combined notices and originals, retains existing notice, rejects missing/changed MIT before staging; original Lucide version/ISC pins retained.",
+    "actualSuccessorPackage": "Verified separately by the root package record; not asserted by synthetic fixtures."
+  }
+}

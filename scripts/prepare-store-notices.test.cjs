@@ -84,6 +84,62 @@ test('stages original notices with exact candidate bytes and version association
   assert.deepEqual(fs.readFileSync(path.join(f.appOutDir, 'LICENSES.chromium.html')), f.chromium);
 });
 
+test('the current Feather supplement is included verbatim in staged notices and originals alongside existing notices', t => {
+  const repository = path.resolve(__dirname, '..');
+  const reviewed = JSON.parse(fs.readFileSync(path.join(repository, 'compliance/notices-inputs-sqlite13.json')));
+  const supplements = reviewed.inputs.filter(entry => entry.id === 'supplemental:feather-mit');
+  assert.equal(supplements.length, 1, 'the active Store manifest must select the Feather supplement');
+  const [supplement] = supplements;
+  const [source] = supplement.sources;
+  const feather = fs.readFileSync(path.join(repository, source.path));
+  assert.equal(feather.length, 1118);
+  assert.equal(hash(feather), '265e5e7218f3502707df75ee9b42b29c35368bde27894bf454040c449301f41c');
+  assert.equal(source.startByte, 0);
+  assert.equal(source.endByte, feather.length);
+  assert.equal(source.sha256, hash(feather));
+  assert.equal(supplement.textSha256, hash(feather));
+  assert.equal(supplement.kind, 'supplemental');
+  assert.match(feather.toString(), /Copyright \(c\) 2013-2023 Cole Bemis/);
+  const lucide = reviewed.packages.find(entry => entry.name === 'lucide-react');
+  assert.equal(lucide.version, '0.468.0');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(repository, 'package-lock.json')))
+    .packages[lucide.path].version, '0.468.0');
+  const isc = reviewed.inputs.find(entry => entry.id === 'notice:node_modules/lucide-react/LICENSE');
+  assert.equal(isc.textSha256, '1e7290b35280a048667bbf0ebabac1c7fd52a75300e8b2946ac165715997f2bc');
+  assert.equal(isc.sources[0].endByte, 880, 'the original pinned ISC notice remains complete and unchanged');
+
+  const f = fixture(t);
+  f.manifest.inputs.push(supplement);
+  write(f.root, source.path, feather);
+  write(f.root, 'compliance/notices-inputs-sqlite13.json', json(f.manifest));
+  const inventory = prepareStoreNotices(f.options);
+  const combined = fs.readFileSync(output(f, 'THIRD_PARTY_NOTICES.provisional.txt'));
+  assert.ok(combined.includes(feather), 'the full authoritative text must accompany the package');
+  assert.ok(combined.includes(f.license), 'the supplement must preserve preexisting notices');
+  assert.deepEqual(fs.readFileSync(output(f, 'originals/' + source.path)), feather);
+  assert.equal(inventory.counts.supplementalInputs, 1);
+  assert.equal(inventory.inputs.find(entry => entry.id === supplement.id).textSha256, hash(feather));
+  assert.deepEqual(inventory.pending, [...f.manifest.pending].sort((a, b) => a.id < b.id ? -1 : 1));
+  assert.equal(inventory.releaseComplianceApproved, false);
+});
+
+test('missing or altered current Feather text fails before notice staging', async t => {
+  const repository = path.resolve(__dirname, '..');
+  const reviewed = JSON.parse(fs.readFileSync(path.join(repository, 'compliance/notices-inputs-sqlite13.json')));
+  const supplement = reviewed.inputs.find(entry => entry.id === 'supplemental:feather-mit');
+  assert.ok(supplement);
+  for (const altered of [false, true]) {
+    await t.test(altered ? 'altered' : 'missing', inner => {
+      const f = fixture(inner);
+      f.manifest.inputs.push(supplement);
+      write(f.root, 'compliance/notices-inputs-sqlite13.json', json(f.manifest));
+      if (altered) write(f.root, supplement.sources[0].path, 'Truncated MIT notice');
+      assert.throws(() => prepareStoreNotices(f.options), { code: altered ? 'CHANGED_INPUT' : 'MISSING_INPUT' });
+      assert.equal(fs.existsSync(output(f, '')), false);
+    });
+  }
+});
+
 test('fails before output for either missing candidate notice and never substitutes installed Electron files', async t => {
   for (const name of ['LICENSE.electron.txt', 'LICENSES.chromium.html']) {
     await t.test(name, inner => {

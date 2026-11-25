@@ -1,0 +1,46 @@
+{
+  "reviewDate": "2026-11-25",
+  "method": "Read-only ZipArchive decompression, SHA-256 and inert UTF-16 version-string checks; no DLL load/execution",
+  "originalArtifact": "release-store/trial-20261125-x64/source/release-store/Bug-Pocket-Store-1.1.0-x64.appx",
+  "priorArtifactSha256": "f286068168eb93422afa5171199f6499167832b7f9610fbc60144023ee105ca1",
+  "priorBinaryOriginEvidence": "release-store/trial-20261125-x64/evidence/content-inspection.json",
+  "files": [
+    {
+      "path": "app/d3dcompiler_47.dll",
+      "bytes": 4753864,
+      "sha256": "f5c95e919b4ffa1ac71049cd45b9f986d2965e6888395ca2806337985334fa56",
+      "fileVersion": "10.0.28000.2270",
+      "versionStringFound": true,
+      "fileDescription": "Direct3D HLSL Compiler for Redistribution",
+      "descriptionStringFound": true
+    },
+    {
+      "path": "app/dxcompiler.dll",
+      "bytes": 25779712,
+      "sha256": "d4dc0f6bd47938e86f0e1b8006236e18393532702ee9e48cffce09c83872692a",
+      "fileVersion": "1.9.2609.0",
+      "versionStringFound": true,
+      "fileDescription": "DirectX Compiler - Google Dawn Custom Build",
+      "descriptionStringFound": true
+    }
+  ],
+  "notShipped": [
+    "dxil.dll",
+    "d3dcsx_47.dll",
+    "vcruntime*.dll",
+    "msvcp*.dll",
+    "ucrtbase.dll"
+  ],
+  "dxcNotice": {
+    "path": "app/LICENSES.chromium.html",
+    "title": "DirectX-Shader-Compiler",
+    "selection": "HTML-decoded pre content; original CRLF; UTF-8 encoding",
+    "bytes": 29842,
+    "sha256": "05f32c081b3c75cd2cc2a0655b571ba94ebcfc64e9ccca6e5a9e36d6cb67e540"
+  },
+  "limits": [
+    "Immediate binary origin is Electron release archive; exact upstream SDK and Dawn/DXC build inputs not independently recovered",
+    "SDK licence entitlement/acceptance and external recipient terms require publisher record",
+    "No separately negotiated-permission or royalty blocker established"
+  ]
+}

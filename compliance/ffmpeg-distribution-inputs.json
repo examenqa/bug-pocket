@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "reviewDate": "2026-11-25",
+  "releaseComplianceApproved": false,
+  "status": "Pinned FFmpeg and Chromium Opus archives verified. Electron patch overlay verified. Build closure, recipient delivery and replacement remain pending.",
+  "scope": "FFmpeg row of the completed seven-item unsigned-AppX review; no general licensing audit",
+  "binary": {
+    "electron": "45.3.3",
+    "platform": "win32",
+    "arch": "x64",
+    "assetId": 748617405,
+    "archive": "ffmpeg-v45.3.3-win32-x64.zip",
+    "archiveBytes": 779662,
+    "archiveSha256": "9d1cf2881a823921da686b1796d3be7689c4d11b534a715dac954fb61fac2c52",
+    "entry": "ffmpeg.dll",
+    "entryBytes": 1675776,
+    "entrySha256": "8496b7330a9d4a14b33c791d5b1d583514f98a3cd5443385254039f5523d22dc",
+    "basis": "Original and corrected unsigned AppX payloads independently match the official alternate DLL digest."
+  },
+  "pins": {
+    "electron": "6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4",
+    "chromium": "46876a0c2df3492ed67a8846950ba6d37170b58c",
+    "ffmpeg": "9db86ce5b5b454dfc96c435f9f0723012980c37f",
+    "opus": "55513e81d8f606bd75d0ff773d2144e5f2a732f5"
+  },
+  "electronTextReadReceipts": [
+    {
+      "path": "patches/ffmpeg/.patches",
+      "url": "https://github.com/electron/electron/blob/6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4/patches/ffmpeg/.patches",
+      "utf8Bytes": 121,
+      "sha256": "9f6ecf225a7a6141e74cc1b30a6b0eb157baa16db027824d38c879f8a7a996ef",
+      "status": "read through GitHub connector; digest of returned UTF-8 text; full source bytes not staged"
+    },
+    {
+      "path": "patches/ffmpeg/link_with_loader_path.patch",
+      "url": "https://github.com/electron/electron/blob/6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4/patches/ffmpeg/link_with_loader_path.patch",
+      "utf8Bytes": 1219,
+      "sha256": "e2f63a2036ffa803db9a50dfec74c4f5628abc476cb44a5ede9d7e775bc7b238",
+      "status": "read through GitHub connector; digest of returned UTF-8 text; full source bytes not staged"
+    },
+    {
+      "path": "patches/ffmpeg/cherry-pick-f4bee18dadeb.patch",
+      "url": "https://github.com/electron/electron/blob/6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4/patches/ffmpeg/cherry-pick-f4bee18dadeb.patch",
+      "utf8Bytes": 3506,
+      "sha256": "058d8da4c2c7ca0ca6a78a6b70b8f9d7f599f2b8244aadd8a14283e0988c36e6",
+      "status": "read through GitHub connector; digest of returned UTF-8 text; full source bytes not staged"
+    },
+    {
+      "path": "patches/ffmpeg/cherry-pick-5eed87f44b0a.patch",
+      "url": "https://github.com/electron/electron/blob/6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4/patches/ffmpeg/cherry-pick-5eed87f44b0a.patch",
+      "utf8Bytes": 2245,
+      "sha256": "f036e4f0c6d131ec832c3727bb0dc5da51810cedcc146c0c8128c3a89e2e4ade",
+      "status": "read through GitHub connector; digest of returned UTF-8 text; full source bytes not staged"
+    },
+    {
+      "path": "patches/ffmpeg/cherry-pick-fb424c4f78d1.patch",
+      "url": "https://github.com/electron/electron/blob/6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4/patches/ffmpeg/cherry-pick-fb424c4f78d1.patch",
+      "utf8Bytes": 1183,
+      "sha256": "37bf2d50981a61f42cb3907aa9e3e612eecb5322c6a0ca53a6c68b3415df868f",
+      "status": "read through GitHub connector; digest of returned UTF-8 text; full source bytes not staged"
+    },
+    {
+      "path": "build/args/ffmpeg.gn",
+      "url": "https://github.com/electron/electron/blob/6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4/build/args/ffmpeg.gn",
+      "utf8Bytes": 195,
+      "sha256": "17335efaaf176bdbc1e329206ff610591b7fab0082b6ff267d567416d7611327",
+      "status": "read through GitHub connector; digest of returned UTF-8 text; full source bytes not staged"
+    },
+    {
+      "path": "build/args/all.gn",
+      "url": "https://github.com/electron/electron/blob/6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4/build/args/all.gn",
+      "utf8Bytes": 4827,
+      "sha256": "3b375c2f45b6bf9b3221e53e779b9f4666f472493f957b6894127ccf766d44ea",
+      "status": "read through GitHub connector; digest of returned UTF-8 text; full source bytes not staged"
+    }
+  ],
+  "sourceMaterialInventory": [
+    {
+      "id": "ffmpeg-preferred-source",
+      "repo": "https://chromium.googlesource.com/chromium/third_party/ffmpeg",
+      "revision": "9db86ce5b5b454dfc96c435f9f0723012980c37f",
+      "selection": "complete tracked tree, including libavcodec/libavformat/libavutil, headers, configure, BUILD.gn, ffmpeg_generated.gni, ffmpeg_options.gni, chromium/config/Chromium/win/x64, chromium/ffmpeg.sigs, chromium/patches, all licence/credit files",
+      "status": "Complete pinned base archive retained and Git tree verified."
+    },
+    {
+      "id": "electron-patches",
+      "repo": "https://github.com/electron/electron",
+      "revision": "6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4",
+      "selection": "patches/ffmpeg/.patches and the four listed patches, in listed order; preserve author/date/adaptation notes; apply_all_patches.py, lib/patches.py, patches/config.json",
+      "status": "Pinned patch series and GN profiles acquired with exact hashes. All four patches applied to the three affected source files. Additional patch tooling remains to be collected."
+    },
+    {
+      "id": "chromium-build-and-headers",
+      "repo": "https://chromium.googlesource.com/chromium/src",
+      "revision": "46876a0c2df3492ed67a8846950ba6d37170b58c",
+      "selection": "DEPS and resolved gclient manifest; .gn, BUILDCONFIG.gn, build/, buildtools/, tools/generate_stubs/, media/ffmpeg/ and every transitively referenced script/header/config needed by //third_party/ffmpeg; retain Electron Chromium patches affecting these",
+      "status": "exact root pinned; transitive build/source closure not materialized/verified"
+    },
+    {
+      "id": "opus-source",
+      "repo": "https://chromium.googlesource.com/chromium/src/+/46876a0c2df3492ed67a8846950ba6d37170b58c/third_party/opus",
+      "revision": "55513e81d8f606bd75d0ff773d2144e5f2a732f5",
+      "selection": "complete src tree plus Chromium third_party/opus GN wrapper/config and licence/patent files",
+      "status": "Complete pinned Chromium-vendored Opus archive retained and subtree verified. Its source record names the listed Opus revision."
+    },
+    {
+      "id": "electron-build-controller",
+      "repo": "https://github.com/electron/electron",
+      "revision": "6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4",
+      "selection": "DEPS, .github/actions/build-electron/action.yml, actual Windows publish workflow and setup actions, BUILD.gn electron_ffmpeg_zip, build/args/ffmpeg.gn and imported all.gn, build/zip.py, script/release/uploaders/upload.py, patch tooling and relevant patches/config.json entries",
+      "status": "profile/action/BUILD.gn/patch config read; complete execution environment not captured"
+    },
+    {
+      "id": "official-build-execution",
+      "selection": "Windows publish run 43631042480 x64; generated out/ffmpeg/args.gn, GN resolved args, dependency list, .ninja/.rsp or equivalent command records, generated ffmpeg.def/import library, compile/link invocation and logs, tool hashes/versions and exact Chromium SDK/Clang/GN/Siso/NASM/depot_tools/build-tools revisions",
+      "status": "job-level args.gn/link log unavailable in completed review; new local source build not run; transitive tools not resolved"
+    },
+    {
+      "id": "delivery",
+      "selection": "archive of exact source + patches + build instructions + licences and generated material; SHA256SUMS, binary-to-source mapping; stable source location in package/listing/download location",
+      "status": "not assembled, not published; final URL not assigned"
+    }
+  ],
+  "unresolved": [
+    "remaining linked modules and their exact transitive build inputs need verification",
+    "full corresponding-source delivery bundle and tool closure are incomplete",
+    "upstream job generated args.gn and linker inputs unavailable",
+    "no independently rebuilt ABI-compatible DLL/replacement run",
+    "Store-recipient technical route and LGPL section 6 interpretation require validation/owner legal review",
+    "publisher customer terms/source-delivery location not approved"
+  ],
+  "localAcquisition": {
+    "receiptSha256": "f34d00e4ea5200fe1922d8af5d77512d6e5c03463d5b46777560bec72633e380",
+    "receiptPath": "release-store/ffmpeg-source-20261125-45.3.3/acquisition.json",
+    "orderedPatchesApplied": [
+      "link_with_loader_path.patch",
+      "cherry-pick-f4bee18dadeb.patch",
+      "cherry-pick-5eed87f44b0a.patch",
+      "cherry-pick-fb424c4f78d1.patch"
+    ],
+    "overlay": {
+      "BUILD.gn": {
+        "baseSha256": "23753f7fc167adf7387e796b5345c5f3cd812ed0f446b09fe251927a22771989",
+        "patchedSha256": "52271b59775f510d3fcb03dfd1b694789d92508ce2a63dba63fe18497635e2c9"
+      },
+      "libavcodec/h264_slice.c": {
+        "baseSha256": "70a8b3ebf8404128166757d8c192c64ca924eba8871550bd2c91d3b97632f992",
+        "patchedSha256": "79ff554a6c7022ea04dfdaf08ab5280cec12a087a294b1abb23c8f390181bb2e"
+      },
+      "libavformat/mov.c": {
+        "baseSha256": "e5859db922468712ed38ee5c951fdf4bd1c13a04c07fb1ea6fe5ffc736c71663",
+        "patchedSha256": "1177b89a532ad3dfcbd21d954b99699d63099aa505c7b059ed24910eaf18f6b3"
+      }
+    },
+    "archives": {
+      "ffmpeg": {
+        "path": "ffmpeg.tar.gz",
+        "url": "https://chromium.googlesource.com/chromium/third_party/ffmpeg/+archive/9db86ce5b5b454dfc96c435f9f0723012980c37f.tar.gz",
+        "bytes": 18926260,
+        "sha256": "68afff2c0d16962a6b6f021038cad6f39bb0b944446a383fc64d48acc2375aca",
+        "metadata": {
+          "path": "ffmpeg-gitiles.json",
+          "url": "https://chromium.googlesource.com/chromium/third_party/ffmpeg/+/9db86ce5b5b454dfc96c435f9f0723012980c37f?format=JSON",
+          "bytes": 2053,
+          "sha256": "845531a47e0d9c74abd021f42ef896915232391fbb7cf8be042463ee2c77d343"
+        },
+        "expectedGitTree": "92494155280ad804b8f3da29425fb0b32b6c27e4",
+        "measuredGitTree": "92494155280ad804b8f3da29425fb0b32b6c27e4",
+        "gitFiles": 11114,
+        "gitTreeMatches": true
+      },
+      "chromium-opus": {
+        "path": "chromium-opus.tar.gz",
+        "url": "https://chromium.googlesource.com/chromium/src/+archive/46876a0c2df3492ed67a8846950ba6d37170b58c/third_party/opus.tar.gz",
+        "bytes": 4258449,
+        "sha256": "cd108b45c61a234ab4b5cc6846a8acff09e9059c05ed19189779114926d3065f",
+        "metadata": {
+          "path": "chromium-opus-gitiles.json",
+          "url": "https://chromium.googlesource.com/chromium/src/+/46876a0c2df3492ed67a8846950ba6d37170b58c/third_party/opus/?format=JSON",
+          "bytes": 1189,
+          "sha256": "da02e133e72d9518543df70172180341a918e5ec6705749d68449d78f8f9d05d"
+        },
+        "expectedGitTree": "4b02723565af08f67e76c7b55fc7d1ece1b3b1ba",
+        "measuredGitTree": "4b02723565af08f67e76c7b55fc7d1ece1b3b1ba",
+        "gitFiles": 715,
+        "gitTreeMatches": true
+      }
+    }
+  }
+}
