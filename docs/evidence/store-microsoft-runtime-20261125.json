@@ -39,8 +39,100 @@
     "sha256": "05f32c081b3c75cd2cc2a0655b571ba94ebcfc64e9ccca6e5a9e36d6cb67e540"
   },
   "limits": [
-    "Immediate binary origin is Electron release archive; exact upstream SDK and Dawn/DXC build inputs not independently recovered",
-    "SDK licence entitlement/acceptance and external recipient terms require publisher record",
+    "The exact D3DCompiler SDK redistributable is byte-matched. The custom Dawn/DXC source and build inputs remain outside this match.",
+    "Publisher acquisition and acceptance of the linked SDK licence are recorded. Downstream Store coverage remains open.",
     "No separately negotiated-permission or royalty blocker established"
-  ]
+  ],
+  "d3dCompilerTrace": {
+    "sdkPackages": [
+      {
+        "package": "microsoft.windows.sdk.cpp.x64",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.cpp.x64/10.0.28000.2270/microsoft.windows.sdk.cpp.x64.10.0.28000.2270.nupkg",
+        "bytes": 52978506,
+        "etag": "0x8DED3B99D6E1323",
+        "entries": 495,
+        "selected": [
+          {
+            "entry": "Microsoft.Windows.SDK.CPP.x64.nuspec",
+            "bytes": 1082,
+            "sha256": "bb86848fa5ce7642761e850bde75e1fe9ae10a11e936052a4a0f306322e47f2c"
+          }
+        ],
+        "bytesTransferred": 33916
+      },
+      {
+        "package": "microsoft.windows.sdk.cpp",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.cpp/10.0.28000.2270/microsoft.windows.sdk.cpp.10.0.28000.2270.nupkg",
+        "bytes": 160882592,
+        "etag": "0x8DED3B9532C67AA",
+        "entries": 5975,
+        "selected": [
+          {
+            "entry": "Microsoft.Windows.SDK.CPP.nuspec",
+            "bytes": 1249,
+            "sha256": "3f30424cc0f1d31630419f8df1fe6041bb6d37d3398a61694f3e1add9d2af258"
+          },
+          {
+            "entry": "c/Redist/D3D/x64/d3dcompiler_47.dll",
+            "bytes": 4753864,
+            "sha256": "f5c95e919b4ffa1ac71049cd45b9f986d2965e6888395ca2806337985334fa56"
+          },
+          {
+            "entry": "c/bin/10.0.28000.0/x64/d3dcompiler_47.dll",
+            "bytes": 4753864,
+            "sha256": "f290f7027426e42ede0a0487de394ce9e06bbc57db0525163f2e24220915169d"
+          }
+        ],
+        "bytesTransferred": 4899498
+      }
+    ],
+    "linkedLicence": {
+      "url": "https://aka.ms/WinSDKLicenseURL",
+      "resolvedUrl": "https://download.microsoft.com/download/0/F/F/0FF2B061-47DD-4F55-89B6-FD1D8C44F14D/sdk_license.rtf",
+      "contentType": "application/octet-stream",
+      "bytes": 246945,
+      "sha256": "dd07eb178e00c6bba4148457fc00ff77cd4887eb521d504186fe59c9ec8bbe62"
+    },
+    "version": "10.0.28000.2270",
+    "actualRedistEntry": "c/Redist/D3D/x64/d3dcompiler_47.dll",
+    "matchMethod": "Direct byte equality with successor app/d3dcompiler_47.dll",
+    "successorSha256": "d46a201a3ea77fded4f6ccdbee2ba2cf11047d607ba73ea79f364daac53de471",
+    "matchingD3DCompilerSha256": "f5c95e919b4ffa1ac71049cd45b9f986d2965e6888395ca2806337985334fa56",
+    "matchingD3DCompilerBytes": 4753864,
+    "angle": {
+      "url": "https://chromium.googlesource.com/angle/angle/+/f10470c77e4810ece55cbe8e08469a31610e92f4/BUILD.gn",
+      "gitBlob": "d6969b427ed614ec861c338cdd127ba4717dad1d",
+      "sha256": "f6f03b3de4d2dc79e4c4fc8cf13c5bfd6181b4527987d7bb080e1e60b082aa0b",
+      "redistCopyRules": [
+        {
+          "line": 434,
+          "source": "sources = [ \"$windows_sdk_path/Redist/D3D/$target_cpu/d3dcompiler_47.dll\" ]"
+        }
+      ]
+    },
+    "chromiumSdkPin": {
+      "release": "10.0.28000.2270",
+      "sdkDirectoryVersion": "10.0.28000.0",
+      "toolchainHash": "3bfcb536c8",
+      "source": "https://chromium.googlesource.com/chromium/src/+/46876a0c2df3492ed67a8846950ba6d37170b58c/build/vs_toolchain.py"
+    },
+    "redistList": "https://learn.microsoft.com/en-us/legal/windows-sdk/redist#binaries",
+    "nuspecRequiresLicenseAcceptance": true,
+    "publisherAcceptance": "Vali Sheik confirmed acceptance for Examen QA on 2026-11-26. Earlier acceptance is unknown.",
+    "downstreamTerms": "The scoped website terms are live. The free Store listing is not started. ADA v8.11 documents the customer terms mechanism. Whether the Store distribution chain satisfies SDK section 2(a)(ii) requires Microsoft clarification."
+  },
+  "storeAgreementReview": {
+    "reviewDate": "2026-11-26",
+    "partnerCenterPublisher": "Examen QA",
+    "acceptedAgreement": "App Developer Agreement - Windows Store",
+    "acceptedVersion": "8.11",
+    "acceptedDate": "2026-10-03",
+    "acceptedBy": "Vali Sheik",
+    "publicVersionEffectiveDate": "2026-04-17",
+    "storeProductId": "9MXD3L6S51ZH",
+    "partnerCenterProductStatus": "Not started",
+    "candidateSha256": "1ba64e9af2a8da2c963bcf055004dbd7b701c500605096b67d001fc4186c9cc0",
+    "publishedWebsiteCommit": "7b4cf475668ea6919a94fab326e6810e26c66fe5",
+    "reviewRecord": "docs/store-recipient-distribution-review.md#free-store-msix-agreement-review--26-november-2026"
+  }
 }

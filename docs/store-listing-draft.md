@@ -92,6 +92,7 @@ The composer request includes only **valisheik@examenqa.com** and subject **Bug 
 | Website | https://bugpocket.app/ | Reconcile broad local-only/cloud-tier claims and acquisition wording with the accepted candidate and Store-only plan. |
 | Support contact | valisheik@examenqa.com | Official owner-designated support/privacy/deletion address; confirm manual operator handling. |
 | Optional support webpage | https://bugpocket.app/help | Align reporting/startup wording and add the verified FFmpeg source and licence entry before using the description paragraph above. [Prepared Help copy](store-recipient-distribution-review.md#help-page-copy). |
+| Additional license terms | Proposed plain-text publisher terms for the free MSIX, including the D3DCompiler-only supplement | Approve the exact text and verify it accompanies Store acquisition when listing work is authorized. [Scoped Store terms proposal](store-recipient-distribution-review.md#proposed-store-field-and-wording). |
 
 These are proposed field values, not verified delivery or a new deployment. The website contact form remains a separate name/email/message route; its existing Resend/forwarding configuration is not changed by the desktop recipient. `examenmail.com` is a test catcher and must not appear as the operational contact. Existing public privacy/help wording was read; the contact page itself was unavailable to the read-only fetch. [R7, M3]
 

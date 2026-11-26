@@ -1,6 +1,11 @@
 Bug Pocket — Store/AppX trial preparation and completed artwork
 8 November 2026 • Asia/Calcutta
 
+Latest result: the 26 November 2026 bundled FFmpeg source-export candidate and
+BugPocketQA-only installed trial passed; see the final addendum. Older holds and
+trial statements below describe their dated scope. This task-only build/install
+exception is complete; public application distribution and Store submission stay held.
+
 Result and changed files
 - Existing electron-builder.store.cjs remains unchanged: explicit provisional minVersion and maxVersionTested, both 10.0.19045.0. Missing/malformed-value and custom-artwork checks remain.
 - Existing scripts/prepare-store-artwork.ps1 was reviewed before execution and remains byte-for-byte unchanged. Prepare and Check both completed successfully.
@@ -453,3 +458,74 @@ Final tray Quit returned exit code 0 for all five tracked processes. The trial p
 See docs/store-local-trial-approval.md for the corrected commands and validation record. The local result is release-store/trial-20261125-notice-x64/evidence/installed-trial-retry-20261125/RESULT.txt. The 79 focused notice-test results and prior static package checks carry forward within their recorded scope.
 
 Public distribution and Store submission remain held. FFmpeg source and build closure, recipient source delivery and attribution, practical replacement or relinking, customer terms and exact SDK entitlement remain outstanding. Windows compatibility across the supported matrix, migration and update behavior, accessibility, WACK and final Store/release acceptance remain pending.
+
+26 November 2026 — bundled FFmpeg source export built and installed trial passed
+
+One fresh unsigned x64 Store candidate was built from checkpoint
+97c6d4a5c97c1148aa8ac1c1581b613da1974930 on codex/exa-66-electron-45-2-1,
+origin https://github.com/examenqa/bug-pocket.git, as AMIGO\BugPocketQA with
+profile C:\Users\BugPocketQA. Disk and retained inputs were checked first.
+Existing approved tools and verified caches were reused; one necessary locked
+dependency copy was made without downloads or dependency installation. Electron
+45.3.3, better-sqlite3 13.2.0 and the other pins remain unchanged. Supported forced
+SQLite rebuild, required postinstall, app build and the normal Store builder
+notice/source hook all completed with exit 0. No --prepackaged route was used;
+the additional read-only --verify-staged check passed.
+
+Retained unsigned candidate:
+  release-store/trial-20261126-source-export-x64/package/Bug-Pocket-Store-1.1.0-x64.appx
+  219,695,867 bytes
+  SHA-256 1ba64e9af2a8da2c963bcf055004dbd7b701c500605096b67d001fc4186c9cc0
+The manifest identity, Publisher, application ID, x64 version 1.1.0.0, only
+runFullTrust and disabled BugPocketStartup matched the reviewed original. All
+289 application files, 16 build outputs, required unpacked native resources,
+alternate FFmpeg, 76 original notices and the complete nine-file source set
+passed inspection. The source ZIP is 24,567,330 bytes, SHA-256
+841b62ad8ae22b9896488402f0bc4a6f6761298307f93a0139f681b53103f5d6.
+Every delivery file matched the release lock and reused published-mirror receipt.
+
+One separate copy was signed using a new 14-day non-exportable QA leaf. SignTool,
+Authenticode and both exact-signer CMS checks passed. The corrected metadata
+checker accepted only AppxSignature.p7x, AppxMetadata/CodeIntegrity.cat and their
+exact content-type overrides: 296 to 298 ZIP entries and 99 to 101 mappings.
+Original payload, manifest and BlockMap streams were unchanged. BugPocketQA-only
+installation was Ok and all 289 installed application files, including the nine
+source files, matched. Help and support > FFmpeg source and licence passed cancel
+with no export, export to a fresh QA-owned empty parent, and repeat to the same
+parent. Both fresh child folders contained the exact nine names, sizes and
+SHA-256 hashes; the first export was unchanged. Recipient/build instructions and
+the LGPL text were visibly legible in Notepad; the Opus texts decoded as UTF-8.
+
+Normal tray Quit and held handles confirmed all five root/descendant processes
+exited with code 0. Only the trial registration was uninstalled. Original QA data
+matched all 74 file hashes and 28 directories after restoration. Trial PFN and
+synthetic data, disposable exports, signing copy/public CER, exact temporary
+LocalMachine TrustedPeople leaf, QA certificate and private key were removed;
+certificate stores returned to baseline and no matching process/package remained.
+Final verification completed at 23:39:35 IST on 26 November (18:09:35 UTC).
+The unsigned candidate, prior packages, SDK evidence change, both clarification
+drafts and compact receipts remain; preserved inputs matched their recorded hashes.
+
+Retained corrections: an initial git archive spawn failed ENOENT because the
+narrow child PATH omitted Git; the retry used its existing absolute path before
+extraction/copy/build. The first inspection over-broadly rejected certificates in
+all PEs; its corrected predicate accepts the exact unchanged upstream D3DCompiler
+bytes/certificate while retaining unsigned app/addon/FFmpeg checks. The first
+trial preflight invocation omitted the established process-scoped RemoteSigned
+option and was blocked before script execution; it was corrected without a
+persistent policy change or certificate/data/deployment mutation. Original failed
+attempt receipts remain. No candidate bytes or product source were repaired.
+
+Evidence: release-store/trial-20261126-source-export-x64/RESULT.txt and evidence/
+content-inspection.json, manifest-inspection.json, appx-zip-blockmap.json and exact
+command/process logs; release-store/installed-source-export-20261126/evidence/
+verify.json, install.json, export-*.json, readable-text.json,
+quit-before-uninstall.json and final-verification.json.
+Completed focused tests, mirror verification and earlier startup/shortcut/native/
+persistence QA were reused. No broad suite, new runtime probe, debugger, startup
+change or sign-out test was performed. The follow-up review of the Store
+agreements for D3DCompiler is in docs/store-recipient-distribution-review.md.
+Matching recipient application-payload access and compatible modified-library/
+relinking proof remain separate. Public
+application distribution, Store submission and debugger work remain held; Windows
+matrix, migration/update, accessibility, WACK and final acceptance remain open.

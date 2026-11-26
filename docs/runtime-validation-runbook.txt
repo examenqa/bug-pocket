@@ -1,6 +1,11 @@
 EXA-66 — Electron 45.3.3 source preparation
 17 November 2026, Asia/Calcutta
 
+Latest result: the 26 November 2026 task-only Store build and installed FFmpeg
+source-export trial passed; see the final addendum. Earlier authorization text
+is historical. This completed exception does not authorize further runtime work,
+public application distribution, Store submission or debugger work.
+
 Current decision and authorization
 Bounded source qualification supports preparing Electron 45.3.3; this is not whole-runtime or release clearance. See the 17 November addendum in docs/store-appx-packaging.txt for primary references, exact scope and remaining gates.
 Only source edits and the inspected, relevant host-only syntax/fixture checks are authorized now. No runtime/header/executable acquisition, dependency installation/lifecycle, Electron/addon/application execution, native compilation, build/package/sign/install, startup mutation, commit/push/PR/Linear change or external message is authorized. Both direct-send paths remain disabled and Slack paused.
@@ -283,3 +288,46 @@ Evidence: evidence\interactive-retest.json (tester replies, runtime/native ident
 Retained execution corrections: the first ASAR post-build verifier used slash paths where the Windows library required native separators; verification alone was corrected, with no rebuild. One closure-record command stopped at PowerShell parsing on an apostrophe before any request ran; corrected quoting collected the original normal-exit receipts. Both failed attempts remain documented. No product defect remained in the requested cases and implementation scope was not expanded.
 
 The full test suite, packaged smoke, earlier interactive workflows and DPI matrix were not repeated. No installation, signing, sign-in startup change, provider/support/Slack activity, staging or commit. The source correction stays unstaged and uncommitted; only these maintained notes gained retest results. All other acceptance/release holds listed above remain, including the historical missing launch receipt and unavailable JPEG export.
+
+26 November 2026 — narrow bundled-source candidate and installed trial complete
+
+The task-only build/install exception was used for checkpoint
+97c6d4a5c97c1148aa8ac1c1581b613da1974930, expected origin/branch and real
+AMIGO\BugPocketQA profile. Pins remain Electron 45.3.3 and better-sqlite3 13.2.0.
+The isolated build reused approved tools/verified inputs, with the supported
+forced native rebuild, required postinstall, app build and normal Store hook.
+The completed build stages exited 0; --verify-staged also passed. No new native-loading/runtime
+probe or broad regression was introduced; prior tests and installed native,
+startup, shortcut and persistence evidence carry forward within their scope.
+
+Unsigned AppX: 219,695,867 bytes, SHA-256
+1ba64e9af2a8da2c963bcf055004dbd7b701c500605096b67d001fc4186c9cc0,
+under release-store/trial-20261126-source-export-x64/package/. Inspection verified
+the identity, disabled startup task, unpacked native resources, alternate FFmpeg,
+notices and all nine source files. The 24,567,330-byte ZIP has SHA-256
+841b62ad8ae22b9896488402f0bc4a6f6761298307f93a0139f681b53103f5d6.
+It and every sidecar matched the reviewed lock and existing live mirror receipt.
+
+The separate signing copy passed SignTool, Authenticode and the corrected exact
+CMS/metadata comparison (296 to 298 entries, 99 to 101 mappings). One QA-only
+install matched all 289 application files. Installed Help export passed cancel,
+fresh-folder nine-file hash comparison, readable instructions/licence text and
+repeat-to-existing-parent behavior with a new child and unchanged first export.
+All five held root/descendant processes exited normally with code 0. Rollback
+restored 74 original QA file hashes and 28 directories and removed only trial
+registration, data/exports, signing copy, certificate/key and exact temporary
+device-wide trust. Final verification passed at 23:39:35 IST on 26 November.
+
+Three retained invocation/checker corrections are described in the packaging
+addendum: absolute Git path after ENOENT, upstream D3DCompiler PE certificate
+predicate, and process-scoped RemoteSigned on the preflight invocation. The
+candidate was not repaired. Existing SDK evidence/drafts/prior packages remained
+unchanged. Evidence: release-store/trial-20261126-source-export-x64/RESULT.txt and
+release-store/installed-source-export-20261126/evidence/final-verification.json,
+verify.json, export-*.json, readable-text.json and quit-before-uninstall.json.
+
+No startup/shortcut change, sign-out, debugger work or full test-suite repeat was
+performed. Public distribution and Store submission remain held. The follow-up
+Store agreement review is in docs/store-recipient-distribution-review.md.
+Recipient payload access and modified-library/relinking proof remain separate.
+Existing OS, migration/update, accessibility, WACK and release gates remain open.
