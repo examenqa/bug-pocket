@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "packageName": "ExamenQA.BugPocket",
+    "packagePublisher": "CN=8D9BF560-2073-427E-9DB1-92BB6AB1F379",
+    "applicationId": "BugPocket",
+    "applicationVersion": "1.1.0",
+    "packageVersion": "1.1.0.0",
+    "platform": "win32",
+    "architecture": "x64",
+    "electronVersion": "45.3.3",
+    "ffmpegDllSha256": "8496b7330a9d4a14b33c791d5b1d583514f98a3cd5443385254039f5523d22dc"
+  },
+  "files": {
+    "BUILDING.txt": {
+      "bytes": 3566,
+      "sha256": "261fa40634e783037ea2fa69a0139a3fe6476eaef32adf4f06a232bce995a5ab"
+    },
+    "COPYING.LGPL-2.1.txt": {
+      "bytes": 26517,
+      "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+    },
+    "INVENTORY.json": {
+      "bytes": 10025,
+      "sha256": "7f1faa451729c915c1c8f2276f65357e77a45b0c9a72f52a4c17d8d4b47f5d85"
+    },
+    "OPUS-COPYING.txt": {
+      "bytes": 1945,
+      "sha256": "01e1167d54a096d123cf6dfbbeb19587278845c6481d2d66d545669846079551"
+    },
+    "OPUS-LICENSE-PLEASE-READ.txt": {
+      "bytes": 703,
+      "sha256": "7efb4989e0cd1b256229bdf2f09300c5d14e35db0e7476bfb87fac243498273d"
+    },
+    "RECIPIENT.txt": {
+      "bytes": 4230,
+      "sha256": "9ba6331b3e4ec11d8340272eab4409a6993c116713fa8cc22e59c8c44b6f3bef"
+    },
+    "SOURCE-MAP.json": {
+      "bytes": 18220,
+      "sha256": "67b22e97a0ff5ffe2b261a43123f1e565e8e2e23d14aa900a1c86ae99826de5f"
+    },
+    "bug-pocket-1.1.0.0-win-x64-electron-45.3.3-ffmpeg-source.zip": {
+      "bytes": 24567330,
+      "sha256": "841b62ad8ae22b9896488402f0bc4a6f6761298307f93a0139f681b53103f5d6"
+    },
+    "bug-pocket-1.1.0.0-win-x64-electron-45.3.3-ffmpeg-source.zip.sha256": {
+      "bytes": 127,
+      "sha256": "823a3e8c81e93fcf203e67093765573800126e34b7d7437fbe612fc8ee6d0afb"
+    }
+  }
+}

@@ -7,7 +7,8 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const test = require('node:test');
-const { prepareStoreNotices } = require('./prepare-store-notices.cjs');
+const storeNoticeHook = require('./prepare-store-notices.cjs');
+const { prepareStoreNotices } = storeNoticeHook;
 
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const json = value => Buffer.from(JSON.stringify(value, null, 2) + '\n');
@@ -60,8 +61,37 @@ function fixture(t) {
     'ffmpeg.dll': Buffer.from('synthetic media sentinel')
   };
   for (const [id, bytes] of Object.entries(existing)) write(appOutDir, id, bytes);
-  return { root, appOutDir, license, electron, chromium, existing, manifest,
-    options: { root, appOutDir, electronVersion: '45.3.3', platform: 'win32', architecture: 'x64' } };
+  const identity = {
+    packageName: 'ExamenQA.BugPocket', packagePublisher: 'CN=Test Publisher', applicationId: 'BugPocket',
+    applicationVersion: '1.1.0', packageVersion: '1.1.0.0', electronVersion: '45.3.3',
+    platform: 'win32', architecture: 'x64'
+  };
+  const release = { ...identity, ffmpegDllSha256: hash(existing['ffmpeg.dll']) };
+  const archiveBase = 'bug-pocket-1.1.0.0-win-x64-electron-45.3.3-ffmpeg-source';
+  const archiveName = archiveBase + '.zip';
+  const deliveryDir = 'release-store/ffmpeg-source-delivery/' + archiveBase;
+  const archive = Buffer.from('synthetic archive checked against the fixture lock');
+  const delivery = {
+    [archiveName]: archive,
+    [archiveName + '.sha256']: Buffer.from(hash(archive) + '  ' + archiveName + '\n'),
+    'SOURCE-MAP.json': json({ release }),
+    'INVENTORY.json': json({ release }),
+    'BUILDING.txt': Buffer.from('fixture build instructions'),
+    'RECIPIENT.txt': Buffer.from('fixture recipient instructions'),
+    'COPYING.LGPL-2.1.txt': Buffer.from('fixture LGPL'),
+    'OPUS-COPYING.txt': Buffer.from('fixture Opus terms'),
+    'OPUS-LICENSE-PLEASE-READ.txt': Buffer.from('fixture Opus notice')
+  };
+  const deliveryLock = {
+    schemaVersion: 1, release,
+    files: Object.fromEntries(Object.entries(delivery).map(([name, bytes]) => [
+      name, { bytes: bytes.length, sha256: hash(bytes) }
+    ]))
+  };
+  write(root, 'compliance/ffmpeg-source-delivery.json', json(deliveryLock));
+  for (const [name, bytes] of Object.entries(delivery)) write(root, path.join(deliveryDir, name), bytes);
+  return { root, appOutDir, license, electron, chromium, existing, manifest, release,
+    archiveName, deliveryDir, delivery, deliveryLock, options: { root, appOutDir, ...identity } };
 }
 function output(f, id) { return path.join(f.appOutDir, 'resources/notices', id); }
 
@@ -71,11 +101,26 @@ test('stages original notices with exact candidate bytes and version association
   assert.deepEqual(fs.readFileSync(output(f, 'electron/LICENSE.electron.txt')), f.electron);
   assert.deepEqual(fs.readFileSync(output(f, 'electron/LICENSES.chromium.html')), f.chromium);
   assert.deepEqual(fs.readFileSync(output(f, 'originals/node_modules/alpha/LICENSE.txt')), f.license);
-  assert.ok(fs.readFileSync(output(f, 'THIRD_PARTY_NOTICES.provisional.txt')).includes(f.license));
+  const combined = fs.readFileSync(output(f, 'THIRD_PARTY_NOTICES.provisional.txt'));
+  assert.ok(combined.toString('utf8').startsWith(
+    'Bug Pocket copyright (c) 2026 Examen QA.\n\n' +
+    'Bug Pocket uses FFmpeg under the GNU Lesser General Public License, version 2.1 or later.\n' +
+    'See electron/LICENSES.chromium.html for the FFmpeg copyright and licence notices.\n' +
+    'FFmpeg source and licence: see ffmpeg-source/RECIPIENT.txt or https://bugpocket.app/help.\n\n'
+  ));
+  assert.ok(combined.includes(f.license));
   assert.equal(inventory.packages[0].version, '1.2.3');
   assert.equal(inventory.runtime.selectedElectronVersion, '45.3.3');
   assert.equal(inventory.runtime.expectedAlternateFFmpegAsset, 'ffmpeg-v45.3.3-win32-x64.zip');
   assert.equal(inventory.runtime.artifactVerification, 'pending');
+  const archive = f.delivery[f.archiveName];
+  assert.deepEqual(inventory.runtime.ffmpegSource, {
+    release: f.release, path: 'ffmpeg-source/' + f.archiveName, bytes: archive.length, sha256: hash(archive)
+  });
+  assert.deepEqual(fs.readdirSync(output(f, 'ffmpeg-source')).sort(), Object.keys(f.delivery).sort());
+  for (const [name, bytes] of Object.entries(f.delivery)) {
+    assert.deepEqual(fs.readFileSync(output(f, path.join('ffmpeg-source', name))), bytes);
+  }
   assert.equal(inventory.releaseComplianceApproved, false);
   assert.deepEqual(inventory.runtime.notices.map(row => row.sha256), [hash(f.electron), hash(f.chromium)]);
   assert.deepEqual(JSON.parse(fs.readFileSync(output(f, 'third-party-inventory.provisional.json'))), inventory);
@@ -200,4 +245,109 @@ test('produces identical notice resources in separate fixture directories', t =>
     'electron/LICENSE.electron.txt', 'electron/LICENSES.chromium.html', 'originals/node_modules/alpha/LICENSE.txt']) {
     assert.deepEqual(fs.readFileSync(output(a, id)), fs.readFileSync(output(b, id)));
   }
+});
+
+test('Store afterPack obtains the AppX identity and version from the pinned builder context', async t => {
+  const f = fixture(t);
+  const context = {
+    appOutDir: f.appOutDir, electronPlatformName: f.release.platform, arch: 1,
+    packager: {
+      projectDir: f.root, info: { framework: { version: f.release.electronVersion } },
+      config: { appx: {
+        identityName: f.release.packageName, publisher: f.release.packagePublisher,
+        applicationId: f.release.applicationId, setBuildNumber: false
+      } },
+      appInfo: {
+        version: f.release.applicationVersion,
+        getVersionInWeirdWindowsForm(useBuildNumber) {
+          assert.equal(useBuildNumber, false);
+          return f.release.packageVersion;
+        }
+      }
+    }
+  };
+  const inventory = await storeNoticeHook(context);
+  assert.deepEqual(inventory.runtime.ffmpegSource.release, f.release);
+});
+
+test('rejects a different AppX name, publisher, application or version and different FFmpeg DLL bytes', t => {
+  const f = fixture(t);
+  for (const key of ['packageName', 'packagePublisher', 'applicationId', 'applicationVersion', 'packageVersion']) {
+    assert.throws(() => prepareStoreNotices({ ...f.options, [key]: 'wrong' }), { code: 'FFMPEG_SOURCE_IDENTITY' }, key);
+    assert.equal(fs.existsSync(output(f, '')), false);
+  }
+  const dll = path.join(f.appOutDir, 'ffmpeg.dll');
+  fs.unlinkSync(dll);
+  assert.throws(() => prepareStoreNotices(f.options), { code: 'MISSING_INPUT' });
+  write(f.appOutDir, 'ffmpeg.dll', 'different candidate binary');
+  assert.throws(() => prepareStoreNotices(f.options), { code: 'FFMPEG_SOURCE_IDENTITY' });
+  assert.equal(fs.existsSync(output(f, '')), false);
+});
+
+test('every locked FFmpeg source delivery file is required and verified before copying', async t => {
+  const f = fixture(t);
+  for (const [name, bytes] of Object.entries(f.delivery)) {
+    await t.test(name, () => {
+      const file = path.join(f.deliveryDir, name);
+      fs.unlinkSync(path.join(f.root, file));
+      assert.throws(() => prepareStoreNotices(f.options),
+        error => error.code === 'MISSING_INPUT' && error.message.includes(name));
+      assert.equal(fs.existsSync(output(f, '')), false);
+      const altered = Buffer.from(bytes);
+      altered[0] ^= 1;
+      write(f.root, file, altered);
+      assert.throws(() => prepareStoreNotices(f.options),
+        error => error.code === 'CHANGED_INPUT' && error.message.includes(name));
+      assert.equal(fs.existsSync(output(f, '')), false);
+      write(f.root, file, bytes);
+    });
+  }
+});
+
+test('rejects a false source-map association and linked FFmpeg input or output folders', async t => {
+  await t.test('source map', inner => {
+    const f = fixture(inner);
+    const wrong = json({ release: { ...f.release, electronVersion: 'wrong' } });
+    f.deliveryLock.files['SOURCE-MAP.json'] = { bytes: wrong.length, sha256: hash(wrong) };
+    write(f.root, 'compliance/ffmpeg-source-delivery.json', json(f.deliveryLock));
+    write(f.root, path.join(f.deliveryDir, 'SOURCE-MAP.json'), wrong);
+    assert.throws(() => prepareStoreNotices(f.options), { code: 'FFMPEG_SOURCE_IDENTITY' });
+    assert.equal(fs.existsSync(output(f, '')), false);
+  });
+  await t.test('source directory junction', inner => {
+    const f = fixture(inner);
+    const directory = path.join(f.root, f.deliveryDir);
+    const relocated = path.join(f.root, 'relocated');
+    fs.renameSync(directory, relocated);
+    fs.symlinkSync(relocated, directory, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.throws(() => prepareStoreNotices(f.options), { code: 'INVALID_PATH' });
+    assert.equal(fs.existsSync(output(f, '')), false);
+  });
+  await t.test('candidate resources junction', inner => {
+    const f = fixture(inner);
+    const directory = path.join(f.appOutDir, 'resources');
+    const relocated = path.join(f.appOutDir, 'untouched');
+    fs.renameSync(directory, relocated);
+    fs.symlinkSync(relocated, directory, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.throws(() => prepareStoreNotices(f.options), { code: 'INVALID_PATH' });
+    assert.equal(fs.existsSync(path.join(relocated, 'notices')), false);
+  });
+});
+
+test('prepackaged preflight reads the staged source set and rejects missing or altered input', t => {
+  const f = fixture(t);
+  const { verifyStagedStoreFfmpegSource } = storeNoticeHook;
+  const options = { root: f.root, appOutDir: f.appOutDir };
+  assert.throws(() => verifyStagedStoreFfmpegSource(options), { code: 'MISSING_INPUT' });
+  const inventory = prepareStoreNotices(f.options);
+  fs.unlinkSync(path.join(f.root, f.deliveryDir, f.archiveName));
+  assert.deepEqual(verifyStagedStoreFfmpegSource(options), inventory.runtime.ffmpegSource);
+  const staged = output(f, 'ffmpeg-source/' + f.archiveName);
+  const changed = Buffer.from(f.delivery[f.archiveName]);
+  changed[0] ^= 1;
+  fs.writeFileSync(staged, changed);
+  assert.throws(() => verifyStagedStoreFfmpegSource(options), { code: 'CHANGED_INPUT' });
+  assert.deepEqual(fs.readFileSync(staged), changed);
+  fs.unlinkSync(staged);
+  assert.throws(() => verifyStagedStoreFfmpegSource(options), { code: 'MISSING_INPUT' });
 });

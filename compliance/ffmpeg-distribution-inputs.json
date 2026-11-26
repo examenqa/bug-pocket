@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "reviewDate": "2026-11-25",
   "releaseComplianceApproved": false,
-  "status": "Pinned FFmpeg and Chromium Opus archives verified. Electron patch overlay verified. Build closure, recipient delivery and replacement remain pending.",
+  "status": "Version-matched delivery prepared and host-verified. An earlier library-only build passed ABI and synthetic Opus decode. Final packaged export, public recipient access and packaged-call proof are pending.",
   "scope": "FFmpeg row of the completed seven-item unsigned-AppX review; no general licensing audit",
   "binary": {
     "electron": "45.3.3",
@@ -94,7 +94,7 @@
       "repo": "https://chromium.googlesource.com/chromium/src",
       "revision": "46876a0c2df3492ed67a8846950ba6d37170b58c",
       "selection": "DEPS and resolved gclient manifest; .gn, BUILDCONFIG.gn, build/, buildtools/, tools/generate_stubs/, media/ffmpeg/ and every transitively referenced script/header/config needed by //third_party/ffmpeg; retain Electron Chromium patches affecting these",
-      "status": "exact root pinned; transitive build/source closure not materialized/verified"
+      "status": "Selected pinned generators and build files retained. The earlier library-only build linked with the resolved Windows x64 inputs and wrapper adjustments. The maintained portable recipe was checked in planning mode."
     },
     {
       "id": "opus-source",
@@ -108,26 +108,24 @@
       "repo": "https://github.com/electron/electron",
       "revision": "6bfc23bf15e7b4ddc76fe6b2c3145418ce79aea4",
       "selection": "DEPS, .github/actions/build-electron/action.yml, actual Windows publish workflow and setup actions, BUILD.gn electron_ffmpeg_zip, build/args/ffmpeg.gn and imported all.gn, build/zip.py, script/release/uploaders/upload.py, patch tooling and relevant patches/config.json entries",
-      "status": "profile/action/BUILD.gn/patch config read; complete execution environment not captured"
+      "status": "Pinned profiles, patch series, relevant build action and ZIP target retained. A provisioned matching checkout can run the library-only target."
     },
     {
       "id": "official-build-execution",
-      "selection": "Windows publish run 43631042480 x64; generated out/ffmpeg/args.gn, GN resolved args, dependency list, .ninja/.rsp or equivalent command records, generated ffmpeg.def/import library, compile/link invocation and logs, tool hashes/versions and exact Chromium SDK/Clang/GN/Siso/NASM/depot_tools/build-tools revisions",
-      "status": "job-level args.gn/link log unavailable in completed review; new local source build not run; transitive tools not resolved"
+      "selection": "Actual Windows x64 compiler, assembler and SDK configuration; selected C/ASM and Opus units; generated interfaces; compile and link scripts, flags and effective dependencies.",
+      "status": "Pinned toolchain references and generated interfaces accompany the materials. The earlier build and ABI receipts are documented in docs/store-ffmpeg-distribution.md. The portable recipe includes the recorded adaptations."
     },
     {
       "id": "delivery",
       "selection": "archive of exact source + patches + build instructions + licences and generated material; SHA256SUMS, binary-to-source mapping; stable source location in package/listing/download location",
-      "status": "not assembled, not published; final URL not assigned"
+      "status": "Deterministic delivery archive and sidecars are pinned by compliance/ffmpeg-source-delivery.json. Final Store Help export and the independent publisher mirror await release verification."
     }
   ],
   "unresolved": [
-    "remaining linked modules and their exact transitive build inputs need verification",
-    "full corresponding-source delivery bundle and tool closure are incomplete",
-    "upstream job generated args.gn and linker inputs unavailable",
-    "no independently rebuilt ABI-compatible DLL/replacement run",
-    "Store-recipient technical route and LGPL section 6 interpretation require validation/owner legal review",
-    "publisher customer terms/source-delivery location not approved"
+    "Verify final packaged Help export and anonymous access to the identical publisher mirror.",
+    "Establish ordinary Store-recipient access to the separate matching application payload.",
+    "Observe a direct packaged call to a verified compatible modified DLL or scope LGPL 2.1 section 6(a) materials.",
+    "Approve component terms and confirm actual downstream D3DCompiler agreement coverage for each distribution channel."
   ],
   "localAcquisition": {
     "receiptSha256": "f34d00e4ea5200fe1922d8af5d77512d6e5c03463d5b46777560bec72633e380",
@@ -186,5 +184,33 @@
         "gitTreeMatches": true
       }
     }
+  },
+  "localMaterials": {
+    "path": "release-store/ffmpeg-materials-45.3.3-win32-x64-20261125",
+    "files": 56,
+    "bytes": 24554938,
+    "sourceMapSha256": "1aaec64236905199be9b2fea5ce5f31743686ff3bc48ee8d94ede5d25dfa46cf",
+    "checksumsSha256": "cd858e9df5f9c07f7c3dd0799e815dcd5c42ca37abab2d91ca10782a091be21f",
+    "sourceSelection": {
+      "FFmpegC": 224,
+      "NASM": 12,
+      "OpusC": 144,
+      "OpusSSE41": 5,
+      "OpusAVX2": 3,
+      "generatedConfigFiles": 12
+    },
+    "interface": {
+      "peExportsMatched": 53,
+      "electronNamedDelayImportsCovered": 45,
+      "abiRecord": "interfaces/win-x64-abi.json"
+    },
+    "verifiedCommandKinds": [
+      "FFmpeg export definition generation",
+      "Chromium feature-header generation",
+      "Draft command-plan generation"
+    ],
+    "libraryBuilt": false,
+    "recipientRouteTested": false,
+    "scope": "Historical 25 November source inputs and draft planning checks. See the distribution record for later builds and export evidence."
   }
 }

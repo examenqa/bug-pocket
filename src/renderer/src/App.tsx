@@ -117,6 +117,26 @@ const settingsNavItems = [
 const howToGuideUrl = 'https://bugpocket.app/help';
 
 function SupportPopover({ anchorRect, open, onClose, onSelectMode }: { anchorRect: DOMRect | null; open: boolean; onClose: () => void; onSelectMode: (mode: SupportModalMode) => void }) {
+  const [hasFfmpegSource, setHasFfmpegSource] = useState(false);
+  const showToast = useToast();
+  useEffect(() => {
+    let active = true;
+    void window.bugPocket.hasFfmpegSource()
+      .then(available => { if (active) setHasFfmpegSource(available); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  async function saveFfmpegSource(): Promise<void> {
+    onClose();
+    try {
+      const folder = await window.bugPocket.copyFfmpegSource();
+      if (folder) showToast('FFmpeg source and licence saved to ' + folder, 'success');
+    } catch {
+      showToast('Could not save FFmpeg source and licence. Check the chosen folder for an incomplete export.', 'error');
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -128,7 +148,7 @@ function SupportPopover({ anchorRect, open, onClose, onSelectMode }: { anchorRec
 
   if (!open || !anchorRect) return null;
 
-  const top = Math.max(12, anchorRect.top - 154);
+  const top = Math.max(12, anchorRect.top - (hasFfmpegSource ? 190 : 154));
   const left = Math.max(12, anchorRect.left);
   const width = Math.max(220, anchorRect.width);
 
@@ -137,6 +157,7 @@ function SupportPopover({ anchorRect, open, onClose, onSelectMode }: { anchorRec
       <div className="support-popover" role="menu" aria-label="Help and support options" style={{ left, top, width }} onMouseDown={(event) => event.stopPropagation()}>
         <button type="button" role="menuitem" onClick={() => onSelectMode('bug')}>Report a Bug</button>
         <button type="button" role="menuitem" onClick={() => onSelectMode('feature')}>Request a Feature</button>
+        {hasFfmpegSource && <button type="button" role="menuitem" onClick={() => void saveFfmpegSource()}>FFmpeg source and licence</button>}
         <a href={howToGuideUrl} target="_blank" rel="noreferrer" role="menuitem" onClick={(event) => { event.preventDefault(); onClose(); void window.bugPocket.openExternalUrl(howToGuideUrl); }}>How-To Guide</a>
       </div>
     </div>,

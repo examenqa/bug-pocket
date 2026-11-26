@@ -3,7 +3,7 @@ import { createTriageDispatchGuard, type AiDispatchGuard } from './ai/triageDisp
 import { AiPublicError, parseAiErrorCode } from '../shared/aiError';
 import type { CaptureContext } from '../shared/types';
 import { DetailsFlushGate } from './detailsFlush';
-import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog, safeStorage } from 'electron';
+import { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, type OpenDialogOptions, clipboard, nativeImage, desktopCapturer, screen, Notification, shell, dialog, safeStorage } from 'electron';
 import log from 'electron-log/main';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
@@ -16,6 +16,7 @@ import { getByokAiConfig, processIssueWithByokAi, saveByokAiConfig, triageBugWit
 import { registerGetByokAiConfigIpc } from './ipc/byokAiConfigIpc';
 import { registerBugDeletionIpc } from './ipc/bugDeletionIpc';
 import { registerSupportEmailIpc } from './ipc/supportEmailIpc';
+import { copyBundledFfmpegSource, findBundledFfmpegSource } from './ffmpegSource';
 import { createIpcArgumentValidators, createSecureIpcRegistrar } from './ipc/secureIpc';
 import { assertWorkspaceAdminAccess, assertWorkspaceWriteAccess } from './ipc/workspaceWriteAccess';
 import { resolveVerifiedTriageAttachmentPath } from './ai/triageAttachment';
@@ -1129,6 +1130,21 @@ function registerIpc(): void {
   });
   secureIpc.handle('attachments:lineage', (_event, id: number) => db.getAttachmentLineage(id));
   secureIpc.handle('clipboard:copy', (_event, text: string) => clipboard.writeText(text));
+  secureIpc.handle('help:hasFfmpegSource', () =>
+    process.windowsStore === true && findBundledFfmpegSource(process.resourcesPath) !== null);
+  secureIpc.handle('help:copyFfmpegSource', async () => {
+    if (process.windowsStore !== true) throw new Error('Bundled FFmpeg source is unavailable.');
+    if (!findBundledFfmpegSource(process.resourcesPath)) throw new Error('Bundled FFmpeg source is unavailable.');
+    const options: OpenDialogOptions = {
+      title: 'Choose a folder for FFmpeg source and licence',
+      properties: ['openDirectory']
+    };
+    const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) return null;
+    const source = findBundledFfmpegSource(process.resourcesPath);
+    if (!source) throw new Error('Bundled FFmpeg source is unavailable.');
+    return copyBundledFfmpegSource(source, result.filePaths[0]);
+  });
   secureIpc.handle('shell:openExternal', (_event, url: string) => {
     const parsed = new URL(url);
     if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only web URLs can be opened.');

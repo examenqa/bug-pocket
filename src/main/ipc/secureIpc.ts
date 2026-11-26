@@ -368,6 +368,8 @@ export function createIpcArgumentValidators(): Record<string, IpcArgumentValidat
   validators['attachments:saveAnnotated'] = args(positiveInteger, pngDataUrl);
   validators['clipboard:copy'] = args(stringValue(maxTextLength));
   validators['shell:openExternal'] = args(webUrl);
+  validators['help:hasFfmpegSource'] = args();
+  validators['help:copyFfmpegSource'] = args();
   validators['support:sendFeedback'] = args(feedbackPayload);
   validators['support:openEmail'] = args();
   validators['details:flushComplete'] = args(nonEmptyString(128), booleanValue);

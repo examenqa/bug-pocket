@@ -25,7 +25,7 @@ First public Store launch, native x64 first, with Windows 10 included in the int
 
 Preserve capture/annotation, report formatting/exports, backup/restore, optional BYOK/native Ollama and configured BYOC Supabase. In-app startup opt-in and quiet sign-in/tray/shortcut readiness remain first-release requirements, with source prepared and installed acceptance pending. Future public distribution is intended to be Store-only. Current first-public-launch direction supersedes older legacy-NSIS-import prerequisites; preserve existing data without adding legacy migration work to this submission. Fresh persistence and future Store-update preservation still require validation. [R1, R2]
 
-The accepted version plan is app **1.1.0 → Store 1.1.0.0** using the provisional electron-builder 26.18.1 AppX/x64 route. Root source remains 0.9.9 and Electron remains pinned to **45.2.1**. No emitted/allocated/uploaded candidate is established by these plans; recheck the ledger when assigning the actual version. [R1, R2]
+The accepted version plan is app **1.1.0 → Store 1.1.0.0** using the provisional electron-builder 26.18.1 AppX/x64 route. Root source remains 0.9.9 and Electron is pinned to **45.3.3**. No emitted/allocated/uploaded candidate is established by these plans; recheck the ledger when assigning the actual version. [R1, R2]
 
 ## Proposed customer-facing text — pending candidate acceptance
 
@@ -39,7 +39,7 @@ Free and open source bug capture for QA. Save notes and screenshots locally, ann
 
 ### Full description
 
-Bug Pocket is free to use and open source under the MIT licence. It helps QA testers capture an issue quickly and finish the report when they are ready.
+Bug Pocket is free to use, and its original application code is open source under the MIT licence. It helps QA testers capture an issue quickly and finish the report when they are ready.
 
 Save a short bug note and screenshot while you work. Add annotations, organize the details, and format a report using editable templates. Copy report text, save screenshot evidence, or open a report in Linear or your configured Jira site.
 
@@ -50,6 +50,8 @@ Optional AI assistance can help draft report fields from text and, when included
 For optional Cloud Sync, connect your own Supabase project. Configured authentication, workspace sync, attachment transfers and keep-alive requests can run in the background. AI requests to remote providers and configured cloud features transmit relevant data; local capture does not mean every feature stays on the device. Optional AI/cloud-provider charges are separate from Bug Pocket's free application price.
 
 To report a problem or inappropriate AI output, prepare and edit a text-only report in the app. Copy its exact preview, request your email app, then paste, review and send it yourself. The app does not confirm sending, delivery or review.
+
+Bug Pocket uses FFmpeg under the GNU Lesser General Public License, version 2.1 or later. Find the source, licence and instructions for Bug Pocket 1.1.0.0 on Windows x64 at https://bugpocket.app/help/ffmpeg/1.1.0.0/win-x64/, or save a bundled copy under Help and support → FFmpeg source and licence.
 
 Editorial factual basis: [R3–R6, R8]. Do not paste this basis line into the Store description.
 
@@ -89,7 +91,7 @@ The composer request includes only **valisheik@examenqa.com** and subject **Bug 
 | Privacy policy | https://bugpocket.app/privacy | Keep the durable existing URL; publish accepted replacement sections and reconcile in-app links first. |
 | Website | https://bugpocket.app/ | Reconcile broad local-only/cloud-tier claims and acquisition wording with the accepted candidate and Store-only plan. |
 | Support contact | valisheik@examenqa.com | Official owner-designated support/privacy/deletion address; confirm manual operator handling. |
-| Optional support webpage | https://bugpocket.app/help | Use only after its desktop reporting/startup wording matches accepted behavior. |
+| Optional support webpage | https://bugpocket.app/help | Align reporting/startup wording and add the verified FFmpeg source and licence entry before using the description paragraph above. [Prepared Help copy](store-recipient-distribution-review.md#help-page-copy). |
 
 These are proposed field values, not verified delivery or a new deployment. The website contact form remains a separate name/email/message route; its existing Resend/forwarding configuration is not changed by the desktop recipient. `examenmail.com` is a test catcher and must not appear as the operational contact. Existing public privacy/help wording was read; the contact page itself was unavailable to the read-only fetch. [R7, M3]
 
@@ -122,7 +124,7 @@ These are future reviewer steps, not a completed test record. The reporting chec
 Repository references are to HEAD `30180af4754526a3c5a72412beaf881659a8133f`; current source and later owner direction govern over historical copy.
 
 - **R1 — Approved planning:** [EXA-62 scope/approval](https://linear.app/examen-qa/document/exa-62-store-launch-scope-and-baseline-decision-packet-30-october-2026-5abe247bf9e9); [EXA-46 accepted version/route plan](https://linear.app/examen-qa/document/exa-46-store-packaging-and-version-strategy-decision-30-october-2026-003ccd058f62); [EXA-53 requirements](https://linear.app/examen-qa/issue/EXA-53/prepare-partner-center-listing-and-certification-notes). Later first-public-launch direction supersedes older legacy-import prerequisites.
-- **R2 — Current intended packaging/startup and limits:** [Store config](../electron-builder.store.cjs); [startup fragment](../build/appx-startup.xml); [Store preparation and source-only addenda](store-appx-packaging.txt); [runtime runbook](runtime-validation-runbook.txt), especially line 172; [native bridge contract](../native/store-startup/README.txt). [package.json](../package.json) retains Electron 45.2.1/root 0.9.9.
+- **R2 — Current intended packaging/startup and limits:** [Store config](../electron-builder.store.cjs); [startup fragment](../build/appx-startup.xml); [Store preparation and source-only addenda](store-appx-packaging.txt); [runtime runbook](runtime-validation-runbook.txt), especially line 172; [native bridge contract](../native/store-startup/README.txt). [package.json](../package.json) records the current Electron pin and root 0.9.9.
 - **R3 — Core/report features:** [QuickCaptureForm.tsx](../src/renderer/src/components/QuickCaptureForm.tsx); [ScreenshotAnnotator.tsx](../src/renderer/src/components/ScreenshotAnnotator.tsx), lines 396–409; [BugDetailPage.tsx](../src/renderer/src/pages/BugDetailPage.tsx), lines 159–174, 380–400; [reports.ts](../src/renderer/src/services/reports.ts), lines 14–82; [DashboardPage.tsx](../src/renderer/src/pages/DashboardPage.tsx).
 - **R4 — Optional AI:** [byokIssueProcessor.ts](../src/main/ai/byokIssueProcessor.ts), lines 43–64, 97–116, 153–204; [ollamaTriage.ts](../src/main/ai/ollamaTriage.ts), lines 9–69; [AiSettings.tsx](../src/renderer/src/components/settings/AiSettings.tsx), lines 156–168.
 - **R5 — Backups/BYOC:** [database.ts](../src/main/database.ts), lines 267–325; [backupService.ts](../src/main/sync/backupService.ts), lines 109–138; [syncService.ts](../src/main/sync/syncService.ts), lines 134–180, 358–400, 660–701, 1043–1083; [keepAlive.ts](../src/main/sync/keepAlive.ts), lines 1–48; [index.ts](../src/main/index.ts), lines 84–88, 667–699.

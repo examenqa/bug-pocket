@@ -46,3 +46,11 @@ test('trusted sender and argument checks still run before any support listener',
   assert.equal(invoke(trusted, payload), 'synthetic result');
   assert.equal(calls, 1);
 });
+
+test('FFmpeg Help channels take no paths or other renderer-supplied arguments', () => {
+  const validators = createIpcArgumentValidators();
+  for (const channel of ['help:hasFfmpegSource', 'help:copyFfmpegSource']) {
+    assert.doesNotThrow(() => validators[channel]([]));
+    assert.throws(() => validators[channel](['C:/unrelated']), TypeError);
+  }
+});

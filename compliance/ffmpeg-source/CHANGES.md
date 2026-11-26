@@ -1,0 +1,5 @@
+# Source and build changes
+
+- The original Chromium FFmpeg and Opus archive bytes and their upstream notices are preserved. `SOURCE-MAP.json` identifies the source revisions, archive hashes and upstream references.
+- Electron applies the patches in `upstream/electron/patches/ffmpeg/.patches` in that file’s order. The included `patch-overlay/BUILD.gn`, `patch-overlay/libavcodec/h264_slice.c` and `patch-overlay/libavformat/mov.c` carry the reviewed results. The patch headers supply the original author, dates and change descriptions. `SOURCE-MAP.json` records the base and patched hashes.
+- Bug Pocket’s library-only build recipe was updated on 26 November 2026 to use the Chromium source layout, add include paths for generated wrappers, fix the Windows x64 export ordinals, and resolve tools from the recipient’s shell. It builds from the preselected generated configuration and introduces no additional FFmpeg or Opus source changes. The earlier test-only trace and replacement binaries are outside this archive.
